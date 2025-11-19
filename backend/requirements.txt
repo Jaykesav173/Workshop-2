@@ -1,8 +1,13 @@
 fastapi
-uvicorn
+uvicorn[standard]
 bcrypt
 python-dotenv
 pyjwt
 sqlalchemy
 psycopg2-binary
-
+supabase
+pydantic
+pydantic-settings
+opencv-python
+tensorflow-lite
+python-multipart
