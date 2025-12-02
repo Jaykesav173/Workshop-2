@@ -2,7 +2,7 @@
  * Authentication Module - Haifa
  * Login component
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authService } from '../../services/authService'
 
@@ -10,6 +10,11 @@ function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const navigate = useNavigate()
+
+  useEffect(() => {
+    localStorage.clear();
+    console.log("Local storage cleared on login page load.");
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault()

@@ -46,27 +46,41 @@ class LoginResponse(BaseModel):
 # ============================================
 # 2. Equipment Schemas - Yi Jing (Equipment Information)
 # ============================================
+class TypeBase(BaseModel):
+    description: str
+
+class TypeResponse(TypeBase):
+    id: int
+    class Config:
+        from_attributes = True
 class EquipmentBase(BaseModel):
-    name: str
-    type: str
+    equipment_tag_no: str
+    equipment_description: str
+    type_id: int
+    material: Optional[str] = None
     location: Optional[str] = None
-    serial_number: Optional[str] = None
-    manufacturer: Optional[str] = None
-    model_number: Optional[str] = None
-    installation_date: Optional[datetime] = None
+    inspection_due_date: Optional[datetime] = None
+    dosh_registration_no: Optional[str] = None
+    nominal_thickness: Optional[float] = None
+    corrosion_allowance: Optional[float] = None
+    design_pressure: Optional[float] = None
+    design_temperature: Optional[float] = None
+    status: Optional[str] = "ACTIVE"
 
 class EquipmentCreate(EquipmentBase):
-    pass
+    created_by: Optional[int] = None
 
 class EquipmentResponse(EquipmentBase):
     id: int
-    status: str
     created_by: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
+    image_url: Optional[str] = None
+
+class Config:
+    from_attributes = True
+class EquipmentOptionsResponse(BaseModel):
+    types: list[TypeResponse]
 
 # ============================================
 # 3. Photo Schemas - Asillah (Photo Upload)

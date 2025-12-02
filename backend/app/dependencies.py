@@ -16,13 +16,16 @@ async def get_current_user(
     Dependency to get current authenticated user from JWT token
     """
     token = credentials.credentials
+    # print(f"DEBUG: Received token: {token[:20]}...") 
     payload = verify_token(token)
     if payload is None:
+        print("DEBUG: Token verification failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # print(f"DEBUG: Token verified for user: {payload.get('sub')}")
     return payload
 
 async def get_db_session():

@@ -165,3 +165,16 @@ def toggle_user_status(user_id: int):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Server error while updating status")
+
+from app.routers.equipment.routes_equipment import router as equipment_router
+from fastapi.staticfiles import StaticFiles
+from app.config import settings
+import os
+
+# Create upload directory if it doesn't exist
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+# Mount static files
+app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+
+app.include_router(equipment_router, prefix="/api")

@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 
 from app.routers.auth.router import router as auth_router
+from app.routers.equipment.routes_equipment import router as equipment_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,7 +24,10 @@ app.add_middleware(
 )
 
 # Only include the auth module
+#app.include_router(api_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(equipment_router, prefix="/api")
+
 
 @app.get("/")
 def root():

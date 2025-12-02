@@ -29,22 +29,38 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 # 2. Equipment Model - Yi Jing (Equipment Information)
+class Type(Base):
+    __tablename__ = "type"
+    id = Column(Integer, primary_key=True, index=True)
+    description = Column(String, nullable=False)
+
+    equipments = relationship("Equipment", back_populates="type")
+
 class Equipment(Base):
     __tablename__ = "Equipment"
-    
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    type = Column(String, nullable=False)
-    location = Column(String)
-    serial_number = Column(String, unique=True)
-    manufacturer = Column(String, nullable=True)  # Equipment manufacturer
-    model_number = Column(String, nullable=True)  # Model number
-    installation_date = Column(DateTime, nullable=True)  # When equipment was installed
-    status = Column(String, default="ACTIVE")  # ACTIVE, INACTIVE, DECOMMISSIONED
-    created_by = Column(Integer, ForeignKey("User.id"), nullable=True)  # Inspector who registered the equipment
-    created_at = Column(DateTime, default=datetime.utcnow)
+    equipment_tag_no = Column(String, nullable=False, index=True)
+    equipment_description = Column(String, nullable=False)
+    type_id = Column(Integer, ForeignKey("Type.id"), nullable=False)
+    material = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    inspection_due_date = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey("User.id"), nullable=True)  # optional link to who created
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    dosh_registration_no = Column(String, nullable=True)
+    nominal_thickness = Column(String, nullable=True)      # kept as string to allow decimals + units
+    corrosion_allowance = Column(String, nullable=True)
+    design_pressure = Column(String, nullable=True)
+    design_temperature = Column(String, nullable=True)
+    status = Column(String, default="ACTIVE")  # ACTIVE, INACTIVE, DECOMMISSIONED
 
+    # relationships
+    type = relationship("type", back_populates="equipments")
+    creator = relationship("User", back_populates="equipment_created")
+    photos = relationship("Photo", back_populates="equipment", cascade="all, delete-orphan")
+    reports = relationship("Report", back_populates="equipment")
+    
 # 3. Photo Model - Asillah (Photo Upload)
 class Photo(Base):
     __tablename__ = "Photo"

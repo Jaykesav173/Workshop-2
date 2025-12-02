@@ -14,147 +14,190 @@ class EquipmentService:
     def __init__(self):
         self.db = get_db()
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    
-    async def create_equipment(self, equipment: EquipmentCreate, current_user: dict) -> EquipmentResponse:
-        """Create new equipment record (register equipment not in database)"""
+
+    # ----------------------------------------------------------
+    # Create Equipment
+    # ----------------------------------------------------------
+    async def create_equipment(self, equipment: EquipmentCreate, current_user: dict):
         try:
             equipment_data = {
-                "name": equipment.name,
-                "type": equipment.type,
+                "equipment_tag_no": equipment.equipment_tag_no,
+                "type_id": equipment.type_id,
+                "material": equipment.material,
                 "location": equipment.location,
-                "serial_number": equipment.serial_number,
-                "manufacturer": equipment.manufacturer,
-                "model_number": equipment.model_number,
-                "installation_date": str(equipment.installation_date) if equipment.installation_date else None,
-                "status": "ACTIVE",
-                "created_by": current_user.get("id"),
+                "inspection_due_date": str(equipment.inspection_due_date) if equipment.inspection_due_date else None,
+                "equipment_description": equipment.equipment_description,
+                "dosh_registration_no": equipment.dosh_registration_no,
+                "nominal_thickness": equipment.nominal_thickness,
+                "corrosion_allowance": equipment.corrosion_allowance,
+                "design_pressure": equipment.design_pressure,
+                "design_temperature": equipment.design_temperature,
+                "status": equipment.status,
+                # "created_by": None,
                 "created_at": str(datetime.utcnow())
             }
-            
-            res = self.db.table("Equipment").insert(equipment_data).execute()
-            
+
+            res = self.db.table("equipment").insert(equipment_data).execute()
+
             if res.data:
                 return EquipmentResponse(**res.data[0])
-            else:
-                raise HTTPException(status_code=400, detail="Failed to create equipment")
-        except HTTPException:
-            raise
+            raise HTTPException(status_code=400, detail="Failed to create equipment")
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error creating equipment: {str(e)}")
-    
-    async def upload_equipment_image(self, equipment_id: int, file: UploadFile, current_user: dict) -> dict:
-        """Upload image for equipment (automatically saved to database under equipment record)"""
+
+    # ----------------------------------------------------------
+    # Upload Image
+    # ----------------------------------------------------------
+    async def upload_equipment_image(self, equipment_id: str, file: UploadFile, current_user: dict):
         try:
             # Verify equipment exists
-            equipment = await self.get_equipment(equipment_id)
-            
-            # Generate unique filename
+            await self.get_equipment(equipment_id)
+
             file_ext = os.path.splitext(file.filename)[1]
             unique_filename = f"{uuid.uuid4()}{file_ext}"
             file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
-            
-            # Save file locally
+
             with open(file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
-            
+
             file_size = len(content)
-            
-            # Save to database under equipment record
+
+            # Note: 'Photo' table structure might need verification, assuming it matches schema
             photo_data = {
-                "equipment_id": equipment_id,
+                "equipment_id": int(equipment_id), # Ensure int if ID is int
                 "uploaded_by": current_user.get("id"),
                 "file_path": file_path,
-                "storage_url": None,  # TODO: Upload to Supabase storage
                 "file_name": file.filename,
                 "file_size": file_size,
+                "storage_url": None,
                 "uploaded_at": str(datetime.utcnow())
             }
-            
+
             res = self.db.table("Photo").insert(photo_data).execute()
-            
+
             if res.data:
                 return {
                     "success": True,
-                    "message": "Image uploaded and saved to equipment record",
+                    "message": "Image uploaded successfully",
                     "photo": res.data[0],
                     "equipment_id": equipment_id
                 }
-            else:
-                raise HTTPException(status_code=400, detail="Failed to save image")
-        except HTTPException:
-            raise
+            raise HTTPException(status_code=400, detail="Failed to save photo record")
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
-    
-    async def get_all_equipment(self) -> list[EquipmentResponse]:
-        """Get all equipment"""
+
+    # ----------------------------------------------------------
+    # Get All
+    # ----------------------------------------------------------
+    async def get_all_equipment(self):
         try:
-            res = self.db.table("Equipment").select("*").execute()
-            if res.data:
-                return [EquipmentResponse(**equipment) for equipment in res.data]
-            return []
+            res = self.db.table("equipment").select("*").order("id").execute()
+            equipment_list = res.data if res.data else []
+            
+            # Fetch photos for all equipment
+            if equipment_list:
+                eq_ids = [e['id'] for e in equipment_list]
+                photos_res = self.db.table("Photo").select("*").in_("equipment_id", eq_ids).execute()
+                photos_map = {p['equipment_id']: p for p in photos_res.data} if photos_res.data else {}
+                
+                for eq in equipment_list:
+                    if eq['id'] in photos_map:
+                        filename = os.path.basename(photos_map[eq['id']]['file_path'])
+                        eq['image_url'] = f"/static/uploads/{filename}"
+            
+            return [EquipmentResponse(**eq) for eq in equipment_list]
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
-    
-    async def get_equipment(self, equipment_id: int) -> EquipmentResponse:
-        """Get equipment by ID"""
+
+    # ----------------------------------------------------------
+    # Get By ID
+    # ----------------------------------------------------------
+    async def get_equipment(self, equipment_id: str):
         try:
-            res = self.db.table("Equipment").select("*").eq("id", equipment_id).execute()
+            res = self.db.table("equipment").select("*").eq("id", equipment_id).execute()
             if not res.data:
                 raise HTTPException(status_code=404, detail="Equipment not found")
-            return EquipmentResponse(**res.data[0])
-        except HTTPException:
-            raise
+            
+            equipment = res.data[0]
+            
+            # Fetch photo
+            photo_res = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).limit(1).execute()
+            if photo_res.data:
+                filename = os.path.basename(photo_res.data[0]['file_path'])
+                equipment['image_url'] = f"/static/uploads/{filename}"
+                
+            return EquipmentResponse(**equipment)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
-    
-    async def update_equipment(self, equipment_id: int, equipment: EquipmentCreate) -> EquipmentResponse:
-        """Update equipment information (edit record)"""
+
+    # ----------------------------------------------------------
+    # Update
+    # ----------------------------------------------------------
+    async def update_equipment(self, equipment_id: str, equipment: EquipmentCreate):
         try:
             update_data = {
-                "name": equipment.name,
-                "type": equipment.type,
+                "equipment_tag_no": equipment.equipment_tag_no,
+                "equipment_description": equipment.equipment_description,
+                "type_id": equipment.type_id,
+                "material": equipment.material,
                 "location": equipment.location,
-                "serial_number": equipment.serial_number,
-                "manufacturer": equipment.manufacturer,
-                "model_number": equipment.model_number,
-                "installation_date": str(equipment.installation_date) if equipment.installation_date else None,
+                "inspection_due_date": str(equipment.inspection_due_date) if equipment.inspection_due_date else None,
+                "dosh_registration_no": equipment.dosh_registration_no,
+                "nominal_thickness": equipment.nominal_thickness,
+                "corrosion_allowance": equipment.corrosion_allowance,
+                "design_pressure": equipment.design_pressure,
+                "design_temperature": equipment.design_temperature,
+                "status": equipment.status,
                 "updated_at": str(datetime.utcnow())
             }
-            
-            res = self.db.table("Equipment").update(update_data).eq("id", equipment_id).execute()
-            
+
+            res = self.db.table("equipment").update(update_data).eq("id", equipment_id).execute()
+
             if not res.data:
                 raise HTTPException(status_code=404, detail="Equipment not found")
-            
+
             return EquipmentResponse(**res.data[0])
-        except HTTPException:
-            raise
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error updating equipment: {str(e)}")
-    
-    async def delete_equipment(self, equipment_id: int) -> dict:
-        """Delete equipment record if no longer needed"""
+
+    # ----------------------------------------------------------
+    # Delete
+    # ----------------------------------------------------------
+    async def delete_equipment(self, equipment_id: str):
         try:
-            # Hard delete - remove from database
-            # First check if equipment exists
-            equipment = await self.get_equipment(equipment_id)
-            
-            # Delete associated photos
+            # Check if exists
+            await self.get_equipment(equipment_id)
+
+            # Delete photos first
             photos = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).execute()
             if photos.data:
-                for photo in photos.data:
-                    if os.path.exists(photo.get("file_path", "")):
-                        os.remove(photo["file_path"])
+                for p in photos.data:
+                    if os.path.exists(p["file_path"]):
+                        try:
+                            os.remove(p["file_path"])
+                        except:
+                            pass
                 self.db.table("Photo").delete().eq("equipment_id", equipment_id).execute()
-            
+
             # Delete equipment
-            self.db.table("Equipment").delete().eq("id", equipment_id).execute()
-            
-            return {"success": True, "message": "Equipment and associated images deleted successfully"}
-        except HTTPException:
-            raise
+            self.db.table("equipment").delete().eq("id", equipment_id).execute()
+
+            return {"success": True, "message": "Equipment deleted successfully"}
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error deleting equipment: {str(e)}")
 
+    # ----------------------------------------------------------
+    # Get Dropdown List Options
+    # ----------------------------------------------------------
+    async def get_equipment_options(self):
+        try:
+            res = self.db.table("type").select("id, description").execute()
+            # Return list of dicts {id, description}
+            return {"types": res.data if res.data else []}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching types: {str(e)}")

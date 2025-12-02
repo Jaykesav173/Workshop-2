@@ -9,5 +9,5 @@ supabase
 pydantic
 pydantic-settings
 opencv-python
-tensorflow-lite
+#tensorflow-lite  tensorflow-lite will block
 python-multipart
