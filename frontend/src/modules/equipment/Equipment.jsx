@@ -14,7 +14,7 @@ import {
 } from "./equipmentApi.jsx";
 
 // Form Row Component
-const FormRow = React.memo(({ label, placeholder, type = "input", name, form, setForm, options, required, className }) => (
+const FormRow = React.memo(({ label, placeholder, type = "input", name, form, setForm, onChange, error, options, required, className }) => (
   <div className={`flex flex-col gap-1 ${className}`}>
     <label className="text-sm font-bold text-gray-800">
       {required && <span className="text-red-500 mr-1">*</span>}
@@ -24,14 +24,17 @@ const FormRow = React.memo(({ label, placeholder, type = "input", name, form, se
     {type === "input" ? (
       <input
         type="text"
+        name={name}
         placeholder={placeholder}
         value={form[name] || ""}
-        onChange={(e) => setForm({ ...form, [name]: e.target.value })}
-        className="w-full px-3 text-base text-gray-800 focus:outline-none placeholder-gray-500 bg-white h-10 rounded-lg border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+        onChange={onChange || ((e) => setForm({ ...form, [name]: e.target.value }))}
+        className={`w-full px-3 text-base text-gray-800 focus:outline-none placeholder-gray-500 bg-white h-10 rounded-lg border shadow-sm focus:ring-1 
+          ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
       />
     ) : (
       <div className="relative w-full">
         <select
+          name={name}
           value={form[name] || ""}
           onChange={(e) => setForm({ ...form, [name]: e.target.value })}
           className="w-full px-3 text-base text-gray-800 focus:outline-none bg-white h-10 rounded-lg appearance-none cursor-pointer border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
@@ -48,6 +51,7 @@ const FormRow = React.memo(({ label, placeholder, type = "input", name, form, se
         </div>
       </div>
     )}
+    {error && <span className="text-red-500 text-xs font-semibold">{error}</span>}
   </div>
 ));
 
@@ -102,7 +106,10 @@ export default function EquipmentDetailsRegistration() {
     status: "ACTIVE"
   });
 
+  const [errors, setErrors] = useState({});
+
   const [imageFile, setImageFile] = useState(null);
+  const [editImageUrl, setEditImageUrl] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [equipmentList, setEquipmentList] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -111,7 +118,7 @@ export default function EquipmentDetailsRegistration() {
   // Filter State
   const [filterCategory, setFilterCategory] = useState("");
   const [filterValue, setFilterValue] = useState("");
-  const [activeFilters, setActiveFilters] = useState([]); // Array of { category, value }
+  const [activeFilters, setActiveFilters] = useState([]);
 
   const token = localStorage.getItem("token");
 
@@ -134,11 +141,31 @@ export default function EquipmentDetailsRegistration() {
     }
   }
 
+  // Handle number validation
+  const handleNumericChange = (e) => {
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+
+    // Allow empty string or check if it's a number
+    if (value && isNaN(Number(value))) {
+      setErrors((prev) => ({ ...prev, [name]: "Please insert numbers only" }));
+    } else {
+      setErrors((prev) => ({ ...prev, [name]: null }));
+    }
+  };
+
   // to save the equipment information (display warning if press save button without filing the information)
   async function handleSaveEquipment() {
     try {
-      if (!form.equipment_tag_no || !form.equipment_description || !form.plant_area || !form.dosh_registration_no || !form.type_id) {
+      if (!form.equipment_tag_no || !form.equipment_description || !form.location || !form.dosh_registration_no || !form.type_id) {
         alert("Please fill in all required fields.");
+        return;
+      }
+
+      // Check for validation errors
+      const hasErrors = Object.values(errors).some((err) => err !== null);
+      if (hasErrors) {
+        alert("Please fix the validation errors before saving.");
         return;
       }
 
@@ -170,6 +197,18 @@ export default function EquipmentDetailsRegistration() {
         await uploadEquipmentImage(equipmentId, imageFile, token);
       }
 
+      if (editingId) {
+        try {
+          // Fetch updated data to ensure image and details are current in the view
+          const updatedItemRes = await getEquipmentById(equipmentId, token);
+          setViewingItem(updatedItemRes.data);
+          setActiveTab("Equipment Details");
+        } catch (fetchErr) {
+          console.error("Failed to fetch updated item for view", fetchErr);
+        }
+        loadAllEquipment();
+      }
+
       // Reset form for new registration
       setForm({
         equipment_tag_no: "",
@@ -185,13 +224,10 @@ export default function EquipmentDetailsRegistration() {
         location: "",
         status: "ACTIVE"
       });
+      setErrors({});
       setImageFile(null);
+      setEditImageUrl(null);
       setEditingId(null);
-
-      if (editingId) {
-        setActiveTab("Equipment Details");
-        loadAllEquipment();
-      }
 
     } catch (error) {
       console.error("Error saving equipment:", error);
@@ -204,8 +240,9 @@ export default function EquipmentDetailsRegistration() {
     if (!window.confirm("Are you sure you want to delete this equipment?")) return;
     try {
       await deleteEquipment(id, token);
+      alert("Equipment deleted successfully!");
       loadAllEquipment();
-      setViewingItem(null); // Close details view if open
+      setViewingItem(null);
     } catch (err) {
       console.error("Failed to delete", err);
       alert("Failed to delete equipment");
@@ -218,7 +255,7 @@ export default function EquipmentDetailsRegistration() {
       const payload = {
         ...viewingItem,
         status: newStatus,
-        type_id: parseInt(viewingItem.type_id), // Ensure correct type
+        type_id: parseInt(viewingItem.type_id),
         nominal_thickness: parseFloat(viewingItem.nominal_thickness) || 0,
         corrosion_allowance: parseFloat(viewingItem.corrosion_allowance) || 0,
         design_pressure: parseFloat(viewingItem.design_pressure) || 0,
@@ -235,7 +272,7 @@ export default function EquipmentDetailsRegistration() {
 
       // Update local state without full reload for speed
       setViewingItem({ ...viewingItem, status: newStatus });
-      loadAllEquipment(); // Refresh list in background
+      loadAllEquipment();
       alert("Status updated successfully!");
     } catch (err) {
       console.error("Failed to update status", err);
@@ -258,7 +295,9 @@ export default function EquipmentDetailsRegistration() {
       design_temperature: item.design_temperature,
       status: item.status || "ACTIVE"
     });
+    setErrors({});
     setEditingId(item.id);
+    setEditImageUrl(item.image_url); // Set existing image URL
     setActiveTab("Equipment Details Update");
   }
 
@@ -271,7 +310,7 @@ export default function EquipmentDetailsRegistration() {
   async function loadOptions() {
     try {
       const res = await getEquipmentOptions(token);
-      setOptions({ types: res.data.types }); // Expecting [{id, description}, ...]
+      setOptions({ types: res.data.types });
     } catch (err) {
       console.error("Failed to load options", err);
     }
@@ -320,6 +359,7 @@ export default function EquipmentDetailsRegistration() {
                   location: "",
                   status: "ACTIVE"
                 });
+                setErrors({});
               }
             }}
             className={`
@@ -376,6 +416,12 @@ export default function EquipmentDetailsRegistration() {
                         alt="Equipment Preview"
                         className="w-full h-full object-contain"
                       />
+                    ) : editImageUrl ? (
+                      <img
+                        src={`http://localhost:8000${editImageUrl}`}
+                        alt="Current Equipment"
+                        className="w-full h-full object-contain"
+                      />
                     ) : (
                       <div className="flex flex-col text-center items-center text-gray-500">
                         <Upload size={48} className="opacity-30 mb-2" />
@@ -396,7 +442,7 @@ export default function EquipmentDetailsRegistration() {
                     className="mt-6 px-6 py-2 text-base font-semibold bg-blue-500 text-white rounded-lg hover:bg-blue-600 shadow-md transition-colors"
                     onClick={() => document.getElementById("equipment-image").click()}
                   >
-                    Insert Image from Files
+                    {imageFile ? "Change Image" : (editImageUrl ? "Insert new image" : "Insert Image from Files")}
                   </button>
                 </div>
 
@@ -413,12 +459,50 @@ export default function EquipmentDetailsRegistration() {
                   <div className="md:col-span-2 h-px bg-gray-200 my-2"></div>
 
                   <FormRow label="Material:" placeholder="Material" name="material" form={form} setForm={setForm} options={options} />
-                  <FormRow label="Nominal Thickness (mm):" placeholder="Value" name="nominal_thickness" form={form} setForm={setForm} options={options} />
 
-                  <FormRow label="Corrosion Allowance (mm):" placeholder="Value" name="corrosion_allowance" form={form} setForm={setForm} options={options} />
-                  <FormRow label="Design Pressure (barg):" placeholder="Value" name="design_pressure" form={form} setForm={setForm} options={options} />
+                  {/* Numeric Fields with Validation */}
+                  <FormRow
+                    label="Nominal Thickness (mm):"
+                    placeholder="Value"
+                    name="nominal_thickness"
+                    form={form}
+                    setForm={setForm}
+                    onChange={handleNumericChange}
+                    error={errors.nominal_thickness}
+                    options={options}
+                  />
 
-                  <FormRow label="Design Temperature (°C):" placeholder="Value" name="design_temperature" form={form} setForm={setForm} options={options} />
+                  <FormRow
+                    label="Corrosion Allowance (mm):"
+                    placeholder="Value"
+                    name="corrosion_allowance"
+                    form={form}
+                    setForm={setForm}
+                    onChange={handleNumericChange}
+                    error={errors.corrosion_allowance}
+                    options={options}
+                  />
+                  <FormRow
+                    label="Design Pressure (barg):"
+                    placeholder="Value"
+                    name="design_pressure"
+                    form={form}
+                    setForm={setForm}
+                    onChange={handleNumericChange}
+                    error={errors.design_pressure}
+                    options={options}
+                  />
+
+                  <FormRow
+                    label="Design Temperature (°C):"
+                    placeholder="Value"
+                    name="design_temperature"
+                    form={form}
+                    setForm={setForm}
+                    onChange={handleNumericChange}
+                    error={errors.design_temperature}
+                    options={options}
+                  />
                 </div>
               </div>
 
@@ -437,6 +521,7 @@ export default function EquipmentDetailsRegistration() {
                   <button
                     onClick={() => {
                       setEditingId(null);
+                      setEditImageUrl(null);
                       setForm({
                         equipment_tag_no: "",
                         equipment_description: "",
@@ -569,7 +654,6 @@ export default function EquipmentDetailsRegistration() {
                         {equipmentList
                           .filter(item => {
                             if (activeFilters.length === 0) return true;
-                            // AND logic: item must match ALL active filters
                             return activeFilters.every(filter => {
                               if (filter.category === "type_id") {
                                 return item.type_id.toString() === filter.value.toString();
@@ -611,7 +695,6 @@ export default function EquipmentDetailsRegistration() {
                     {/* Left side - Image */}
                     <div className="w-full md:w-1/3 flex flex-col items-center pt-8">
                       <div className="w-full bg-gray-200 overflow-hidden border border-gray-300 rounded-lg min-h-[520px] flex items-center justify-center">
-                        {/* Show equipment image if available in database*/}
                         {/* Show equipment image if available in database, else show text */}
                         {viewingItem.image_url ? (
                           <img
@@ -685,9 +768,8 @@ export default function EquipmentDetailsRegistration() {
               )}
             </div>
           )}
-
-        </div >
-      </div >
-    </div >
+        </div>
+      </div>
+    </div>
   );
 }
