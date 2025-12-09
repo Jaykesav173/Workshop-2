@@ -13,12 +13,10 @@ import {
   getEquipmentOptions
 } from "./equipmentApi.jsx";
 
-// ---------------------------
 // Form Row Component
-// ---------------------------
-const FormRow = React.memo(({ label, placeholder, type = "input", name, form, setForm, options, required }) => (
-  <div className="flex items-center space-x-4 py-1">
-    <label className="w-60 text-right font-bold text-base">
+const FormRow = React.memo(({ label, placeholder, type = "input", name, form, setForm, options, required, className }) => (
+  <div className={`flex flex-col gap-1 ${className}`}>
+    <label className="text-sm font-bold text-gray-800">
       {required && <span className="text-red-500 mr-1">*</span>}
       {label}
     </label>
@@ -29,14 +27,14 @@ const FormRow = React.memo(({ label, placeholder, type = "input", name, form, se
         placeholder={placeholder}
         value={form[name] || ""}
         onChange={(e) => setForm({ ...form, [name]: e.target.value })}
-        className="flex-1 px-2 text-gray-700 focus:outline-none placeholder-gray-500 bg-input-bg h-10 rounded-md border border-gray-300"
+        className="w-full px-3 text-base text-gray-800 focus:outline-none placeholder-gray-500 bg-white h-10 rounded-lg border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
       />
     ) : (
-      <div className="relative flex-1">
+      <div className="relative w-full">
         <select
           value={form[name] || ""}
           onChange={(e) => setForm({ ...form, [name]: e.target.value })}
-          className="w-full px-2 text-gray-700 focus:outline-none bg-input-bg h-10 rounded-md appearance-none cursor-pointer border border-gray-300"
+          className="w-full px-3 text-base text-gray-800 focus:outline-none bg-white h-10 rounded-lg appearance-none cursor-pointer border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
         >
           <option disabled value="">
             {placeholder}
@@ -45,8 +43,8 @@ const FormRow = React.memo(({ label, placeholder, type = "input", name, form, se
             <option key={t.id} value={t.id}>{t.description}</option>
           ))}
         </select>
-        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-          <ChevronDown size={16} className="text-gray-700" />
+        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+          <ChevronDown size={18} className="text-gray-500" />
         </div>
       </div>
     )}
@@ -54,11 +52,11 @@ const FormRow = React.memo(({ label, placeholder, type = "input", name, form, se
 ));
 
 const DetailsRow = ({ label, value }) => (
-  <div className="flex items-center mb-1 min-h-[34px]">
-    <span className="min-w-[250px] text-right text-lg font-bold text-black mr-5 select-none">
+  <div className="flex items-center mb-1 w-full justify-center">
+    <span className="w-1/3 text-right text-base font-bold text-black mr-6 select-none">
       {label}
     </span>
-    <div className="flex-1 max-w-xl min-h-[34px] bg-[#e9e9e9] rounded-md flex items-center px-3 text-lg text-[#333]">
+    <div className="w-1/2 min-h-[44px] bg-[#e9e9e9] rounded-lg flex items-center px-4 text-base text-[#333] shadow-sm">
       {value || "Value"}
     </div>
   </div>
@@ -66,17 +64,17 @@ const DetailsRow = ({ label, value }) => (
 
 const InstructionField = () => (
   <div className="mt-8 px-4">
-    <div className="text-base font-normal text-black mb-4">
+    <div className="text-sm font-normal text-black mb-4">
       Please insert the equipment number of the equipment that requires changes.
     </div>
     <div className="flex items-center gap-4">
-      <span className="text-base font-bold text-black min-w-[152px]">
+      <span className="text-sm font-bold text-black min-w-[152px]">
         Equipment Tag No:
       </span>
       <input
         type="text"
         placeholder="Value"
-        className="w-[305px] h-8 bg-gray-300 rounded-xl px-4 text-base text-gray-700 placeholder-gray-500 shadow-inner"
+        className="w-[305px] h-9 bg-gray-300 rounded-xl px-4 text-sm text-gray-700 placeholder-gray-500 shadow-inner"
       />
     </div>
   </div>
@@ -84,9 +82,7 @@ const InstructionField = () => (
 
 export default function EquipmentDetailsRegistration() {
 
-  // ------------------------------------------------------
-  // 🔹 States
-  // ------------------------------------------------------
+  // States
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Equipment Registration");
   const [options, setOptions] = useState({ types: [] });
@@ -94,7 +90,7 @@ export default function EquipmentDetailsRegistration() {
   const [form, setForm] = useState({
     equipment_tag_no: "",
     equipment_description: "",
-    plant_area: "", // Not in DB? "location"?
+    plant_area: "",
     dosh_registration_no: "",
     type_id: "",
     material: "",
@@ -141,13 +137,11 @@ export default function EquipmentDetailsRegistration() {
   // to save the equipment information (display warning if press save button without filing the information)
   async function handleSaveEquipment() {
     try {
-      // Validate Type ID
-      if (!form.type_id) {
+      if (!form.equipment_tag_no || !form.equipment_description || !form.plant_area || !form.dosh_registration_no || !form.type_id) {
         alert("Please fill in all required fields.");
         return;
       }
 
-      // Prepare payload
       const payload = {
         ...form,
         type_id: parseInt(form.type_id),
@@ -176,7 +170,7 @@ export default function EquipmentDetailsRegistration() {
         await uploadEquipmentImage(equipmentId, imageFile, token);
       }
 
-      // Reset form
+      // Reset form for new registration
       setForm({
         equipment_tag_no: "",
         equipment_description: "",
@@ -194,7 +188,6 @@ export default function EquipmentDetailsRegistration() {
       setImageFile(null);
       setEditingId(null);
 
-      // If we were editing, maybe switch back to list?
       if (editingId) {
         setActiveTab("Equipment Details");
         loadAllEquipment();
@@ -212,9 +205,41 @@ export default function EquipmentDetailsRegistration() {
     try {
       await deleteEquipment(id, token);
       loadAllEquipment();
+      setViewingItem(null); // Close details view if open
     } catch (err) {
       console.error("Failed to delete", err);
       alert("Failed to delete equipment");
+    }
+  }
+
+  async function handleStatusUpdate(newStatus) {
+    if (!viewingItem) return;
+    try {
+      const payload = {
+        ...viewingItem,
+        status: newStatus,
+        type_id: parseInt(viewingItem.type_id), // Ensure correct type
+        nominal_thickness: parseFloat(viewingItem.nominal_thickness) || 0,
+        corrosion_allowance: parseFloat(viewingItem.corrosion_allowance) || 0,
+        design_pressure: parseFloat(viewingItem.design_pressure) || 0,
+        design_temperature: parseFloat(viewingItem.design_temperature) || 0,
+      };
+
+      // Remove generic fields that might cause issues if spread from viewingItem
+      delete payload.id;
+      delete payload.created_at;
+      delete payload.updated_at;
+      delete payload.image_url;
+
+      await updateEquipment(viewingItem.id, payload, token);
+
+      // Update local state without full reload for speed
+      setViewingItem({ ...viewingItem, status: newStatus });
+      loadAllEquipment(); // Refresh list in background
+      alert("Status updated successfully!");
+    } catch (err) {
+      console.error("Failed to update status", err);
+      alert("Failed to update status");
     }
   }
 
@@ -238,7 +263,7 @@ export default function EquipmentDetailsRegistration() {
   }
 
 
-  //load dropdown list options
+  // load dropdown list options
   useEffect(() => {
     loadOptions();
   }, []);
@@ -252,30 +277,24 @@ export default function EquipmentDetailsRegistration() {
     }
   }
 
-  // ------------------------------------------------------
-  // 🔹 Helper Components
-  // ------------------------------------------------------
+  // Helper Components
   const menuItems = [
     editingId ? "Equipment Details Update" : "Equipment Registration",
     "Equipment Details",
   ];
 
-  // ------------------------------------------------------
-  // 🔹 RENDER UI
-  // ------------------------------------------------------
+  // RENDER UI
   return (
-    <div className="bg-white min-h-screen w-full font-sans text-black rounded-lg overflow-hidden">
 
-      {/* Header */}
-      <div className="flex justify-between items-center px-4 py-2 text-white bg-header-blue">
-        <div className="text-xl font-bold">EQUIPMENT INFORMATION</div>
-        <button className="p-1 hover:opacity-80">
-          <X size={24} />
-        </button>
+    <div className="bg-white min-h-screen font-sans text-black ml-[250px] mt-[80px]">
+
+      {/* Page Title */}
+      <div className="px-8 py-6">
+        <h1 className="text-3xl font-bold text-gray-800">Equipment Information</h1>
       </div>
 
       {/* Tabs */}
-      <div className="flex px-4 pt-0 space-x-0 border-b border-gray-300">
+      <div className="flex px-8 pt-0 space-x-0 border-b border-gray-300">
         {menuItems.map((item) => (
           <button
             key={item}
@@ -304,15 +323,15 @@ export default function EquipmentDetailsRegistration() {
               }
             }}
             className={`
-              text-sm px-4 py-1.5 font-medium transition-all duration-300
+              text-sm px-6 py-2 font-bold transition-all duration-300
               ${activeTab === item
-                ? "bg-white text-black border border-gray-300 border-b-white -mb-px scale-[1.02] shadow-sm z-10"
-                : "text-white bg-tab-blue hover:scale-[1.05] hover:opacity-90"
+                ? "bg-blue-500 text-white shadow-md transform scale-[1.02]"
+                : "bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800 border border-transparent"
               }
             `}
             style={{
-              borderRadius: "4px 4px 0 0",
-              marginRight: "1px",
+              borderRadius: "8px 8px 0 0",
+              marginRight: "4px",
             }}
           >
             {item}
@@ -322,8 +341,8 @@ export default function EquipmentDetailsRegistration() {
       </div>
 
       {/* Main Content */}
-      <div className="p-4">
-        <div className="max-w-7xl mx-auto">
+      <div className="p-8">
+        <div className="w-full">
 
           {/* Equipment Registration / Update page */}
           {(activeTab === "Equipment Registration" || activeTab === "Equipment Details Update") && (
@@ -358,9 +377,9 @@ export default function EquipmentDetailsRegistration() {
                         className="w-full h-full object-contain"
                       />
                     ) : (
-                      <div className="flex flex-col items-center text-gray-500">
-                        <Upload size={64} className="opacity-30 mb-4" />
-                        <span className="text-lg font-medium text-gray-600">Drag and drop an image here</span>
+                      <div className="flex flex-col text-center items-center text-gray-500">
+                        <Upload size={48} className="opacity-30 mb-2" />
+                        <span className="text-base font-medium text-gray-600">Drag and drop an image here</span>
                       </div>
                     )}
                   </div>
@@ -374,7 +393,7 @@ export default function EquipmentDetailsRegistration() {
                   />
 
                   <button
-                    className="mt-4 px-3 py-1 text-sm bg-gray-300 rounded-lg hover:bg-gray-400"
+                    className="mt-6 px-6 py-2 text-base font-semibold bg-blue-500 text-white rounded-lg hover:bg-blue-600 shadow-md transition-colors"
                     onClick={() => document.getElementById("equipment-image").click()}
                   >
                     Insert Image from Files
@@ -382,26 +401,24 @@ export default function EquipmentDetailsRegistration() {
                 </div>
 
                 {/* Right side - Form */}
-                <div className="flex-1 flex flex-col gap-4 pt-8">
-                  {[
-                    { label: "Equipment Tag No:", placeholder: "Value", name: "equipment_tag_no", required: true },
-                    { label: "Equipment Description:", placeholder: "Value", name: "equipment_description", required: true },
-                    { label: "Plant/Unit/Area:", placeholder: "Value", name: "location", required: true },
-                    { label: "DOSH Registration No:", placeholder: "Value", name: "dosh_registration_no", required: true },
-                    { label: "", placeholder: "", type: "spacer" },
-                    { label: "Type:", placeholder: "Select Type", type: "select", name: "type_id", required: true },
-                    { label: "Material:", placeholder: "Material", name: "material" },
-                    { label: "Nominal Thickness (mm):", placeholder: "Nominal Thickness", name: "nominal_thickness" },
-                    { label: "Corrosion Allowance (mm):", placeholder: "Corrosion Allowance", name: "corrosion_allowance" },
-                    { label: "Design Pressure (barg):", placeholder: "Design Pressure", name: "design_pressure" },
-                    { label: "Design Temperature (°C):", placeholder: "Design Temperature", name: "design_temperature" },
-                  ].map((field, index) =>
-                    field.type === "spacer" ? (
-                      <div key={index} className="h-1"></div>
-                    ) : (
-                      <FormRow key={field.label} {...field} form={form} setForm={setForm} options={options} />
-                    )
-                  )}
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
+                  <FormRow label="Equipment Tag No:" placeholder="Value" name="equipment_tag_no" form={form} setForm={setForm} options={options} required />
+                  <FormRow label="Plant/Unit/Area:" placeholder="Value" name="location" form={form} setForm={setForm} options={options} required />
+
+                  <FormRow label="Equipment Description:" placeholder="Value" name="equipment_description" form={form} setForm={setForm} options={options} required className="md:col-span-2" />
+
+                  <FormRow label="DOSH Registration No:" placeholder="Value" name="dosh_registration_no" form={form} setForm={setForm} options={options} required />
+                  <FormRow label="Type:" placeholder="Select Type" type="select" name="type_id" form={form} setForm={setForm} options={options} required />
+
+                  <div className="md:col-span-2 h-px bg-gray-200 my-2"></div>
+
+                  <FormRow label="Material:" placeholder="Material" name="material" form={form} setForm={setForm} options={options} />
+                  <FormRow label="Nominal Thickness (mm):" placeholder="Value" name="nominal_thickness" form={form} setForm={setForm} options={options} />
+
+                  <FormRow label="Corrosion Allowance (mm):" placeholder="Value" name="corrosion_allowance" form={form} setForm={setForm} options={options} />
+                  <FormRow label="Design Pressure (barg):" placeholder="Value" name="design_pressure" form={form} setForm={setForm} options={options} />
+
+                  <FormRow label="Design Temperature (°C):" placeholder="Value" name="design_temperature" form={form} setForm={setForm} options={options} />
                 </div>
               </div>
 
@@ -412,7 +429,7 @@ export default function EquipmentDetailsRegistration() {
                 </span>
                 <button
                   onClick={handleSaveEquipment}
-                  className="px-10 py-2 text-base bg-gray-300 border border-gray-500 rounded-lg shadow-sm hover:bg-gray-400"
+                  className="px-8 py-2 text-base font-semibold bg-blue-500 text-white border border-blue-500 rounded-lg shadow-sm hover:bg-blue-600"
                 >
                   {editingId ? "Update" : "Save"}
                 </button>
@@ -436,7 +453,7 @@ export default function EquipmentDetailsRegistration() {
                       });
                       setActiveTab("Equipment Registration"); // Switch back to registration
                     }}
-                    className="px-10 py-2 text-base bg-red-300 border border-red-500 rounded-lg shadow-sm hover:bg-red-400"
+                    className="px-8 py-2 text-base font-semibold bg-blue-500 text-white border border-blue-500 rounded-lg shadow-sm hover:bg-blue-600"
                   >
                     Cancel Edit
                   </button>
@@ -451,19 +468,19 @@ export default function EquipmentDetailsRegistration() {
               {!viewingItem ? (
                 /* LIST VIEW */
                 <div className="w-full">
-                  {/* 🔹 Filter Section */}
-                  <div className="flex flex-col gap-4 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  {/* Filter Section */}
+                  <div className="flex flex-col gap-4 mb-6 bg-gray-50 p-6 rounded-lg border border-gray-200">
                     <div className="flex flex-wrap items-center gap-4">
                       {/* Filter By Dropdown */}
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-black">Filter by:</span>
+                        <span className="font-bold text-l text-black">Filter by:</span>
                         <select
                           value={filterCategory}
                           onChange={(e) => {
                             setFilterCategory(e.target.value);
                             setFilterValue(""); // Reset value when category changes
                           }}
-                          className="px-4 py-2 bg-gray-300 text-black rounded-full border-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
+                          className="px-4 py-2 bg-gray-300 text-black text-l rounded-full border-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
                         >
                           <option value="">Select your filter here</option>
                           <option value="type_id">Type</option>
@@ -474,7 +491,7 @@ export default function EquipmentDetailsRegistration() {
 
                       {/* Value Dropdown */}
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-black">Value:</span>
+                        <span className="font-bold text-l text-black">Value:</span>
                         <select
                           value={filterValue}
                           onChange={(e) => {
@@ -491,7 +508,7 @@ export default function EquipmentDetailsRegistration() {
                             }
                           }}
                           disabled={!filterCategory}
-                          className="px-4 py-2 bg-gray-300 text-black rounded-full border-none focus:ring-2 focus:ring-gray-400 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-4 py-2 bg-gray-300 text-black text-l rounded-full border-none focus:ring-2 focus:ring-gray-400 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <option value="">Select the value here</option>
                           {filterCategory === "type_id" && options.types.map(t => (
@@ -507,10 +524,9 @@ export default function EquipmentDetailsRegistration() {
                       </div>
                     </div>
 
-                    {/* Active Filters Chips */}
                     <div className="flex flex-wrap gap-2">
                       {activeFilters.map((filter, index) => (
-                        <div key={index} className="flex items-center gap-2 px-4 py-1.5 bg-gray-200 text-gray-800 rounded-lg text-sm font-medium tracking-wider">
+                        <div key={index} className="flex items-center gap-2 px-4 py-1.5 bg-gray-200 text-gray-800 rounded-lg text-base font-medium tracking-wider">
                           <span>
                             {filter.category === "type_id" ? "Type" :
                               filter.category.charAt(0).toUpperCase() + filter.category.slice(1)}:
@@ -540,13 +556,13 @@ export default function EquipmentDetailsRegistration() {
 
                   <div className="overflow-x-auto">
                     <table className="min-w-full bg-white border border-gray-300">
-                      <thead>
+                      <thead className="text-base">
                         <tr className="bg-gray-100">
-                          <th className="py-2 px-4 border-b">Tag No</th>
-                          <th className="py-2 px-4 border-b">Description</th>
-                          <th className="py-2 px-4 border-b">Location</th>
-                          <th className="py-2 px-4 border-b">DOSH No</th>
-                          <th className="py-2 px-4 border-b">Actions</th>
+                          <th className="py-2 px-4 border-b text-center">Tag No</th>
+                          <th className="py-2 px-4 border-b text-center">Description</th>
+                          <th className="py-2 px-4 border-b text-center">Location</th>
+                          <th className="py-2 px-4 border-b text-center">DOSH No</th>
+                          <th className="py-2 px-4 border-b text-center">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -562,30 +578,24 @@ export default function EquipmentDetailsRegistration() {
                             });
                           })
                           .map((item) => (
-                            <tr key={item.id} className="hover:bg-gray-50">
-                              <td className="py-2 px-4 border-b">{item.equipment_tag_no}</td>
-                              <td className="py-2 px-4 border-b">{item.equipment_description}</td>
-                              <td className="py-2 px-4 border-b">{item.location}</td>
-                              <td className="py-2 px-4 border-b">{item.dosh_registration_no}</td>
-                              <td className="py-2 px-4 border-b flex gap-2">
+                            <tr key={item.id} className="hover:bg-gray-50 text-base">
+                              <td className="py-2 px-4 border-b text-center">{item.equipment_tag_no}</td>
+                              <td className="py-2 px-4 border-b text-center">{item.equipment_description}</td>
+                              <td className="py-2 px-4 border-b text-center">{item.location}</td>
+                              <td className="py-2 px-4 border-b text-center">{item.dosh_registration_no}</td>
+                              <td className="py-2 px-4 border-b flex gap-2 justify-center">
                                 <button
                                   onClick={() => setViewingItem(item)}
-                                  className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
+                                  className="bg-green-500 text-white px-6 py-1 rounded hover:bg-green-600 font-semibold"
                                 >
                                   View
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(item.id)}
-                                  className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-                                >
-                                  Delete
                                 </button>
                               </td>
                             </tr>
                           ))}
                         {equipmentList.length === 0 && (
                           <tr>
-                            <td colSpan="5" className="py-4 text-center text-gray-500">
+                            <td colSpan="5" className="py-4 text-center text-sm text-gray-500">
                               No equipment found.
                             </td>
                           </tr>
@@ -601,17 +611,24 @@ export default function EquipmentDetailsRegistration() {
                     {/* Left side - Image */}
                     <div className="w-full md:w-1/3 flex flex-col items-center pt-8">
                       <div className="w-full bg-gray-200 overflow-hidden border border-gray-300 rounded-lg min-h-[520px] flex items-center justify-center">
-                        {/* TODO: Show actual image if available */}
-                        <img
-                          src={viewingItem.image_url ? `http://localhost:8000${viewingItem.image_url}` : "image_633902.png"}
-                          alt="Equipment"
-                          className="w-full h-full object-contain"
-                        />
+                        {/* Show equipment image if available in database*/}
+                        {/* Show equipment image if available in database, else show text */}
+                        {viewingItem.image_url ? (
+                          <img
+                            src={`http://localhost:8000${viewingItem.image_url}`}
+                            alt="Equipment"
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-gray-500 text-lg font-medium">
+                            no image to be viewed
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     {/* Right side - Details */}
-                    <div className="flex-1 flex flex-col gap-4 pt-8">
+                    <div className="flex-1 flex flex-col gap-4 justify-center items-center w-full">
                       <DetailsRow label="Equipment Tag No:" value={viewingItem.equipment_tag_no} />
                       <DetailsRow label="Equipment Description:" value={viewingItem.equipment_description} />
                       <DetailsRow label="Plant/Unit/Area:" value={viewingItem.location} />
@@ -623,22 +640,45 @@ export default function EquipmentDetailsRegistration() {
                       <DetailsRow label="Corrosion Allowance (mm):" value={viewingItem.corrosion_allowance} />
                       <DetailsRow label="Design Pressure (barg):" value={viewingItem.design_pressure} />
                       <DetailsRow label="Design Temperature (°C):" value={viewingItem.design_temperature} />
+
+                      <div className="flex items-center gap-4 mt-4 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                        <span className="font-bold text-base text-gray-800">Status:</span>
+                        <select
+                          value={viewingItem.status || "ACTIVE"}
+                          onChange={(e) => handleStatusUpdate(e.target.value)}
+                          className={`px-4 py-2 rounded-lg font-bold text-white cursor-pointer border-none outline-none
+                             ${viewingItem.status === "ACTIVE" ? "bg-green-500 hover:bg-green-600" :
+                              viewingItem.status === "MAINTENANCE" ? "bg-orange-500 hover:bg-orange-600" :
+                                "bg-gray-500 hover:bg-gray-600"}`}
+                        >
+                          <option value="ACTIVE" className="bg-white text-black">Active</option>
+                          <option value="INACTIVE" className="bg-white text-black">Inactive</option>
+                          <option value="MAINTENANCE" className="bg-white text-black">Maintenance</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
                   {/* Buttons */}
-                  <div className="mt-16 flex flex-col items-center gap-2">
+                  <div className="mt-12 flex flex-col items-center gap-4">
                     <button
                       onClick={() => handleEdit(viewingItem)}
-                      className="px-10 py-2 text-base bg-blue-500 text-white rounded-lg shadow-sm hover:bg-blue-600"
+                      className="px-8 py-2 text-base font-bold bg-blue-500 text-white rounded-xl shadow-md hover:bg-blue-600 transition-transform hover:scale-105"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => setViewingItem(null)}
-                      className="px-10 py-2 text-base bg-gray-300 border border-gray-500 rounded-lg shadow-sm hover:bg-gray-400"
+                      className="px-8 py-2 text-base font-bold bg-blue-500 text-white border border-blue-500 rounded-xl shadow-md hover:bg-blue-600 transition-transform hover:scale-105"
                     >
                       Back to List
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(viewingItem.id)}
+                      className="px-8 py-2 text-base font-bold bg-red-500 text-white rounded-xl shadow-md hover:bg-red-600 transition-transform hover:scale-105"
+                    >
+                      Delete
                     </button>
                   </div>
                 </div>
