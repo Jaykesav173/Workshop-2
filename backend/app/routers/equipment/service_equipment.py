@@ -15,9 +15,7 @@ class EquipmentService:
         self.db = get_db()
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
-    # ----------------------------------------------------------
-    # Create Equipment
-    # ----------------------------------------------------------
+    # Create equipment
     async def create_equipment(self, equipment: EquipmentCreate, current_user: dict):
         try:
             equipment_data = {
@@ -46,12 +44,10 @@ class EquipmentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error creating equipment: {str(e)}")
 
-    # ----------------------------------------------------------
-    # Upload Image
-    # ----------------------------------------------------------
+    # Upload equipment image
     async def upload_equipment_image(self, equipment_id: str, file: UploadFile, current_user: dict):
         try:
-            # Verify equipment exists
+            # Verify if the equipment exists in the database
             await self.get_equipment(equipment_id)
 
             file_ext = os.path.splitext(file.filename)[1]
@@ -64,9 +60,8 @@ class EquipmentService:
 
             file_size = len(content)
 
-            # Note: 'Photo' table structure might need verification, assuming it matches schema
             photo_data = {
-                "equipment_id": int(equipment_id), # Ensure int if ID is int
+                "equipment_id": int(equipment_id), 
                 "uploaded_by": current_user.get("id"),
                 "file_path": file_path,
                 "file_name": file.filename,
@@ -89,9 +84,7 @@ class EquipmentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
 
-    # ----------------------------------------------------------
-    # Get All
-    # ----------------------------------------------------------
+    # to get all equipment
     async def get_all_equipment(self):
         try:
             res = self.db.table("equipment").select("*").order("id").execute()
@@ -112,9 +105,7 @@ class EquipmentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
 
-    # ----------------------------------------------------------
-    # Get By ID
-    # ----------------------------------------------------------
+    # Get the equipment by ID
     async def get_equipment(self, equipment_id: str):
         try:
             res = self.db.table("equipment").select("*").eq("id", equipment_id).execute()
@@ -133,9 +124,7 @@ class EquipmentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
 
-    # ----------------------------------------------------------
-    # Update
-    # ----------------------------------------------------------
+    # Update equipment information
     async def update_equipment(self, equipment_id: str, equipment: EquipmentCreate):
         try:
             update_data = {
@@ -164,9 +153,7 @@ class EquipmentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error updating equipment: {str(e)}")
 
-    # ----------------------------------------------------------
-    # Delete
-    # ----------------------------------------------------------
+    # Delete equipment
     async def delete_equipment(self, equipment_id: str):
         try:
             # Check if exists
@@ -191,13 +178,18 @@ class EquipmentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error deleting equipment: {str(e)}")
 
-    # ----------------------------------------------------------
     # Get Dropdown List Options
-    # ----------------------------------------------------------
     async def get_equipment_options(self):
         try:
             res = self.db.table("type").select("id, description").execute()
-            # Return list of dicts {id, description}
             return {"types": res.data if res.data else []}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching types: {str(e)}")
+
+    # # Get material options
+    # async def get_material_options(self):
+    #     try:
+    #         res = self.db.table("material").select("id, description").execute()
+    #         return {"materials": res.data if res.data else []}
+    #     except Exception as e:
+    #         raise HTTPException(status_code=500, detail=f"Error fetching materials: {str(e)}")
