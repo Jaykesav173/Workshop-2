@@ -169,6 +169,34 @@ export default function EquipmentDetailsRegistration() {
         return;
       }
 
+      // Check for duplicates
+      try {
+        const res = await getAllEquipment(token);
+        const existingList = res.data;
+
+        // Check for duplicate Tag No or DOSH No
+        // Exclude the current equipment if we are editing (editingId)
+        const duplicate = existingList.find(item =>
+          ((item.equipment_tag_no === form.equipment_tag_no) ||
+            (item.dosh_registration_no === form.dosh_registration_no)) &&
+          (!editingId || item.id !== editingId)
+        );
+
+        if (duplicate) {
+          alert(`Equipment with this Tag No (${duplicate.equipment_tag_no}) or DOSH No (${duplicate.dosh_registration_no}) already exists.`);
+          setViewingItem(duplicate);
+          setActiveTab("Equipment Details");
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to check for duplicates", err);
+        // Optional: decide if we stop saving if check fails. 
+        // For now, we continue or just alert functionality issue, but safer to let it pass if API fails? 
+        // Actually best to alert user that check failed.
+        alert("Network error: Unable to verify if equipment exists. Please try again.");
+        return;
+      }
+
       const payload = {
         ...form,
         type_id: parseInt(form.type_id),
@@ -448,22 +476,22 @@ export default function EquipmentDetailsRegistration() {
 
                 {/* Right side - Form */}
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
-                  <FormRow label="Equipment Tag No:" placeholder="Value" name="equipment_tag_no" form={form} setForm={setForm} options={options} required />
-                  <FormRow label="Plant/Unit/Area:" placeholder="Value" name="location" form={form} setForm={setForm} options={options} required />
+                  <FormRow label="Equipment Tag No:" placeholder="eg. T-101" name="equipment_tag_no" form={form} setForm={setForm} options={options} required />
+                  <FormRow label="Plant/Unit/Area:" placeholder="eg. Plant A" name="location" form={form} setForm={setForm} options={options} required />
 
-                  <FormRow label="Equipment Description:" placeholder="Value" name="equipment_description" form={form} setForm={setForm} options={options} required className="md:col-span-2" />
+                  <FormRow label="Equipment Description:" placeholder="eg. Nitrogen Vessel" name="equipment_description" form={form} setForm={setForm} options={options} required className="md:col-span-2" />
 
-                  <FormRow label="DOSH Registration No:" placeholder="Value" name="dosh_registration_no" form={form} setForm={setForm} options={options} required />
+                  <FormRow label="DOSH Registration No:" placeholder="eg. MK PMT 1001" name="dosh_registration_no" form={form} setForm={setForm} options={options} required />
                   <FormRow label="Type:" placeholder="Select Type" type="select" name="type_id" form={form} setForm={setForm} options={options} required />
 
                   <div className="md:col-span-2 h-px bg-gray-200 my-2"></div>
 
-                  <FormRow label="Material:" placeholder="Material" name="material" form={form} setForm={setForm} options={options} />
+                  <FormRow label="Material:" placeholder="eg. Carbon Steel" name="material" form={form} setForm={setForm} options={options} />
 
                   {/* Numeric Fields with Validation */}
                   <FormRow
                     label="Nominal Thickness (mm):"
-                    placeholder="Value"
+                    placeholder="eg. 10"
                     name="nominal_thickness"
                     form={form}
                     setForm={setForm}
@@ -474,7 +502,7 @@ export default function EquipmentDetailsRegistration() {
 
                   <FormRow
                     label="Corrosion Allowance (mm):"
-                    placeholder="Value"
+                    placeholder="eg. 1"
                     name="corrosion_allowance"
                     form={form}
                     setForm={setForm}
@@ -484,7 +512,7 @@ export default function EquipmentDetailsRegistration() {
                   />
                   <FormRow
                     label="Design Pressure (barg):"
-                    placeholder="Value"
+                    placeholder="eg. 10"
                     name="design_pressure"
                     form={form}
                     setForm={setForm}
@@ -495,7 +523,7 @@ export default function EquipmentDetailsRegistration() {
 
                   <FormRow
                     label="Design Temperature (°C):"
-                    placeholder="Value"
+                    placeholder="eg. 100"
                     name="design_temperature"
                     form={form}
                     setForm={setForm}
@@ -558,7 +586,7 @@ export default function EquipmentDetailsRegistration() {
                     <div className="flex flex-wrap items-center gap-4">
                       {/* Filter By Dropdown */}
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-l text-black">Filter by:</span>
+                        <span className="font-bold text-l text-black">Filtered by:</span>
                         <select
                           value={filterCategory}
                           onChange={(e) => {
@@ -568,9 +596,9 @@ export default function EquipmentDetailsRegistration() {
                           className="px-4 py-2 bg-gray-300 text-black text-l rounded-full border-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
                         >
                           <option value="">Select your filter here</option>
-                          <option value="type_id">Type</option>
-                          <option value="location">Location</option>
-                          <option value="status">Status</option>
+                          <option value="type_id" disabled={activeFilters.some(f => f.category === "type_id")}>Type</option>
+                          <option value="location" disabled={activeFilters.some(f => f.category === "location")}>Location</option>
+                          <option value="status" disabled={activeFilters.some(f => f.category === "status")}>Status</option>
                         </select>
                       </div>
 
