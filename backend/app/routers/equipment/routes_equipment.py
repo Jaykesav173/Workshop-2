@@ -52,7 +52,7 @@ async def get_all_equipment():
     return await equipment_service.get_all_equipment()
 
 # -------------------------------------------------------------------------
-# Get by ID (str)
+# Get by ID (str) : return only a single record/one equipment 
 # -------------------------------------------------------------------------
 @router.get("/{equipment_id}", response_model=EquipmentResponse)
 async def get_equipment(

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, ChevronDown, Upload } from "lucide-react";
+import { X, ChevronDown, Upload, Search, ChevronLeft, ChevronRight } from "lucide-react";
 
 import {
   createEquipment,
@@ -66,23 +66,23 @@ const DetailsRow = ({ label, value }) => (
   </div>
 );
 
-const InstructionField = () => (
-  <div className="mt-8 px-4">
-    <div className="text-sm font-normal text-black mb-4">
-      Please insert the equipment number of the equipment that requires changes.
-    </div>
-    <div className="flex items-center gap-4">
-      <span className="text-sm font-bold text-black min-w-[152px]">
-        Equipment Tag No:
-      </span>
-      <input
-        type="text"
-        placeholder="Value"
-        className="w-[305px] h-9 bg-gray-300 rounded-xl px-4 text-sm text-gray-700 placeholder-gray-500 shadow-inner"
-      />
-    </div>
-  </div>
-);
+// const InstructionField = () => (
+//   <div className="mt-8 px-4">
+//     <div className="text-sm font-normal text-black mb-4">
+//       Please insert the equipment number of the equipment that requires changes.
+//     </div>
+//     <div className="flex items-center gap-4">
+//       <span className="text-sm font-bold text-black min-w-[152px]">
+//         Equipment Tag No:
+//       </span>
+//       <input
+//         type="text"
+//         placeholder="Value"
+//         className="w-[305px] h-9 bg-gray-300 rounded-xl px-4 text-sm text-gray-700 placeholder-gray-500 shadow-inner"
+//       />
+//     </div>
+//   </div>
+// );
 
 export default function EquipmentDetailsRegistration() {
 
@@ -118,7 +118,13 @@ export default function EquipmentDetailsRegistration() {
   // Filter State
   const [filterCategory, setFilterCategory] = useState("");
   const [filterValue, setFilterValue] = useState("");
+
   const [activeFilters, setActiveFilters] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const token = localStorage.getItem("token");
 
@@ -190,9 +196,8 @@ export default function EquipmentDetailsRegistration() {
         }
       } catch (err) {
         console.error("Failed to check for duplicates", err);
-        // Optional: decide if we stop saving if check fails. 
-        // For now, we continue or just alert functionality issue, but safer to let it pass if API fails? 
-        // Actually best to alert user that check failed.
+        //alert user if the checking fails
+
         alert("Network error: Unable to verify if equipment exists. Please try again.");
         return;
       }
@@ -350,6 +355,21 @@ export default function EquipmentDetailsRegistration() {
     "Equipment Details",
   ];
 
+  // Helper to highlight text
+  const highlightText = (text, query) => {
+    if (!query) return text;
+    if (!text) return "";
+
+    const parts = text.toString().split(new RegExp(`(${query})`, "gi"));
+    return parts.map((part, i) =>
+      part.toLowerCase() === query.toLowerCase() ? (
+        <span key={i} className="bg-yellow-200 font-bold">{part}</span>
+      ) : (
+        part
+      )
+    );
+  };
+
   // RENDER UI
   return (
 
@@ -453,7 +473,7 @@ export default function EquipmentDetailsRegistration() {
                     ) : (
                       <div className="flex flex-col text-center items-center text-gray-500">
                         <Upload size={48} className="opacity-30 mb-2" />
-                        <span className="text-base font-medium text-gray-600">Drag and drop an image here</span>
+                        <span className="text-base font-medium text-gray-600">Drag and drop an image here (General View only)</span>
                       </div>
                     )}
                   </div>
@@ -583,6 +603,25 @@ export default function EquipmentDetailsRegistration() {
                 <div className="w-full">
                   {/* Filter Section */}
                   <div className="flex flex-col gap-4 mb-6 bg-gray-50 p-6 rounded-lg border border-gray-200">
+
+                    {/* Search Bar */}
+                    <div className="relative w-full">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Search equipment by tag, description, location, or DOSH no..."
+                        className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setCurrentPage(1); // Reset to first page on search
+                        }}
+                      />
+                    </div>
+
+
                     <div className="flex flex-wrap items-center gap-4">
                       {/* Filter By Dropdown */}
                       <div className="flex items-center gap-2">
@@ -592,6 +631,7 @@ export default function EquipmentDetailsRegistration() {
                           onChange={(e) => {
                             setFilterCategory(e.target.value);
                             setFilterValue(""); // Reset value when category changes
+                            setCurrentPage(1);
                           }}
                           className="px-4 py-2 bg-gray-300 text-black text-l rounded-full border-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
                         >
@@ -614,6 +654,7 @@ export default function EquipmentDetailsRegistration() {
                               // Add to active filters if not already present
                               if (!activeFilters.some(f => f.category === filterCategory && f.value === val)) {
                                 setActiveFilters([...activeFilters, { category: filterCategory, value: val }]);
+                                setCurrentPage(1);
                               }
                               // Reset selection after adding
                               setFilterCategory("");
@@ -648,7 +689,10 @@ export default function EquipmentDetailsRegistration() {
                               : filter.value}
                           </span>
                           <button
-                            onClick={() => setActiveFilters(activeFilters.filter((_, i) => i !== index))}
+                            onClick={() => {
+                              setActiveFilters(activeFilters.filter((_, i) => i !== index));
+                              setCurrentPage(1);
+                            }}
                             className="hover:text-red-600 font-bold"
                           >
                             ×
@@ -657,7 +701,10 @@ export default function EquipmentDetailsRegistration() {
                       ))}
                       {activeFilters.length > 0 && (
                         <button
-                          onClick={() => setActiveFilters([])}
+                          onClick={() => {
+                            setActiveFilters([]);
+                            setCurrentPage(1);
+                          }}
                           className="text-sm text-red-600 hover:underline self-center ml-2"
                         >
                           Clear all
@@ -679,39 +726,108 @@ export default function EquipmentDetailsRegistration() {
                         </tr>
                       </thead>
                       <tbody>
-                        {equipmentList
-                          .filter(item => {
-                            if (activeFilters.length === 0) return true;
-                            return activeFilters.every(filter => {
-                              if (filter.category === "type_id") {
-                                return item.type_id.toString() === filter.value.toString();
-                              }
-                              return item[filter.category] === filter.value;
+                        {(() => {
+                          const filteredItems = equipmentList
+                            .filter(item => {
+                              if (activeFilters.length === 0) return true;
+                              return activeFilters.every(filter => {
+                                if (filter.category === "type_id") {
+                                  return item.type_id.toString() === filter.value.toString();
+                                }
+                                return item[filter.category] === filter.value;
+                              });
+                            })
+                            .filter(item => {
+                              if (!searchQuery) return true;
+                              const query = searchQuery.toLowerCase();
+                              return (
+                                (item.equipment_tag_no && item.equipment_tag_no.toLowerCase().includes(query)) ||
+                                (item.equipment_description && item.equipment_description.toLowerCase().includes(query)) ||
+                                (item.location && item.location.toLowerCase().includes(query)) ||
+                                (item.dosh_registration_no && item.dosh_registration_no.toLowerCase().includes(query))
+                              );
                             });
-                          })
-                          .map((item) => (
-                            <tr key={item.id} className="hover:bg-gray-50 text-base">
-                              <td className="py-2 px-4 border-b text-center">{item.equipment_tag_no}</td>
-                              <td className="py-2 px-4 border-b text-center">{item.equipment_description}</td>
-                              <td className="py-2 px-4 border-b text-center">{item.location}</td>
-                              <td className="py-2 px-4 border-b text-center">{item.dosh_registration_no}</td>
-                              <td className="py-2 px-4 border-b flex gap-2 justify-center">
-                                <button
-                                  onClick={() => setViewingItem(item)}
-                                  className="bg-green-500 text-white px-6 py-1 rounded hover:bg-green-600 font-semibold"
-                                >
-                                  View
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        {equipmentList.length === 0 && (
-                          <tr>
-                            <td colSpan="5" className="py-4 text-center text-sm text-gray-500">
-                              No equipment found.
-                            </td>
-                          </tr>
-                        )}
+
+                          // Pagination Logic
+                          const indexOfLastItem = currentPage * itemsPerPage;
+                          const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+                          const currentItems = filteredItems.slice(indexOfFirstItem, indexOfLastItem);
+                          const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+
+                          if (currentItems.length === 0 && filteredItems.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan="5" className="py-4 text-center text-sm text-gray-500">
+                                  No equipment found.
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          if (currentItems.length === 0 && filteredItems.length > 0) {
+                            // e.g. landed on empty page
+                            return (
+                              <tr>
+                                <td colSpan="5" className="py-4 text-center text-sm text-gray-500">
+                                  No items on this page.
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return (
+                            <>
+                              {currentItems.map((item) => (
+                                <tr key={item.id} className="hover:bg-gray-50 text-base">
+                                  <td className="py-2 px-4 border-b text-center">{highlightText(item.equipment_tag_no, searchQuery)}</td>
+                                  <td className="py-2 px-4 border-b text-center">{highlightText(item.equipment_description, searchQuery)}</td>
+                                  <td className="py-2 px-4 border-b text-center">{highlightText(item.location, searchQuery)}</td>
+                                  <td className="py-2 px-4 border-b text-center">{highlightText(item.dosh_registration_no, searchQuery)}</td>
+                                  <td className="py-2 px-4 border-b flex gap-2 justify-center">
+                                    <button
+                                      onClick={() => setViewingItem(item)}
+                                      className="bg-green-500 text-white px-6 py-1 rounded hover:bg-green-600 font-semibold"
+                                    >
+                                      View
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+
+                              {/* Pagination Controls Row */}
+                              {filteredItems.length > itemsPerPage && (
+                                <tr>
+                                  <td colSpan="5" className="py-4 border-t border-gray-200">
+                                    <div className="flex justify-between items-center px-4">
+                                      <div className="text-sm text-gray-600">
+                                        Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredItems.length)} of {filteredItems.length} entries
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                          disabled={currentPage === 1}
+                                          className="p-1 rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
+                                        >
+                                          <ChevronLeft size={20} />
+                                        </button>
+                                        <span className="text-sm font-medium text-gray-700">
+                                          Page {currentPage} of {totalPages}
+                                        </span>
+                                        <button
+                                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                          disabled={currentPage === totalPages}
+                                          className="p-1 rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
+                                        >
+                                          <ChevronRight size={20} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                          );
+                        })()}
                       </tbody>
                     </table>
                   </div>
