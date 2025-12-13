@@ -4,7 +4,6 @@
  */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import InspectorLayout from '../../components/inspector/InspectorLayout'
 import axios from 'axios'
 import { API_BASE } from '../../services/api'
 
@@ -170,7 +169,7 @@ function MyInspections() {
   const draftInspections = inspections.filter(i => i.status === 'Draft' || i.status === 'In Progress').length
 
   return (
-    <InspectorLayout activeMenuId="inspection">
+    <>
       {/* Page Header */}
       <div className="mb-8 flex justify-between items-center">
         <div>
@@ -319,7 +318,7 @@ function MyInspections() {
           </div>
         )}
       </div>
-    </InspectorLayout>
+    </>
   )
 }
 

@@ -4,6 +4,9 @@
  */
 import { Routes, Route, Navigate } from 'react-router-dom'
 
+// Layout import
+import MainLayout from '../components/MainLayout.jsx'
+
 // Module imports
 import AuthModule from '../modules/auth/Login.jsx'
 import PhotoUploadModule from '../modules/photoUpload/PhotoUpload.jsx'
@@ -26,22 +29,25 @@ function Router() {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<AuthModule />} />
       
-      {/* Dashboard Routes */}
-      <Route path="/admin/dashboard" element={<AdminDashboard />} />
-      <Route path="/inspector/dashboard" element={<InspectorDashboard />} />
-      
-      {/* Module Routes */}
-      <Route path="/photo-upload" element={<PhotoUploadModule />} />
-      <Route path="/inspection" element={<InspectionModule />} />
-      <Route path="/inspection/list" element={<MyInspections />} />
-      <Route path="/inspection/new" element={<NewInspection />} />
-      <Route path="/inspection/:id" element={<InspectionDetails />} />
-      <Route path="/defect-ai" element={<DefectAIModule />} />
-      <Route path="/reports" element={<ReportsModule />} />
-      <Route path="/validation" element={<ValidationModule />} />
-      <Route path="/monitoring" element={<MonitoringModule />} />
-      <Route path="/equipment" element={<EquipmentModule />} />
-      <Route path="/analytics" element={<AnalyticsModule />} />
+      {/* Authenticated Routes with MainLayout */}
+      <Route element={<MainLayout />}>
+        {/* Dashboard Routes */}
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/inspector/dashboard" element={<InspectorDashboard />} />
+        
+        {/* Module Routes */}
+        <Route path="/photo-upload" element={<PhotoUploadModule />} />
+        <Route path="/inspection" element={<InspectionModule />} />
+        <Route path="/inspection/list" element={<MyInspections />} />
+        <Route path="/inspection/new" element={<NewInspection />} />
+        <Route path="/inspection/:id" element={<InspectionDetails />} />
+        <Route path="/defect-ai" element={<DefectAIModule />} />
+        <Route path="/reports" element={<ReportsModule />} />
+        <Route path="/validation" element={<ValidationModule />} />
+        <Route path="/monitoring" element={<MonitoringModule />} />
+        <Route path="/equipment" element={<EquipmentModule />} />
+        <Route path="/analytics" element={<AnalyticsModule />} />
+      </Route>
     </Routes>
   )
 }

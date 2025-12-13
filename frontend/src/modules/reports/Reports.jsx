@@ -98,8 +98,6 @@ function Reports() {
   const location = useLocation() // Get inspection_id from location state if present
   const fileInputRef = useRef(null)
   const [user, setUser] = useState(null)
-  const [activeMenu, setActiveMenu] = useState('reports')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
   
   // Report state
   const [inspectionId, setInspectionId] = useState(null) // Store inspection_id if available
@@ -119,8 +117,82 @@ function Reports() {
     report_date: new Date().toISOString().split('T')[0],
     inspector_name: '',
     reviewed_by: '',
-    client_approver: ''
+    client_approver: '',
+    inspection_type: 'VI', // Default to Visual Inspection
+    turnaround_code: null // Auto-generated from report_date
   })
+  
+  // Map inspection type to standardized code for report number
+  const mapInspectionTypeToCode = (inspectionType) => {
+    if (!inspectionType) return 'VI'
+    const typeUpper = inspectionType.toUpperCase().trim()
+    const mapping = {
+      'VISUAL': 'VI',
+      'VISUAL INSPECTION': 'VI',
+      'NDT': 'NDT',
+      'NDT INSPECTION': 'NDT',
+      'COMPREHENSIVE': 'COMP',
+      'ROUTINE': 'ROUT',
+    }
+    if (mapping[typeUpper]) return mapping[typeUpper]
+    if (typeUpper.length <= 4) return typeUpper
+    return 'VI'
+  }
+
+  // Function to generate report number according to format
+  const generateReportNumber = (plant, equipmentTag, reportDate, inspectionType = 'VI', turnaroundCode = null) => {
+    if (!plant || !equipmentTag || !reportDate) {
+      return ''
+    }
+    
+    // Normalize plant name: remove spaces, convert to uppercase
+    const plantNormalized = plant.replace(/\s+/g, '').toUpperCase()
+    
+    // Map inspection type to standardized code
+    const inspectionTypeCode = mapInspectionTypeToCode(inspectionType)
+    
+    // Extract year from report_date and create turnaround code
+    let turnaroundCodeNormalized
+    if (turnaroundCode) {
+      turnaroundCodeNormalized = turnaroundCode.toUpperCase()
+    } else {
+      // Extract year from report_date (format: YYYY-MM-DD)
+      try {
+        const year = reportDate.substring(0, 4)
+        if (year && year.match(/^\d{4}$/)) {
+          turnaroundCodeNormalized = `TA${year}`
+        } else {
+          // Fallback to current year
+          turnaroundCodeNormalized = `TA${new Date().getFullYear()}`
+        }
+      } catch (e) {
+        turnaroundCodeNormalized = `TA${new Date().getFullYear()}`
+      }
+    }
+    
+    // Construct report number: <PLANT>/<INSPECTION_TYPE>/<EQUIPMENT_TAG>/<TURNAROUND_CODE>
+    return `${plantNormalized}/${inspectionTypeCode}/${equipmentTag}/${turnaroundCodeNormalized}`
+  }
+  
+  // Auto-generate report number when relevant fields change
+  useEffect(() => {
+    if (header.plant && header.equipment_tag && header.report_date) {
+      const generatedReportNo = generateReportNumber(
+        header.plant,
+        header.equipment_tag,
+        header.report_date,
+        header.inspection_type,
+        header.turnaround_code
+      )
+      // Only update if the generated number is different from current
+      setHeader(prev => {
+        if (prev.report_no !== generatedReportNo) {
+          return { ...prev, report_no: generatedReportNo }
+        }
+        return prev
+      })
+    }
+  }, [header.plant, header.equipment_tag, header.report_date, header.inspection_type, header.turnaround_code])
   
   // Findings and recommendations
   const [findings, setFindings] = useState([])
@@ -191,7 +263,7 @@ function Reports() {
     }
   ]
 
-  // Fetch user info and verify authentication
+  // Fetch user info
   useEffect(() => {
     const userStr = localStorage.getItem('user')
     const token = localStorage.getItem('token')
@@ -233,6 +305,32 @@ function Reports() {
       }
     }
   }, [urlInspectionId, location.state])
+
+  // Fetch inspection data when inspection_id is available to auto-populate plant field
+  useEffect(() => {
+    const fetchInspectionData = async () => {
+      if (inspectionId) {
+        try {
+          const token = localStorage.getItem('token')
+          const response = await axios.get(`${API_BASE}/inspections/${inspectionId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          const inspection = response.data
+          // Auto-populate plant field from inspection if not already set
+          if (inspection?.plant_unit_area && !header.plant) {
+            setHeader(prev => ({
+              ...prev,
+              plant: inspection.plant_unit_area
+            }))
+            console.log('📋 Auto-populated plant field from inspection:', inspection.plant_unit_area)
+          }
+        } catch (err) {
+          console.error('Error fetching inspection data:', err)
+        }
+      }
+    }
+    fetchInspectionData()
+  }, [inspectionId])
   
   // Fetch equipment list
   useEffect(() => {
@@ -259,7 +357,8 @@ function Reports() {
         equipment_tag: selectedEquipment.equipment_tag_no || selectedEquipment.name || '',
         equipment_description: selectedEquipment.equipment_description || 
                               `${selectedEquipment.type || ''} - ${selectedEquipment.equipment_tag_no || selectedEquipment.name || ''}`,
-        plant: selectedEquipment.location || '',
+        // Only set plant from equipment if not already set from inspection
+        plant: prev.plant || selectedEquipment.location || '',
         dosh_no: selectedEquipment.dosh_registration_no || ''
       }))
       setEquipmentId(selectedEquipment.id)
@@ -499,94 +598,8 @@ function Reports() {
     }
   }
 
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Icons.Dashboard, path: '/inspector/dashboard' },
-    { id: 'inspection', label: 'Inspection Workflow', icon: Icons.Eye, path: '/inspection' },
-    { id: 'photos', label: 'Photo Upload', icon: Icons.Camera, path: '/photo-upload' },
-    { id: 'reports', label: 'Generate Report', icon: Icons.FileText, path: '/reports' },
-    { id: 'defect-ai', label: 'Defect AI', icon: Icons.Bot, path: '/defect-ai' },
-    { id: 'validation', label: 'Validation', icon: Icons.CheckCircle, path: '/validation' },
-    { id: 'equipment', label: 'Equipment', icon: Icons.Building, path: '/equipment' },
-  ]
-
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col`}>
-        <div className="p-6 border-b border-gray-200">
-          <h1 className={`text-xl font-bold text-gray-900 ${!sidebarOpen && 'hidden'}`}>VISOR</h1>
-          <h1 className={`text-xl font-bold text-gray-900 ${sidebarOpen && 'hidden'}`}>V</h1>
-        </div>
-        
-        <nav className="flex-1 p-4 space-y-1">
-          {menuItems.map((item) => {
-            const isActive = activeMenu === item.id
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveMenu(item.id)
-                  if (item.path) navigate(item.path)
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <div className={`${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
-                  <item.icon />
-                </div>
-                {sidebarOpen && <span className="text-sm">{item.label}</span>}
-              </button>
-            )
-          })}
-        </nav>
-      </aside>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Navigation */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex-1 max-w-2xl">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Icons.Search />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search inspections, equipment, sites..."
-                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4 ml-6">
-              <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative">
-                <Icons.Bell />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                <Icons.Settings />
-              </button>
-              <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                  {user?.username?.charAt(0).toUpperCase() || 'I'}
-                </div>
-                {user && (
-                  <div className="hidden md:block">
-                    <p className="text-sm font-medium text-gray-900">{user.username}</p>
-                    <p className="text-xs text-gray-500">{user.role}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+    <>
           {/* Page Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -629,7 +642,7 @@ function Reports() {
                     const desc = eq.equipment_description || eq.type || ''
                     const loc = eq.location || 'N/A'
                     const displayText = desc ? `${tag} - ${desc} (${loc})` : `${tag} (${loc})`
-  return (
+                    return (
                       <option key={eq.id} value={eq.id}>
                         {displayText}
                       </option>
@@ -691,8 +704,12 @@ function Reports() {
                   className="visor-form-input"
                   value={header.report_no}
                   onChange={(e) => setHeader({...header, report_no: e.target.value})}
-                  placeholder="RPT-2024-001"
+                  placeholder="PLANT1/VI/V-002/TA2025"
+                  title="Auto-generated from Plant, Equipment Tag, and Report Date (format: PLANT/INSPECTION_TYPE/EQUIPMENT_TAG/TURNAROUND_CODE)"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Format: PLANT/INSPECTION_TYPE/EQUIPMENT_TAG/TURNAROUND_CODE (auto-generated when Plant, Equipment Tag, and Report Date are filled)
+                </p>
               </div>
               <div className="visor-form-group">
                 <label className="visor-form-label">Report Date <span className="text-red-500">*</span></label>
@@ -1041,9 +1058,7 @@ function Reports() {
               </button>
             )}
           </div>
-        </main>
-      </div>
-    </div>
+    </>
   )
 }
 

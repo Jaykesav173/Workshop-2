@@ -131,3 +131,4 @@ LEFT JOIN "User" u ON e.created_by = u.id;
 **Table Owner:** Yi Jing (Equipment Information Module)
 
 
+

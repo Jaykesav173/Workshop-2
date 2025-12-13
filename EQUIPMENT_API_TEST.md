@@ -124,3 +124,4 @@ print(f"Data: {response.json()}")
 
 **Note**: RLS is currently open for testing. Remember to implement proper role-based policies before production!
 
+

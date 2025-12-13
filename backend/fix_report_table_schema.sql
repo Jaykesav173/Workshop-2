@@ -10,3 +10,4 @@ ALTER COLUMN inspection_id DROP NOT NULL;
 -- FROM information_schema.columns 
 -- WHERE table_name = 'Report' AND column_name = 'inspection_id';
 
+

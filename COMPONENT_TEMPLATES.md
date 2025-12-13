@@ -332,3 +332,4 @@ When creating new components:
 
 **Remember:** All components should feel like part of the same unified VISOR platform!
 
+

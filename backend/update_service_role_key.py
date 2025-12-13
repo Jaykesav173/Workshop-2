@@ -75,3 +75,4 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 if __name__ == "__main__":
     update_env_file()
 
+

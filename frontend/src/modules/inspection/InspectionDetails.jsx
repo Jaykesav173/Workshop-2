@@ -4,7 +4,6 @@
  */
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import InspectorLayout from '../../components/inspector/InspectorLayout'
 import axios from 'axios'
 import { API_BASE } from '../../services/api'
 import { photoService } from '../../services/photoService'
@@ -955,19 +954,82 @@ function InspectionDetails() {
 
       const equipmentTagNo = inspection.equipment_tag_no || equipment?.equipment_tag_no || equipment?.name || 'N/A'
       
+      // Map inspection type to standardized code for report number
+      const mapInspectionTypeToCode = (inspectionType) => {
+        if (!inspectionType) return 'VI'
+        const typeUpper = inspectionType.toUpperCase().trim()
+        const mapping = {
+          'VISUAL': 'VI',
+          'VISUAL INSPECTION': 'VI',
+          'NDT': 'NDT',
+          'NDT INSPECTION': 'NDT',
+          'COMPREHENSIVE': 'COMP',
+          'ROUTINE': 'ROUT',
+        }
+        if (mapping[typeUpper]) return mapping[typeUpper]
+        if (typeUpper.length <= 4) return typeUpper
+        return 'VI'
+      }
+      
+      // Generate report number: <PLANT>/<INSPECTION_TYPE>/<EQUIPMENT_TAG>/<TURNAROUND_CODE>
+      const generateReportNumber = (plant, equipmentTag, reportDate, inspectionType) => {
+        if (!plant || !equipmentTag || !reportDate) {
+          return `RPT-${inspectionId}-${Date.now()}` // Fallback if required fields missing
+        }
+        
+        // Normalize plant: remove spaces, uppercase
+        const plantNormalized = plant.replace(/\s+/g, '').toUpperCase()
+        
+        // Map inspection type to code
+        const inspectionTypeCode = mapInspectionTypeToCode(inspectionType)
+        
+        // Extract year from report_date for turnaround code
+        let turnaroundCode
+        try {
+          const year = reportDate.substring(0, 4)
+          if (year && year.match(/^\d{4}$/)) {
+            turnaroundCode = `TA${year}`
+          } else {
+            turnaroundCode = `TA${new Date().getFullYear()}`
+          }
+        } catch (e) {
+          turnaroundCode = `TA${new Date().getFullYear()}`
+        }
+        
+        return `${plantNormalized}/${inspectionTypeCode}/${equipmentTag}/${turnaroundCode}`
+      }
+      
+      // Get plant from inspection (required - must come from inspection creation)
+      const plantValue = inspection.plant_unit_area || ''
+      if (!plantValue) {
+        alert('Warning: Plant/Unit/Area is missing. Please ensure it was entered during inspection creation.')
+      }
+      
+      // Get inspection type from inspection
+      const inspectionType = inspection.inspection_type || 'VISUAL'
+      
+      // Get report date (use inspection date or current date)
+      const reportDate = inspection.inspection_date 
+        ? new Date(inspection.inspection_date).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0]
+      
+      // Generate proper report number
+      const generatedReportNo = generateReportNumber(plantValue, equipmentTagNo, reportDate, inspectionType)
+      
       const reportData = {
         inspection_id: inspectionId, // CRITICAL: Include inspection_id as integer
         equipment_id: equipment?.id || inspection.equipment_id,
         header: {
           equipment_tag: equipmentTagNo,
           equipment_description: equipment?.equipment_description || '',
-          plant: equipment?.location || '',
+          plant: plantValue, // Must come from inspection.plant_unit_area
           dosh_no: equipment?.dosh_registration_no || '',
-          report_no: `RPT-${inspectionId}-${Date.now()}`,
-          report_date: new Date().toISOString().split('T')[0],
+          report_no: generatedReportNo, // Properly formatted report number
+          report_date: reportDate,
           inspector_name: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).username : 'Inspector',
           reviewed_by: '',
           client_approver: '',
+          inspection_type: mapInspectionTypeToCode(inspectionType), // Include mapped inspection type
         },
         findings: allFindings, // Already in { key, text } format
         recommendations: allRecommendations, // Already in { key, text } format
@@ -1002,22 +1064,18 @@ function InspectionDetails() {
 
   if (loading) {
     return (
-      <InspectorLayout activeMenuId="inspection">
-        <div className="p-12 text-center text-gray-500">Loading inspection details...</div>
-      </InspectorLayout>
+      <div className="p-12 text-center text-gray-500">Loading inspection details...</div>
     )
   }
 
   if (!inspection) {
     return (
-      <InspectorLayout activeMenuId="inspection">
-        <div className="p-12 text-center text-gray-500">Inspection not found</div>
-      </InspectorLayout>
+      <div className="p-12 text-center text-gray-500">Inspection not found</div>
     )
   }
 
   return (
-    <InspectorLayout activeMenuId="inspection">
+    <>
       {/* Page Header */}
       <div className="mb-8">
         <button
@@ -1067,7 +1125,7 @@ function InspectionDetails() {
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Vessel Information</h3>
                   <p className="text-lg font-semibold text-gray-900">{inspection.equipment_tag_no || equipment?.equipment_tag_no || 'N/A'}</p>
                   <p className="text-sm text-gray-600 mt-1">{equipment?.equipment_description || ''}</p>
-                  <p className="text-sm text-gray-600">Location: {equipment?.location || 'N/A'}</p>
+                  <p className="text-sm text-gray-600">Plant/Unit/Area: {inspection?.plant_unit_area || 'N/A'}</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-6">
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Inspection Information</h3>
@@ -1717,7 +1775,7 @@ function InspectionDetails() {
                 <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
                   <div className="mb-4">
                     <p className="text-sm text-gray-600">Report Number</p>
-                    <p className="text-lg font-semibold text-gray-900">{report.report_id || report.id || 'N/A'}</p>
+                    <p className="text-lg font-semibold text-gray-900">{report.report_no || report.report_id || report.id || 'N/A'}</p>
                   </div>
                   <div className="mb-4">
                     <p className="text-sm text-gray-600">Generated Date</p>
@@ -1790,7 +1848,7 @@ function InspectionDetails() {
           )}
         </div>
       </div>
-    </InspectorLayout>
+    </>
   )
 }
 

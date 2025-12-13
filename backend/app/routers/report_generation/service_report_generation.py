@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm, inch
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image, KeepTogether, Frame, PageTemplate, BaseDocTemplate, Flowable
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image, KeepTogether, Frame, PageTemplate, BaseDocTemplate, Flowable, NextPageTemplate
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY, TA_RIGHT
 from reportlab.pdfgen import canvas
@@ -109,6 +109,114 @@ class FixedSizeImage(Flowable):
             self.canv.setFont("Helvetica", 8)
             self.canv.drawString(5, 5, f"Image Error: {os.path.basename(self.image_path)}")
 
+def map_inspection_type_to_code(inspection_type: str) -> str:
+    """
+    Map inspection type to standardized code for report number.
+    
+    VISUAL -> VI
+    NDT -> NDT (or keep as is)
+    COMPREHENSIVE -> COMP (or keep as is)
+    ROUTINE -> ROUT (or keep as is)
+    
+    If already a code (like "VI"), return as-is.
+    """
+    if not inspection_type:
+        return "VI"
+    
+    inspection_type_upper = inspection_type.upper().strip()
+    
+    # Mapping dictionary
+    type_mapping = {
+        "VISUAL": "VI",
+        "VISUAL INSPECTION": "VI",
+        "NDT": "NDT",
+        "NDT INSPECTION": "NDT",
+        "COMPREHENSIVE": "COMP",
+        "ROUTINE": "ROUT",
+    }
+    
+    # Check if it's already a code or if we have a mapping
+    if inspection_type_upper in type_mapping:
+        return type_mapping[inspection_type_upper]
+    
+    # If it's already a short code (like "VI", "NDT"), return as-is
+    if len(inspection_type_upper) <= 4:
+        return inspection_type_upper
+    
+    # Default to VI for unknown types
+    return "VI"
+
+
+def generate_report_number(
+    plant: str,
+    equipment_tag: str,
+    report_date: str,
+    inspection_type: str = "VI",
+    turnaround_code: str = None
+) -> str:
+    """
+    Generate report number according to format:
+    <PLANT>/<INSPECTION_TYPE>/<EQUIPMENT_TAG>/<TURNAROUND_CODE>
+    
+    Example: PLANT1/VI/V-002/TA2025
+    
+    Rules:
+    - PLANT: From inspection.plant_unit_area (remove spaces, uppercase)
+    - INSPECTION_TYPE: Mapped to code (VISUAL -> VI)
+    - EQUIPMENT_TAG: Equipment tag number
+    - TURNAROUND_CODE: TA<YYYY> from report_date
+    """
+    if not plant or not equipment_tag or not report_date:
+        raise ValueError("Plant, equipment_tag, and report_date are required for report number generation")
+    
+    # Normalize plant name: remove spaces, convert to uppercase
+    plant_normalized = plant.replace(" ", "").upper()
+    
+    # Map inspection type to standardized code
+    inspection_type_code = map_inspection_type_to_code(inspection_type)
+    
+    # Extract year from report_date and create turnaround code
+    if turnaround_code:
+        turnaround_code_normalized = turnaround_code.upper()
+    else:
+        # Try to extract year from report_date
+        try:
+            from datetime import datetime
+            # Handle different date formats
+            if isinstance(report_date, str):
+                # Try ISO format first (YYYY-MM-DD)
+                if len(report_date) >= 4:
+                    year = report_date[:4]
+                    if year.isdigit():
+                        turnaround_code_normalized = f"TA{year}"
+                    else:
+                        # Try parsing as date
+                        try:
+                            date_obj = datetime.strptime(report_date, "%Y-%m-%d")
+                            turnaround_code_normalized = f"TA{date_obj.year}"
+                        except:
+                            # Try other formats
+                            try:
+                                date_obj = datetime.strptime(report_date, "%d/%m/%Y")
+                                turnaround_code_normalized = f"TA{date_obj.year}"
+                            except:
+                                # Fallback to current year
+                                turnaround_code_normalized = f"TA{datetime.now().year}"
+                else:
+                    turnaround_code_normalized = f"TA{datetime.now().year}"
+            else:
+                turnaround_code_normalized = f"TA{datetime.now().year}"
+        except Exception as e:
+            # Fallback to current year
+            from datetime import datetime
+            turnaround_code_normalized = f"TA{datetime.now().year}"
+    
+    # Construct report number: <PLANT>/<INSPECTION_TYPE>/<EQUIPMENT_TAG>/<TURNAROUND_CODE>
+    report_no = f"{plant_normalized}/{inspection_type_code}/{equipment_tag}/{turnaround_code_normalized}"
+    
+    return report_no
+
+
 class ReportGenerationService:
     def __init__(self):
         self.db = get_db()
@@ -132,9 +240,49 @@ class ReportGenerationService:
         try:
             print(f"\n🔍 GENERATE REPORT DEBUG:")
             print(f"   Equipment ID: {report_data.equipment_id}")
+            print(f"   Inspection ID: {report_data.inspection_id}")
+            print(f"   Report Number: {report_data.header.report_no}")
             print(f"   Photos count: {len(report_data.photos) if report_data.photos else 0}")
             print(f"   Findings count: {len(report_data.findings) if report_data.findings else 0}")
             print(f"   Recommendations count: {len(report_data.recommendations) if report_data.recommendations else 0}")
+            
+            # Get inspection data if provided - CRITICAL: Use inspection's plant_unit_area
+            inspection_data = None
+            if report_data.inspection_id:
+                try:
+                    inspection_res = self.db.table("Inspection").select("*").eq("inspection_id", report_data.inspection_id).execute()
+                    if inspection_res.data:
+                        inspection_data = inspection_res.data[0]
+                        print(f"   ✅ Fetched inspection data: plant_unit_area={inspection_data.get('plant_unit_area')}, inspection_type={inspection_data.get('inspection_type')}")
+                        # Override header plant with inspection's plant_unit_area if available
+                        if inspection_data.get('plant_unit_area'):
+                            report_data.header.plant = inspection_data.get('plant_unit_area')
+                            print(f"   ✅ Updated header.plant from inspection: {report_data.header.plant}")
+                        # Override inspection_type if available from inspection
+                        if inspection_data.get('inspection_type'):
+                            mapped_type = map_inspection_type_to_code(inspection_data.get('inspection_type'))
+                            report_data.header.inspection_type = mapped_type
+                            print(f"   ✅ Updated header.inspection_type from inspection: {mapped_type}")
+                except Exception as e:
+                    print(f"   ⚠️ Error fetching inspection data: {e}")
+            
+            # Auto-generate report number if not provided or empty
+            # CRITICAL: Ensure plant comes from inspection.plant_unit_area (already set above if inspection exists)
+            if not report_data.header.report_no or report_data.header.report_no.strip() == "":
+                # Get inspection type code (use mapped value from header if available, otherwise default to VI)
+                inspection_type_code = getattr(report_data.header, 'inspection_type', 'VI')
+                if inspection_data and inspection_data.get('inspection_type'):
+                    inspection_type_code = map_inspection_type_to_code(inspection_data.get('inspection_type'))
+                
+                report_data.header.report_no = generate_report_number(
+                    plant=report_data.header.plant,
+                    equipment_tag=report_data.header.equipment_tag,
+                    report_date=report_data.header.report_date,
+                    inspection_type=inspection_type_code,
+                    turnaround_code=getattr(report_data.header, 'turnaround_code', None)
+                )
+                print(f"📋 Auto-generated report number: {report_data.header.report_no}")
+                print(f"   Using plant: {report_data.header.plant}, inspection_type: {inspection_type_code}")
             
             # Get equipment data if provided
             equipment_data = None
@@ -213,10 +361,22 @@ class ReportGenerationService:
                     # Convert string to boolean if needed
                     api_510_value = api_510_value.lower() in ('true', 'yes', '1')
                 
+                # Extract report_no from content JSON if available
+                report_no = None
+                try:
+                    if db_record.get('content'):
+                        content_data = json.loads(db_record.get('content'))
+                        if isinstance(content_data, dict) and 'header' in content_data:
+                            report_no = content_data['header'].get('report_no')
+                            print(f"📋 Extracted report_no from content: {report_no}")
+                except Exception as e:
+                    print(f"⚠️ Error extracting report_no from content: {e}")
+                
                 # Database already has report_id (UUID string) - use it directly
                 response_data = {
                     **db_record,
                     'api_510_compliant': bool(api_510_value),  # Ensure it's a boolean
+                    'report_no': report_no,  # Add extracted report_no
                 }
                 
                 return ReportResponse(**response_data)
@@ -235,90 +395,117 @@ class ReportGenerationService:
         """
         Generate PDF report matching EXACT API-510 format from reference images
         Structure (CORRECT ORDER):
-        1. COVER/HEADER PAGE (first page with full header)
-        2. FINDINGS, NDTs & RECOMMENDATIONS PAGE
-        3. PHOTOS REPORT PAGES (multi-page)
-        4. SIGNATURE/APPROVAL SECTION (final)
+        1. HEADER PAGE with proper 2-column table
+        2. EQUIPMENT INFORMATION table
+        3. FINDINGS, NDTs & RECOMMENDATIONS PAGE with bordered box
+        4. PHOTOS REPORT PAGES (multi-page)
+        5. SIGNATURE/APPROVAL SECTION (5-row table)
         """
         pdf_filename = f"{base_filename}.pdf"
         pdf_path = os.path.join(settings.REPORTS_DIR, pdf_filename)
         
-        # Create PDF document with optimized margins (matching reference)
-        # Reduced margins to maximize content space while maintaining readability
+        # Format footer date once (for use in page templates)
+        footer_date = report_data.header.report_date or ''
+        try:
+            if footer_date:
+                from datetime import datetime
+                try:
+                    dt = datetime.fromisoformat(footer_date.replace('Z', '+00:00'))
+                    footer_date = dt.strftime('%d %B %Y')
+                except:
+                    try:
+                        dt = datetime.strptime(footer_date, '%Y-%m-%d')
+                        footer_date = dt.strftime('%d %B %Y')
+                    except:
+                        pass
+        except:
+            pass
+        
+        # Store footer data as instance variables for use in page templates
+        footer_inspector = report_data.header.inspector_name or ''
+        
+        # Create PDF document with standard margins
+        # Use BaseDocTemplate to support custom page templates with footers
         doc = BaseDocTemplate(
             pdf_path,
             pagesize=A4,
-            rightMargin=12 * mm,  # Reduced from 15mm
-            leftMargin=12 * mm,   # Reduced from 15mm
-            topMargin=12 * mm,    # Reduced from 15mm
-            bottomMargin=12 * mm  # Reduced from 15mm
+            rightMargin=15 * mm,
+            leftMargin=15 * mm,
+            topMargin=15 * mm,
+            bottomMargin=15 * mm
         )
         
-        # Define header frame (for header on every page)
-        header_frame = Frame(
-            doc.leftMargin,
-            doc.height + doc.bottomMargin - 50*mm,
-            doc.width,
-            50*mm,
-            id='header'
-        )
+        # Calculate content width for tables
+        self.content_width = doc.width
         
-        # Define main content frame
-        main_frame = Frame(
+        # Create frame for standard pages (no footer)
+        standard_frame = Frame(
             doc.leftMargin,
             doc.bottomMargin,
             doc.width,
-            doc.height - 50*mm,
-            id='main'
+            doc.height,
+            id='standard'
         )
         
-        # Page template with header
-        def draw_header_footer(canvas_obj, doc):
-            """Draw header on every page"""
-            canvas_obj.saveState()
-            
-            # Header background
-            canvas_obj.setFillColor(colors.white)
-            canvas_obj.rect(doc.leftMargin, doc.height + doc.bottomMargin - 50*mm, doc.width, 50*mm, fill=1, stroke=0)
-            
-            # Centered title block
-            canvas_obj.setFont("Helvetica-Bold", 14)
-            canvas_obj.setFillColor(colors.black)
-            title_y = doc.height + doc.bottomMargin - 15*mm
-            canvas_obj.drawCentredString(doc.leftMargin + doc.width/2, title_y, "MAJOR TURNAROUND 2025")
-            canvas_obj.drawCentredString(doc.leftMargin + doc.width/2, title_y - 6*mm, "PRESSURE VESSEL INSPECTION REPORT")
-            
-            # Right-aligned report info box
-            canvas_obj.setFont("Helvetica", 9)
-            right_x = doc.leftMargin + doc.width - 5*mm
-            info_y = title_y - 2*mm
-            canvas_obj.drawRightString(right_x, info_y, f"Report no.: {report_data.header.report_no}")
-            canvas_obj.drawRightString(right_x, info_y - 4*mm, f"Report date.: {report_data.header.report_date}")
-            
-            # Left and right equipment info rows
-            left_x = doc.leftMargin + 5*mm
-            bottom_y = doc.height + doc.bottomMargin - 45*mm
-            
-            # Left column
-            canvas_obj.setFont("Helvetica", 9)
-            canvas_obj.drawString(left_x, bottom_y, f"Equipment tag no.: {report_data.header.equipment_tag}")
-            canvas_obj.drawString(left_x, bottom_y - 4*mm, f"Equipment description: {report_data.header.equipment_description}")
-            
-            # Right column
-            right_col_x = doc.leftMargin + doc.width/2 + 10*mm
-            canvas_obj.drawString(right_col_x, bottom_y, f"Plant/Unit/Area: {report_data.header.plant}")
-            canvas_obj.drawString(right_col_x, bottom_y - 4*mm, f"DOSH registration no.: {report_data.header.dosh_no}")
-            
-            canvas_obj.restoreState()
-        
-        # Create page template
-        page_template = PageTemplate(
-            id='main_template',
-            frames=[main_frame],
-            onPage=draw_header_footer
+        # Create frame for photo pages (with space reserved for footer at bottom)
+        footer_height = 35  # Space reserved for footer in points
+        photo_frame = Frame(
+            doc.leftMargin,
+            doc.bottomMargin + footer_height,  # Reserve space for footer
+            doc.width,
+            doc.height - footer_height,  # Reduce available height
+            id='photo'
         )
         
-        doc.addPageTemplates([page_template])
+        # Page template for standard pages (no footer)
+        def on_standard_page(canvas, doc):
+            pass  # No footer on standard pages
+        
+        standard_template = PageTemplate(
+            id='standard',
+            frames=[standard_frame],
+            onPage=on_standard_page
+        )
+        
+        # Store report_data for use in page template callbacks
+        self._report_data_for_template = report_data
+        
+        # Page template for photo pages (with footer at bottom)
+        def on_photo_page(canvas, doc):
+            """Draw footer at bottom of photo pages - called for EVERY photo page"""
+            # Footer table data - single row with two columns
+            footer_data = [[
+                f"Inspected by: {footer_inspector}",
+                f"Date: {footer_date}"
+            ]]
+            
+            # Create footer table
+            footer_table = Table(footer_data, colWidths=[doc.width * 0.6, doc.width * 0.4])
+            footer_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (0, 0), 'LEFT'),      # Left cell - left aligned
+                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),     # Right cell - right aligned
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Border around table
+            ]))
+            
+            # Draw footer at bottom of page (just above bottom margin)
+            footer_table.wrapOn(canvas, doc.width, footer_height)
+            footer_table.drawOn(canvas, doc.leftMargin, doc.bottomMargin)
+        
+        photo_template = PageTemplate(
+            id='photo',
+            frames=[photo_frame],
+            onPage=on_photo_page
+        )
+        
+        # Add templates to document (standard first, photo second)
+        doc.addPageTemplates([standard_template, photo_template])
         
         # Container for the 'Flowable' objects
         story = []
@@ -326,7 +513,456 @@ class ReportGenerationService:
         # Define styles
         styles = getSampleStyleSheet()
         
-        # Custom styles matching sample report exactly
+        # ============================================
+        # PART 1: HEADER SECTION - 2-Column Table with Borders
+        # ============================================
+        # Left column: Title (bold, large, centered in cell)
+        title_style = ParagraphStyle(
+            'Title',
+            parent=styles['Normal'],
+            fontSize=14,
+            textColor=colors.black,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            spaceAfter=0,
+            spaceBefore=0,
+            leading=16
+        )
+        
+        # Right column: Report info
+        report_info_style = ParagraphStyle(
+            'ReportInfo',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica',
+            spaceAfter=2,
+            leading=11
+        )
+        
+        # Format report date properly
+        report_date = report_data.header.report_date or ''
+        try:
+            # Try to parse and format date
+            if report_date:
+                from datetime import datetime
+                try:
+                    # Try ISO format first
+                    dt = datetime.fromisoformat(report_date.replace('Z', '+00:00'))
+                    report_date = dt.strftime('%d %B %Y')
+                except:
+                    # Try other formats
+                    try:
+                        dt = datetime.strptime(report_date, '%Y-%m-%d')
+                        report_date = dt.strftime('%d %B %Y')
+                    except:
+                        pass
+        except:
+            pass
+        
+        # Ensure report number is generated if not present
+        if not report_data.header.report_no or report_data.header.report_no.strip() == "":
+            report_data.header.report_no = generate_report_number(
+                plant=report_data.header.plant,
+                equipment_tag=report_data.header.equipment_tag,
+                report_date=report_data.header.report_date,
+                inspection_type=getattr(report_data.header, 'inspection_type', 'VI'),
+                turnaround_code=getattr(report_data.header, 'turnaround_code', None)
+            )
+            print(f"📋 PDF Generation: Auto-generated report number: {report_data.header.report_no}")
+        
+        # Create header table with 2 columns
+        header_table_data = [
+            [
+                Paragraph("MAJOR TURNAROUND 2025<br/>PRESSURE VESSEL INSPECTION REPORT", title_style),
+                Paragraph(
+                    f"Report no.: {report_data.header.report_no}<br/>"
+                    f"Report date.: {report_date}",
+                    report_info_style
+                )
+            ]
+        ]
+        
+        header_table = Table(header_table_data, colWidths=[doc.width * 0.65, doc.width * 0.35])
+        header_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (0, 0), 'CENTER'),  # Title centered
+            ('ALIGN', (1, 0), (1, 0), 'LEFT'),    # Report info left-aligned
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (0, 0), 14),
+            ('FONTSIZE', (1, 0), (1, 0), 9),
+            ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Borders
+        ]))
+        
+        story.append(header_table)
+        story.append(Spacer(1, 8*mm))
+        
+        # ============================================
+        # PART 2: EQUIPMENT INFORMATION - 2-Column Table with Borders
+        # ============================================
+        equipment_info_style = ParagraphStyle(
+            'EquipmentInfo',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica',
+            spaceAfter=0,
+            leading=11
+        )
+        
+        equipment_table_data = [
+            [
+                Paragraph(f"Equipment tag no.: {report_data.header.equipment_tag or ''}", equipment_info_style),
+                Paragraph(f"Plant/Unit/Area: {report_data.header.plant or ''}", equipment_info_style)
+            ],
+            [
+                Paragraph(f"Equipment description: {report_data.header.equipment_description or ''}", equipment_info_style),
+                Paragraph(f"DOSH registration no.: {report_data.header.dosh_no or ''}", equipment_info_style)
+            ]
+        ]
+        
+        equipment_table = Table(equipment_table_data, colWidths=[doc.width * 0.5, doc.width * 0.5])
+        equipment_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Borders
+        ]))
+        
+        story.append(equipment_table)
+        story.append(Spacer(1, 8*mm))
+        
+        # ============================================
+        # PART 3: MAIN CONTENT BOX - FINDINGS, NDTS & RECOMMENDATIONS
+        # ============================================
+        
+        # Main title with grey background
+        main_title_style = ParagraphStyle(
+            'MainTitle',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.black,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            backColor=colors.HexColor('#E0E0E0'),  # Grey background
+            spaceAfter=6,
+            spaceBefore=0,
+            leading=13
+        )
+        
+        # Introduction paragraph style
+        intro_style = ParagraphStyle(
+            'Intro',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_JUSTIFY,
+            fontName='Helvetica',
+            spaceAfter=4,
+            leading=11
+        )
+        
+        # Section header style (bold, underlined)
+        section_header_style = ParagraphStyle(
+            'SectionHeader',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica-Bold',
+            spaceAfter=3,
+            spaceBefore=4,
+            leading=12
+        )
+        
+        # Finding item style
+        finding_item_style = ParagraphStyle(
+            'FindingItem',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica',
+            leftIndent=6*mm,  # Indentation for numbered items
+            spaceAfter=2,
+            leading=11
+        )
+        
+        # Title with grey background in a bordered table
+        title_table = Table([[Paragraph("FINDINGS, NDTS & RECOMMENDATIONS", main_title_style)]], colWidths=[doc.width])
+        title_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Borders
+        ]))
+        story.append(title_table)
+        story.append(Spacer(1, 4*mm))
+        
+        # Introduction paragraph (exact text from template)
+        intro_text = (
+            "This section describes the condition of the equipment. Findings include description of: "
+            "Scales, deposits, corrosion, erosion, defects, changes since last inspection, and including "
+            "pressure gauge. Deviations such as: Absence of significant damage, cracks, bulges, dents, "
+            "corrosion, erosion, etc... Report changes or repairs since the last NDT exam, such as leaks "
+            "or cracks, buildup of dirt/scale, overall condition of closing, lining, baffles, support, etc., "
+            "especially erosion through or repair history does not exist / not requested."
+        )
+        story.append(Paragraph(intro_text, intro_style))
+        story.append(Spacer(1, 4*mm))
+        
+        # FINDINGS Section
+        story.append(Paragraph("<u>FINDINGS</u>", section_header_style))
+        story.append(Spacer(1, 2*mm))
+        
+        # Initial/Pre-Inspection
+        story.append(Paragraph(
+            f"Initial/Pre-Inspection - {report_data.initial_inspection_text or 'Not applicable'}",
+            finding_item_style
+        ))
+        story.append(Spacer(1, 3*mm))
+        
+        # Post/Final Inspection
+        story.append(Paragraph("Post/Final Inspection", section_header_style))
+        story.append(Spacer(1, 2*mm))
+        
+        # External Findings (1.x) - ALWAYS show this section
+        story.append(Paragraph("<u>External</u>", section_header_style))
+        external_findings = sorted([f for f in report_data.findings if f.key.startswith('1.')], 
+                                   key=lambda x: (int(x.key.split('.')[0]), int(x.key.split('.')[1]) if '.' in x.key and len(x.key.split('.')) > 1 else 0))
+        if external_findings:
+            for finding in external_findings:
+                story.append(Paragraph(f"{finding.key}: {finding.text}", finding_item_style))
+        else:
+            # Show placeholder if no external findings
+            story.append(Paragraph("No external findings recorded.", finding_item_style))
+        story.append(Spacer(1, 3*mm))
+        
+        # Internal Findings (2.x) - ALWAYS show this section
+        story.append(Paragraph("<u>Internal</u>", section_header_style))
+        internal_findings = sorted([f for f in report_data.findings if f.key.startswith('2.')],
+                                   key=lambda x: (int(x.key.split('.')[0]), int(x.key.split('.')[1]) if '.' in x.key and len(x.key.split('.')) > 1 else 0))
+        if internal_findings:
+            for finding in internal_findings:
+                story.append(Paragraph(f"{finding.key}: {finding.text}", finding_item_style))
+        else:
+            # Show placeholder if no internal findings
+            story.append(Paragraph("No internal findings recorded.", finding_item_style))
+        story.append(Spacer(1, 3*mm))
+        
+        # Other Findings (not 1.x or 2.x)
+        other_findings = sorted([f for f in report_data.findings if not f.key.startswith('1.') and not f.key.startswith('2.')],
+                               key=lambda x: (int(x.key.split('.')[0]) if '.' in x.key else 999, int(x.key.split('.')[1]) if '.' in x.key and len(x.key.split('.')) > 1 else 0))
+        if other_findings:
+            for finding in other_findings:
+                story.append(Paragraph(f"{finding.key}: {finding.text}", finding_item_style))
+            story.append(Spacer(1, 3*mm))
+        
+        # NON-DESTRUCTIVE TESTINGS Section - ALWAYS show
+        story.append(Paragraph("<u>NON-DESTRUCTIVE TESTINGS</u>", section_header_style))
+        if report_data.ndt_text:
+            story.append(Paragraph(f"UTTM: {report_data.ndt_text}", finding_item_style))
+        else:
+            story.append(Paragraph("UTTM: No significant wall lost detected compared to nominal thickness. Please refer attachment report.", finding_item_style))
+        story.append(Spacer(1, 4*mm))
+        
+        # RECOMMENDATIONS Section - ALWAYS show (on same page)
+        story.append(Paragraph("<u>RECOMMENDATIONS</u>", section_header_style))
+        if report_data.recommendations and len(report_data.recommendations) > 0:
+            sorted_recs = sorted(report_data.recommendations,
+                               key=lambda x: (int(x.key.split('.')[0]) if '.' in x.key else 999, int(x.key.split('.')[1]) if '.' in x.key and len(x.key.split('.')) > 1 else 0))
+            for rec in sorted_recs:
+                story.append(Paragraph(f"{rec.key}: {rec.text}", finding_item_style))
+        else:
+            # Show placeholder if no recommendations
+            story.append(Paragraph("No recommendations recorded.", finding_item_style))
+        
+        # Only add page break if there are photos to show
+        if report_data.photos and len(report_data.photos) > 0:
+            # Switch to photo page template BEFORE page break so first photo page uses it
+            story.append(NextPageTemplate('photo'))
+            story.append(PageBreak())  # Break before photos section
+        
+        
+        # ============================================
+        # PART 3: PHOTOS REPORT SECTION (Multi-page) - API-510 Standard Format
+        # ============================================
+        
+        # Helper function to create photo page header table (appears on every photo page)
+        def create_photo_page_header(report_data):
+            """Create the complete header table for photo pages"""
+            # Format report date
+            report_date = report_data.header.report_date or ''
+            try:
+                if report_date:
+                    from datetime import datetime
+                    try:
+                        dt = datetime.fromisoformat(report_date.replace('Z', '+00:00'))
+                        report_date = dt.strftime('%d %B %Y')
+                    except:
+                        try:
+                            dt = datetime.strptime(report_date, '%Y-%m-%d')
+                            report_date = dt.strftime('%d %B %Y')
+                        except:
+                            pass
+            except:
+                pass
+            
+            # Title style
+            title_style = ParagraphStyle(
+                'PhotoPageTitle',
+                parent=styles['Normal'],
+                fontSize=14,
+                textColor=colors.black,
+                alignment=TA_CENTER,
+                fontName='Helvetica-Bold',
+                spaceAfter=0,
+                spaceBefore=0,
+                leading=16
+            )
+            
+            # Report info style
+            report_info_style = ParagraphStyle(
+                'PhotoPageReportInfo',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.black,
+                alignment=TA_LEFT,
+                fontName='Helvetica',
+                spaceAfter=2,
+                leading=11
+            )
+            
+            # Equipment info style
+            equipment_info_style = ParagraphStyle(
+                'PhotoPageEquipmentInfo',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.black,
+                alignment=TA_LEFT,
+                fontName='Helvetica',
+                spaceAfter=0,
+                leading=11
+            )
+            
+            # Header table - same as first page
+            header_table_data = [
+                [
+                    Paragraph("MAJOR TURNAROUND 2025<br/>PRESSURE VESSEL INSPECTION REPORT", title_style),
+                    Paragraph(
+                        f"Report no.: {report_data.header.report_no}<br/>"
+                        f"Report date.: {report_date}",
+                        report_info_style
+                    )
+                ]
+            ]
+            
+            header_table = Table(header_table_data, colWidths=[doc.width * 0.65, doc.width * 0.35])
+            header_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+                ('ALIGN', (1, 0), (1, 0), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (0, 0), 14),
+                ('FONTSIZE', (1, 0), (1, 0), 9),
+                ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            
+            # Equipment info table
+            equipment_table_data = [
+                [
+                    Paragraph(f"Equipment tag no.: {report_data.header.equipment_tag or ''}", equipment_info_style),
+                    Paragraph(f"Plant/Unit/Area: {report_data.header.plant or ''}", equipment_info_style)
+                ],
+                [
+                    Paragraph(f"Equipment description: {report_data.header.equipment_description or ''}", equipment_info_style),
+                    Paragraph(f"DOSH registration no.: {report_data.header.dosh_no or ''}", equipment_info_style)
+                ]
+            ]
+            
+            equipment_table = Table(equipment_table_data, colWidths=[doc.width * 0.5, doc.width * 0.5])
+            equipment_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            
+            return [header_table, Spacer(1, 2*mm), equipment_table, Spacer(1, 4*mm)]
+        
+        # Helper function to create "PHOTOS REPORT" grey banner
+        def create_photos_report_banner():
+            """Create the grey 'PHOTOS REPORT' banner"""
+            photos_banner_style = ParagraphStyle(
+                'PhotosBanner',
+                parent=styles['Normal'],
+                fontSize=11,
+                textColor=colors.black,
+                alignment=TA_CENTER,
+                fontName='Helvetica-Bold',
+                backColor=colors.HexColor('#E0E0E0'),
+                spaceAfter=6,
+                spaceBefore=0,
+                leading=13
+            )
+            
+            banner_table = Table([[Paragraph("PHOTOS REPORT", photos_banner_style)]], colWidths=[doc.width])
+            banner_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            
+            return [banner_table, Spacer(1, 4*mm)]
+        
+        # Custom flowable to ensure headers appear on new pages
+        class PhotoPageHeaderFlowable(Flowable):
+            """Flowable that adds header and banner when a new photo page starts"""
+            def __init__(self, report_data, create_header_func, create_banner_func):
+                Flowable.__init__(self)
+                self.report_data = report_data
+                self.create_header_func = create_header_func
+                self.create_banner_func = create_banner_func
+                self.header_added = False
+            
+            def wrap(self, availWidth, availHeight):
+                return (0, 0)  # Takes no space itself
+            
+            def draw(self):
+                # This is called when the flowable is drawn
+                # Headers are added to story, not drawn directly
+                pass
+        
+        # Photo header style (black bar with "Photo N")
         photo_header_style = ParagraphStyle(
             'PhotoHeader',
             parent=styles['Normal'],
@@ -342,20 +978,6 @@ class ReportGenerationService:
             leading=12
         )
         
-        finding_label_style = ParagraphStyle(
-            'FindingLabel',
-            parent=styles['Normal'],
-            fontSize=10,
-            textColor=colors.red,
-            alignment=TA_LEFT,
-            fontName='Helvetica-Bold',
-            borderColor=colors.red,
-            borderWidth=1,
-            borderPadding=2,
-            leftIndent=0,
-            spaceAfter=2
-        )
-        
         finding_text_style = ParagraphStyle(
             'FindingText',
             parent=styles['Normal'],
@@ -367,259 +989,119 @@ class ReportGenerationService:
             leading=11
         )
         
-        section_header_style = ParagraphStyle(
-            'SectionHeader',
-            parent=styles['Normal'],
-            fontSize=11,
-            textColor=colors.black,
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            backColor=colors.HexColor('#E0E0E0'),  # Light gray background
-            spaceAfter=6,
-            spaceBefore=6,
-            leading=13
-        )
-        
-        finding_item_style = ParagraphStyle(
-            'FindingItem',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.black,
-            alignment=TA_LEFT,
-            fontName='Helvetica',
-            leftIndent=0,
-            spaceAfter=3,
-            leading=11
-        )
-        
-        signature_style = ParagraphStyle(
-            'Signature',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.black,
-            alignment=TA_LEFT,
-            fontName='Helvetica',
-            spaceAfter=4,
-            leading=11
-        )
-        
-        # ============================================
-        # PART 1: COVER/HEADER PAGE (FIRST PAGE)
-        # ============================================
-        # Create cover page with header info (centered, large title)
-        cover_title_style = ParagraphStyle(
-            'CoverTitle',
-            parent=styles['Normal'],
-            fontSize=16,
-            textColor=colors.black,
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            spaceAfter=10,
-            leading=20
-        )
-        
-        cover_subtitle_style = ParagraphStyle(
-            'CoverSubtitle',
-            parent=styles['Normal'],
-            fontSize=14,
-            textColor=colors.black,
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            spaceAfter=20,
-            leading=18
-        )
-        
-        cover_info_style = ParagraphStyle(
-            'CoverInfo',
-            parent=styles['Normal'],
-            fontSize=10,
-            textColor=colors.black,
-            alignment=TA_LEFT,
-            fontName='Helvetica',
-            spaceAfter=6,
-            leading=12
-        )
-        
-        # Cover page content - Match reference exactly
-        # Title centered at top
-        story.append(Spacer(1, 20*mm))  # Reduced top spacing
-        story.append(Paragraph("MAJOR TURNAROUND 2025", cover_title_style))
-        story.append(Paragraph("PRESSURE VESSEL INSPECTION REPORT", cover_subtitle_style))
-        story.append(Spacer(1, 15*mm))  # Reduced spacing
-        
-        # Header info - Report no. and date right-aligned (matching reference)
-        header_info_style = ParagraphStyle(
-            'HeaderInfo',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.black,
-            alignment=TA_RIGHT,
-            fontName='Helvetica',
-            spaceAfter=2,
-            leading=11
-        )
-        story.append(Paragraph(f"Report no.: {report_data.header.report_no or ''}", header_info_style))
-        story.append(Paragraph(f"Report date.: {report_data.header.report_date or ''}", header_info_style))
-        story.append(Spacer(1, 8*mm))
-        
-        # Equipment info in two-column table (matching reference layout)
-        cover_info_data = [
-            ['Equipment tag no.:', report_data.header.equipment_tag or '', 'Plant/Unit/Area:', report_data.header.plant or ''],
-            ['Equipment description:', report_data.header.equipment_description or '', 'DOSH registration no.:', report_data.header.dosh_no or ''],
-        ]
-        
-        cover_info_table = Table(cover_info_data, colWidths=[40*mm, 60*mm, 40*mm, 60*mm])
-        cover_info_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
-        ]))
-        story.append(cover_info_table)
-        story.append(PageBreak())  # End cover page
-        
-        # ============================================
-        # PART 2: FINDINGS, NDTs & RECOMMENDATIONS PAGE (SECOND PAGE)
-        # ============================================
-        
-        # Section header with gray background bar (matching reference)
-        story.append(Paragraph(
-            "FINDINGS, NDTS & RECOMMENDATIONS",
-            section_header_style
-        ))
-        story.append(Spacer(1, 3*mm))  # Reduced spacing
-        
-        # Small descriptive text (matching reference)
-        desc_text = "This section describes the condition of the equipment, including scales, deposits, corrosion, erosion, defects, and changes since the last inspection."
-        story.append(Paragraph(desc_text, finding_item_style))
-        story.append(Spacer(1, 4*mm))  # Reduced spacing
-        
-        # Initial/Pre-Inspection (matching reference format)
-        story.append(Paragraph(
-            f"<b>Initial/Pre-Inspection</b> — {report_data.initial_inspection_text or 'Not applicable'}",
-            finding_item_style
-        ))
-        story.append(Spacer(1, 3*mm))  # Reduced spacing
-        
-        # Post/Final Inspection
-        story.append(Paragraph("<b>Post/Final Inspection</b>", finding_item_style))
-        story.append(Spacer(1, 2*mm))  # Reduced spacing
-        
-        # External Findings (1.x) - matching reference format
-        external_findings = sorted([f for f in report_data.findings if f.key.startswith('1.')], 
-                                   key=lambda x: (int(x.key.split('.')[0]), int(x.key.split('.')[1]) if '.' in x.key and len(x.key.split('.')) > 1 else 0))
-        if external_findings:
-            story.append(Paragraph("<b>External</b>", finding_item_style))
-            for finding in external_findings:
-                story.append(Paragraph(f"{finding.key}: {finding.text}", finding_item_style))
-            story.append(Spacer(1, 2*mm))  # Reduced spacing
-        
-        # Internal Findings (2.x) - matching reference format
-        internal_findings = sorted([f for f in report_data.findings if f.key.startswith('2.')],
-                                   key=lambda x: (int(x.key.split('.')[0]), int(x.key.split('.')[1]) if '.' in x.key and len(x.key.split('.')) > 1 else 0))
-        if internal_findings:
-            story.append(Paragraph("<b>Internal</b>", finding_item_style))
-            for finding in internal_findings:
-                story.append(Paragraph(f"{finding.key}: {finding.text}", finding_item_style))
-            story.append(Spacer(1, 2*mm))  # Reduced spacing
-        
-        # Other Findings (not 1.x or 2.x)
-        other_findings = sorted([f for f in report_data.findings if not f.key.startswith('1.') and not f.key.startswith('2.')],
-                               key=lambda x: (int(x.key.split('.')[0]) if '.' in x.key else 999, int(x.key.split('.')[1]) if '.' in x.key and len(x.key.split('.')) > 1 else 0))
-        if other_findings:
-            for finding in other_findings:
-                story.append(Paragraph(f"{finding.key}: {finding.text}", finding_item_style))
-            story.append(Spacer(1, 3*mm))
-        
-        story.append(Spacer(1, 3*mm))  # Reduced spacing
-        
-        # NON-DESTRUCTIVE TESTINGS section (matching reference)
-        if report_data.ndt_text:
-            story.append(Paragraph("<b>NON-DESTRUCTIVE TESTINGS:</b>", finding_item_style))
-            story.append(Paragraph(f"UTTM: {report_data.ndt_text}", finding_item_style))
-            story.append(Spacer(1, 3*mm))  # Reduced spacing
-        
-        # RECOMMENDATIONS section (matching reference)
-        if report_data.recommendations:
-            story.append(Paragraph("<b>RECOMMENDATIONS:</b>", finding_item_style))
-            sorted_recs = sorted(report_data.recommendations,
-                               key=lambda x: (int(x.key.split('.')[0]) if '.' in x.key else 999, int(x.key.split('.')[1]) if '.' in x.key and len(x.key.split('.')) > 1 else 0))
-            for rec in sorted_recs:
-                story.append(Paragraph(f"{rec.key}: {rec.text}", finding_item_style))
-            story.append(Spacer(1, 4*mm))  # Reduced spacing
-        
-        story.append(PageBreak())  # End Findings page
-        
-        # ============================================
-        # PART 3: PHOTOS REPORT SECTION (Multi-page) - THIRD SECTION
-        # ============================================
-        
         # Group photos by finding key prefix (observation number)
         if not report_data.photos:
             report_data.photos = []
         
-        sorted_photos = sorted(report_data.photos, key=lambda p: (
+        # Process ALL photos, even if they don't have finding_key
+        # Sort photos - those with finding_key first, then others
+        photos_with_key = [p for p in report_data.photos if getattr(p, 'finding_key', None)]
+        photos_without_key = [p for p in report_data.photos if not getattr(p, 'finding_key', None)]
+        
+        sorted_photos_with_key = sorted(photos_with_key, key=lambda p: (
             int(p.finding_key.split('.')[0]) if p.finding_key and '.' in p.finding_key else 999,
             int(p.finding_key.split('.')[1]) if p.finding_key and '.' in p.finding_key and len(p.finding_key.split('.')) > 1 else 999
         ))
+        
+        # Combine sorted photos with key and photos without key
+        all_sorted_photos = sorted_photos_with_key + photos_without_key
         
         # Group photos by observation number (Photo 1, Photo 2, etc.)
         photo_groups = defaultdict(list)
         photo_group_numbers = {}
         
-        for photo in sorted_photos:
-            if not photo.finding_key:
-                continue
-            obs_num = photo.finding_key.split('.')[0] if '.' in photo.finding_key else '1'
+        for photo in all_sorted_photos:
+            # Use finding_key if available, otherwise assign to group 1
+            if getattr(photo, 'finding_key', None):
+                obs_num = photo.finding_key.split('.')[0] if '.' in photo.finding_key else '1'
+            else:
+                obs_num = '1'  # Default group for photos without finding_key
+            
             if obs_num not in photo_group_numbers:
                 photo_group_numbers[obs_num] = len(photo_group_numbers) + 1
             group_key = photo_group_numbers[obs_num]
             photo_groups[group_key].append(photo)
         
-        # Generate photo pages (only if there are photos)
-        if photo_groups:
+        # Generate photo pages with API-510 standard format
+        print(f"📸 Processing {len(report_data.photos)} photos for PDF")
+        if report_data.photos and len(report_data.photos) > 0:
+            # Track if this is the first photo page
+            first_photo_page = True
+            
+            # Track previous group to detect group changes
+            previous_group_num = None
+            
             for group_num in sorted(photo_groups.keys()):
                 group_photos = photo_groups[group_num]
+                print(f"📸 Processing photo group {group_num} with {len(group_photos)} photos")
+                
+                # Add header and banner when starting a new group (ensures headers on new pages)
+                # This handles both explicit page breaks and auto-created pages by ReportLab
+                if previous_group_num is not None or first_photo_page:
+                    # Add header before new group - will appear at top of page when group starts
+                    # If group fits on same page, header from previous group will be at top (correct)
+                    header_elements = create_photo_page_header(report_data)
+                    story.extend(header_elements)
+                    
+                    # Add "PHOTOS REPORT" grey banner
+                    banner_elements = create_photos_report_banner()
+                    story.extend(banner_elements)
+                    
+                    if first_photo_page:
+                        first_photo_page = False
+                
+                previous_group_num = group_num
                 
                 # Group findings by photo (some photos have multiple findings)
                 photo_findings_map = defaultdict(list)
                 for photo in group_photos:
+                    # Use storage_url as primary key, fallback to file_path, then finding_key
                     photo_key = (
-                        getattr(photo, 'storage_url', None) or 
-                        getattr(photo, 'file_path', None) or 
-                        getattr(photo, 'finding_key', None) or 
-                        str(hash(str(photo)))
+                        photo.storage_url if hasattr(photo, 'storage_url') and photo.storage_url else 
+                        (photo.file_path if hasattr(photo, 'file_path') and photo.file_path else 
+                        (photo.finding_key if hasattr(photo, 'finding_key') and photo.finding_key else 
+                        f"photo_{hash(str(photo))}"))
                     )
                     photo_findings_map[photo_key].append(photo)
                 
                 photo_keys_list = list(photo_findings_map.keys())
+                print(f"📸 Created {len(photo_keys_list)} unique photo entries")
                 
-                # Create one page per unique photo (matching reference format)
+                # Process each photo in the group
                 for idx, (photo_key, photo_list) in enumerate(photo_findings_map.items()):
+                    print(f"📸 Processing photo {idx + 1}/{len(photo_keys_list)}: {photo_key[:50]}...")
+                    
                     # Photo header bar (black bar) - matching reference
                     photo_header = Paragraph(f"Photo {group_num}", photo_header_style)
-                    story.append(photo_header)
-                    story.append(Spacer(1, 3*mm))  # Slightly increased spacing
                     
                     photo = photo_list[0]  # Use first photo for image
                     
                     # Load image with labels - improved sizing and centering
                     photo_cell_content = None
                     try:
-                        finding_keys = [getattr(p, 'finding_key', None) for p in photo_list if getattr(p, 'finding_key', None)]
+                        # Collect finding keys for labels
+                        finding_keys = []
+                        for p in photo_list:
+                            if hasattr(p, 'finding_key') and p.finding_key:
+                                finding_keys.append(p.finding_key)
+                        
+                        # Get photo URL/path
+                        photo_url = photo.storage_url if hasattr(photo, 'storage_url') and photo.storage_url else None
+                        photo_path = photo.file_path if hasattr(photo, 'file_path') and photo.file_path else None
+                        
+                        print(f"📸 Loading image: URL={photo_url is not None}, Path={photo_path is not None}, Labels={finding_keys}")
                         img = await self._load_image_with_labels(
-                            getattr(photo, 'storage_url', None),
-                            getattr(photo, 'file_path', None),
-                            finding_keys
+                            photo_url,
+                            photo_path,
+                            finding_keys if finding_keys else None
                         )
                         if img:
                             # Improved image sizing - match reference (proper aspect ratio, centered)
-                            max_width = 90 * mm  # Slightly larger for better visibility
-                            max_height = self.content_height - 120  # Leave space for header/footer/text
+                            max_width = 90 * mm  # Photo column width
+                            # Calculate available height (page height minus margins and space for text)
+                            page_height = A4[1]  # A4 height in points
+                            available_height = page_height - (2 * 15 * mm) - 100  # Leave space for header/footer/text
+                            max_height = available_height
                             
                             current_width = getattr(img, 'drawWidth', None) or getattr(img, 'imageWidth', None)
                             current_height = getattr(img, 'drawHeight', None) or getattr(img, 'imageHeight', None)
@@ -683,15 +1165,25 @@ class ReportGenerationService:
                     recommendations_texts = []
                     
                     for p in photo_list:
-                        finding_key = getattr(p, 'finding_key', '') or ''
-                        finding_text = getattr(p, 'finding_text', '') or ''
-                        recommendation_text = getattr(p, 'recommendation_text', '') or ''
+                        # Access attributes directly from PhotoItem model
+                        finding_key = p.finding_key if hasattr(p, 'finding_key') and p.finding_key else ''
+                        finding_text = p.finding_text if hasattr(p, 'finding_text') and p.finding_text else ''
+                        recommendation_text = p.recommendation_text if hasattr(p, 'recommendation_text') and p.recommendation_text else ''
                         
-                        if finding_text:
-                            findings_texts.append(f"<b>{finding_key}:</b> {finding_text}")
+                        print(f"📸 Photo data: key={finding_key}, finding_text={finding_text[:50] if finding_text else 'None'}..., rec_text={recommendation_text[:50] if recommendation_text else 'None'}...")
                         
-                        if recommendation_text and recommendation_text.strip().lower() not in ['nil', 'nil.', 'none', '']:
-                            recommendations_texts.append(f"<b>{finding_key}:</b> {recommendation_text}")
+                        # Always show finding text if available (even if empty, show the key)
+                        if finding_text and finding_text.strip():
+                            key_display = finding_key if finding_key else 'N/A'
+                            findings_texts.append(f"<b>{key_display}:</b> {finding_text}")
+                        elif finding_key:
+                            # Show key even if no text
+                            findings_texts.append(f"<b>{finding_key}:</b> (No finding text provided)")
+                        
+                        # Always show recommendation text if available
+                        if recommendation_text and recommendation_text.strip() and recommendation_text.strip().lower() not in ['nil', 'nil.', 'none', 'n/a', 'na', '']:
+                            key_display = finding_key if finding_key else 'N/A'
+                            recommendations_texts.append(f"<b>{key_display}:</b> {recommendation_text}")
                     
                     if findings_texts:
                         combined_text += "<b>Finding:</b><br/>"
@@ -709,8 +1201,8 @@ class ReportGenerationService:
                     text_cell = Paragraph(combined_text if combined_text else "No findings or recommendations", finding_text_style)
                     
                     # Create two-column layout with borders (matching reference)
-                    photo_width = 90 * mm  # Slightly larger
-                    text_width = self.content_width - photo_width - 10*mm  # Adjusted spacing
+                    photo_width = 90 * mm  # Photo column width
+                    text_width = doc.width - photo_width - 10*mm  # Text column width (remaining space)
                     
                     photo_row = Table(
                         [[photo_cell_content, text_cell]],
@@ -729,101 +1221,208 @@ class ReportGenerationService:
                         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),  # Add border
                     ]))
                     
-                    story.append(photo_row)
-                    story.append(Spacer(1, 6*mm))  # Reduced spacing
-                    
-                    # Footer for photo pages (matching reference)
-                    footer_data = [
-                        ['Inspected by:', report_data.header.inspector_name or ''],
-                        ['Date:', report_data.header.report_date or ''],
+                    # Build complete photo block (header + photo) wrapped in KeepTogether
+                    # Footer is handled by page template (appears once per page at bottom), not in each photo block
+                    # This prevents splitting and allows ReportLab to fit multiple photos per page
+                    photo_block = [
+                        photo_header,
+                        Spacer(1, 3*mm),
+                        photo_row,
+                        Spacer(1, 6*mm)  # Space after photo before next photo
                     ]
                     
-                    footer_table = Table(footer_data, colWidths=[30*mm, self.content_width - 30*mm])
-                    footer_table.setStyle(TableStyle([
-                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-                        ('FONTSIZE', (0, 0), (-1, -1), 9),
-                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                        ('TOPPADDING', (0, 0), (-1, -1), 2),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-                    ]))
+                    # Use KeepTogether to prevent photo block from being split across pages
+                    # ReportLab will automatically fit multiple blocks per page when space allows
+                    story.append(KeepTogether(photo_block))
                     
-                    story.append(footer_table)
-                    
-                    # Page break after each photo (except last)
+                    # Smart page management: Let ReportLab handle page breaks naturally
+                    # Only add explicit page break when we need a new header for next group
                     is_last_group = group_num == max(photo_groups.keys())
                     is_last_photo_in_group = idx == len(photo_keys_list) - 1
-                    if not (is_last_group and is_last_photo_in_group):
-                        story.append(PageBreak())
+                    is_last_photo = is_last_group and is_last_photo_in_group
+                    
+                    # Check if next photo is in a different group - if so, add header before it
+                    if not is_last_photo:
+                        # Check if next photo is in a different group
+                        next_group_num = None
+                        # Find the next group number
+                        sorted_groups = sorted(photo_groups.keys())
+                        current_group_index = sorted_groups.index(group_num)
+                        if current_group_index + 1 < len(sorted_groups):
+                            next_group_num = sorted_groups[current_group_index + 1]
+                        
+                        # Check if next photo belongs to a different group
+                        next_photo_in_different_group = False
+                        if next_group_num and idx + 1 < len(photo_keys_list):
+                            # The next photo will be processed in the next iteration
+                            # We'll handle header addition before the next group starts
+                            pass
+                    else:
+                        # Last photo in current group - check if there are more groups
+                        if not is_last_group:
+                            # More groups coming - add page break and header for next group
+                            story.append(PageBreak())
+                            # Add complete header table for new page
+                            header_elements = create_photo_page_header(report_data)
+                            story.extend(header_elements)
+                            # Add "PHOTOS REPORT" grey banner on new page
+                            banner_elements = create_photos_report_banner()
+                            story.extend(banner_elements)
+        
+        # Add page break before signature section if there were photos
+        if report_data.photos and len(report_data.photos) > 0:
+            # Switch back to standard template (no footer) for signature section
+            story.append(NextPageTemplate('standard'))
+            story.append(PageBreak())
         
         # ============================================
-        # PART 4: SIGNATURE/APPROVAL SECTION (FINAL)
+        # PART 4: SIGNATURE/APPROVAL SECTION (FINAL) - 5-Row Table
         # ============================================
         
-        # Signature block
-        signature_data = [
-            ['Inspected by:', report_data.header.inspector_name or ''],
-            ['Reviewed by:', report_data.header.reviewed_by or ''],
-            ['Approved by (Client):', report_data.header.client_approver or ''],
+        signature_label_style = ParagraphStyle(
+            'SignatureLabel',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica',
+            spaceAfter=0,
+            leading=11
+        )
+        
+        signature_value_style = ParagraphStyle(
+            'SignatureValue',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica',
+            spaceAfter=0,
+            leading=11
+        )
+        
+        signature_section_style = ParagraphStyle(
+            'SignatureSection',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica-Bold',
+            spaceAfter=2,
+            leading=11
+        )
+        
+        # Create 5-row signature table with proper structure
+        col_width = doc.width / 3
+        
+        # Row 1: Three columns - Inspected by, Reviewed by, Approved by
+        # Each cell contains label and value on separate lines
+        row1 = [
+            Paragraph(f"Inspected by:<br/>{report_data.header.inspector_name or ''}", signature_label_style),
+            Paragraph(f"Reviewed by:<br/>{report_data.header.reviewed_by or ''}", signature_label_style),
+            Paragraph(f"Approved by (Client):<br/>{report_data.header.client_approver or ''}", signature_label_style)
         ]
         
-        signature_table = Table(signature_data, colWidths=[40*mm, 80*mm])
-        signature_table.setStyle(TableStyle([
+        # Row 2: Full width - DOSH Officer comment section
+        # Create a table cell that will span all 3 columns
+        row2_content = Table(
+            [[Paragraph("Recommendation/Comment by DOSH Officer (if applicable):", signature_section_style)]],
+            colWidths=[doc.width]
+        )
+        row2_content.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 40),  # Extra space for comments
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ]))
         
-        story.append(signature_table)
-        story.append(Spacer(1, 6*mm))
+        # Row 3: Three columns - Name, Signature, Date (for DOSH)
+        row3 = [
+            Paragraph("Name:", signature_label_style),
+            Paragraph("Signature:", signature_label_style),
+            Paragraph("Date:", signature_label_style)
+        ]
         
-        # DOSH Officer section
-        story.append(Paragraph("<b>Recommendation/Comment by DOSH Officer (if applicable):</b>", signature_style))
+        # Row 4: Full width - Plant action section
+        row4_content = Table(
+            [[Paragraph("Action taken by Plant 1 on recommendation by DOSH (if applicable):", signature_section_style)]],
+            colWidths=[doc.width]
+        )
+        row4_content.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 40),  # Extra space for comments
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        
+        # Row 5: Three columns - Name, Signature, Date (for Plant)
+        row5 = [
+            Paragraph("Name:", signature_label_style),
+            Paragraph("Signature:", signature_label_style),
+            Paragraph("Date:", signature_label_style)
+        ]
+        
+        # Build signature table - use separate tables for rows 2 and 4, and a 3-column table for rows 1, 3, 5
+        # First, add row 1 table
+        row1_table = Table([row1], colWidths=[col_width, col_width, col_width])
+        row1_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        story.append(row1_table)
         story.append(Spacer(1, 2*mm))
         
-        dosh_fields = [
-            ['Name:', '____________'],
-            ['Signature:', '____________'],
-            ['Date:', '____________'],
-        ]
-        
-        dosh_table = Table(dosh_fields, colWidths=[30*mm, 100*mm])
-        dosh_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-        ]))
-        
-        story.append(dosh_table)
-        story.append(Spacer(1, 6*mm))
-        
-        # Plant 1 action section
-        story.append(Paragraph("<b>Action taken by Plant 1 on recommendation by DOSH (if applicable):</b>", signature_style))
+        # Add row 2 (full width)
+        story.append(row2_content)
         story.append(Spacer(1, 2*mm))
         
-        plant_fields = [
-            ['Name:', '____________'],
-            ['Signature:', '____________'],
-            ['Date:', '____________'],
-        ]
-        
-        plant_table = Table(plant_fields, colWidths=[30*mm, 100*mm])
-        plant_table.setStyle(TableStyle([
+        # Add row 3 table
+        row3_table = Table([row3], colWidths=[col_width, col_width, col_width])
+        row3_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ]))
+        story.append(row3_table)
+        story.append(Spacer(1, 2*mm))
         
-        story.append(plant_table)
+        # Add row 4 (full width)
+        story.append(row4_content)
+        story.append(Spacer(1, 2*mm))
+        
+        # Add row 5 table
+        row5_table = Table([row5], colWidths=[col_width, col_width, col_width])
+        row5_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        story.append(row5_table)
         
         # Build PDF and ensure file is properly closed
         try:
@@ -1519,9 +2118,20 @@ class ReportGenerationService:
             elif isinstance(api_510_value, str):
                 api_510_value = api_510_value.lower() in ('true', 'yes', '1')
             
+            # Extract report_no from content JSON if available
+            report_no = None
+            try:
+                if db_record.get('content'):
+                    content_data = json.loads(db_record.get('content'))
+                    if isinstance(content_data, dict) and 'header' in content_data:
+                        report_no = content_data['header'].get('report_no')
+            except Exception as e:
+                print(f"⚠️ Error extracting report_no from content: {e}")
+            
             response_data = {
                 **db_record,
                 'api_510_compliant': bool(api_510_value),
+                'report_no': report_no,  # Add extracted report_no
             }
             
             return ReportResponse(**response_data)
@@ -1544,9 +2154,20 @@ class ReportGenerationService:
                     elif isinstance(api_510_value, str):
                         api_510_value = api_510_value.lower() in ('true', 'yes', '1')
                     
+                    # Extract report_no from content JSON if available
+                    report_no = None
+                    try:
+                        if db_record.get('content'):
+                            content_data = json.loads(db_record.get('content'))
+                            if isinstance(content_data, dict) and 'header' in content_data:
+                                report_no = content_data['header'].get('report_no')
+                    except Exception as e:
+                        print(f"⚠️ Error extracting report_no from content: {e}")
+                    
                     response_data = {
                         **db_record,
                         'api_510_compliant': bool(api_510_value),
+                        'report_no': report_no,  # Add extracted report_no
                     }
                     reports.append(ReportResponse(**response_data))
                 return reports

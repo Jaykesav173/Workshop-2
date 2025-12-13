@@ -225,3 +225,4 @@ class ObservationService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error deleting observation: {str(e)}")
 
+

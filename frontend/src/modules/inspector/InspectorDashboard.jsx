@@ -4,7 +4,7 @@
  * Matches Admin Dashboard design aesthetic
  */
 import { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 // Simple SVG Icon Components (matching Admin Dashboard)
 const Icons = {
@@ -105,11 +105,7 @@ const Icons = {
 
 function InspectorDashboard() {
   const navigate = useNavigate()
-  const location = useLocation()
   const [user, setUser] = useState(null)
-  const [activeMenu, setActiveMenu] = useState('dashboard')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
 
   useEffect(() => {
     const userStr = localStorage.getItem('user')
@@ -138,45 +134,6 @@ function InspectorDashboard() {
     }
   }, [navigate])
 
-  // Close dropdown when navigating to a different page
-  useEffect(() => {
-    setProfileDropdownOpen(false)
-  }, [location.pathname])
-
-  // Close dropdown when clicking outside or pressing Escape
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (profileDropdownOpen && !event.target.closest('.profile-dropdown-container')) {
-        setProfileDropdownOpen(false)
-      }
-    }
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape' && profileDropdownOpen) {
-        setProfileDropdownOpen(false)
-      }
-    }
-
-    if (profileDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-      document.addEventListener('keydown', handleEscape)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [profileDropdownOpen])
-
-  const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    localStorage.removeItem('userRole')
-    setUser(null)
-    setProfileDropdownOpen(false)
-    navigate('/login')
-  }
-
   // Mock data for Inspector Dashboard
   const kpiData = [
     { title: 'Pending Inspections', value: '8', trend: '+2', trendUp: true, icon: Icons.Eye, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
@@ -185,16 +142,6 @@ function InspectorDashboard() {
     { title: 'Reports Generated', value: '12', trend: '+3', trendUp: true, icon: Icons.FileText, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
     { title: 'Pending QA Review', value: '4', trend: '-1', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-yellow-50', iconColor: 'text-yellow-600' },
     { title: 'Active Sites', value: '6', trend: '0', trendUp: true, icon: Icons.Building, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
-  ]
-
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Icons.Dashboard, path: '/inspector/dashboard' },
-    { id: 'inspection', label: 'Inspection Workflow', icon: Icons.Eye, path: '/inspection' },
-    { id: 'photos', label: 'Photo Upload', icon: Icons.Camera, path: '/photo-upload' },
-    { id: 'reports', label: 'Generate Report', icon: Icons.FileText, path: '/reports' },
-    { id: 'defect-ai', label: 'Defect AI', icon: Icons.Bot, path: '/defect-ai' },
-    { id: 'validation', label: 'Validation', icon: Icons.CheckCircle, path: '/validation' },
-    { id: 'equipment', label: 'Equipment', icon: Icons.Building, path: '/equipment' },
   ]
 
   const recentInspections = [
@@ -212,126 +159,7 @@ function InspectorDashboard() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col`}>
-        <div className="p-6 border-b border-gray-200">
-          <h1 className={`text-xl font-bold text-gray-900 ${!sidebarOpen && 'hidden'}`}>VISOR</h1>
-          <h1 className={`text-xl font-bold text-gray-900 ${sidebarOpen && 'hidden'}`}>V</h1>
-        </div>
-        
-        <nav className="flex-1 p-4 space-y-1">
-          {menuItems.map((item) => {
-            const isActive = activeMenu === item.id
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveMenu(item.id)
-                  if (item.path) navigate(item.path)
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <div className={`${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
-                  <item.icon />
-                </div>
-                {sidebarOpen && <span className="text-sm">{item.label}</span>}
-              </button>
-            )
-          })}
-        </nav>
-      </aside>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Navigation */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex-1 max-w-2xl">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Icons.Search />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search inspections, equipment, sites..."
-                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4 ml-6">
-              <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative">
-                <Icons.Bell />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                <Icons.Settings />
-              </button>
-              {/* Profile Dropdown */}
-              <div className="relative pl-4 border-l border-gray-200 profile-dropdown-container">
-                <button
-                  onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                  className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-2 py-1.5 transition-colors"
-                >
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                    {user?.username?.charAt(0).toUpperCase() || 'I'}
-                  </div>
-                  {user && (
-                    <div className="hidden md:block text-left">
-                      <p className="text-sm font-medium text-gray-900">{user.username}</p>
-                      <p className="text-xs text-gray-500">{user.role}</p>
-                    </div>
-                  )}
-                  <Icons.ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {/* Dropdown Menu */}
-                {profileDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-20">
-                      <button
-                        onClick={() => {
-                          setProfileDropdownOpen(false)
-                          // Navigate to profile page if exists, or show placeholder
-                          console.log('Profile clicked')
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                      >
-                        <Icons.User className="w-4 h-4 text-gray-500" />
-                        <span>Profile</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setProfileDropdownOpen(false)
-                          // Navigate to settings page if exists, or show placeholder
-                          console.log('Settings clicked')
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                      >
-                        <Icons.Settings className="w-4 h-4 text-gray-500" />
-                        <span>Settings</span>
-                      </button>
-                      <div className="border-t border-gray-200 my-1"></div>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
-                      >
-                        <Icons.LogOut className="w-4 h-4 text-red-600" />
-                        <span>Logout</span>
-                      </button>
-                    </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Dashboard Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+    <>
           {/* Welcome Section */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -487,8 +315,6 @@ function InspectorDashboard() {
               </div>
             </div>
           </div>
-        </main>
-      </div>
 
       {/* Floating Action Buttons */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3">
@@ -500,7 +326,7 @@ function InspectorDashboard() {
           <Icons.Plus />
         </button>
       </div>
-    </div>
+    </>
   )
 }
 

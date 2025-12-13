@@ -114,6 +114,7 @@ class InspectionBase(BaseModel):
     next_inspection_date: Optional[datetime] = None
     remarks_general: Optional[str] = None
     findings_summary: Optional[str] = None
+    plant_unit_area: Optional[str] = None  # Plant/Unit/Area location - required when creating inspection
 
 class InspectionCreate(InspectionBase):
     # Allow equipment_id from frontend, will be converted to equipment_tag_no
@@ -197,6 +198,7 @@ class ReportResponse(ReportBase):
     status: str
     created_at: datetime
     updated_at: Optional[datetime] = None
+    report_no: Optional[str] = None  # Formatted report number (extracted from content JSON)
     
     class Config:
         from_attributes = True
@@ -223,6 +225,8 @@ class ReportHeader(BaseModel):
     inspector_name: str
     reviewed_by: Optional[str] = None
     client_approver: Optional[str] = None
+    inspection_type: Optional[str] = "VI"  # Default to "VI" for Visual Inspection
+    turnaround_code: Optional[str] = None  # Auto-generated from report_date if not provided
 
 class FindingItem(BaseModel):
     key: str  # e.g., "1.1", "2.3"

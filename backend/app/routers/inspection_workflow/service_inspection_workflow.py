@@ -74,6 +74,7 @@ class InspectionWorkflowService:
                 "next_inspection_date": format_date(inspection.next_inspection_date),
                 "remarks_general": inspection.remarks_general,
                 "findings_summary": inspection.findings_summary,
+                "plant_unit_area": inspection.plant_unit_area,
             }
             
             # Remove None values to avoid database issues

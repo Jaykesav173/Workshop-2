@@ -43,3 +43,4 @@ After updating `.env`, restart your backend server.
 ⚠️ **NEVER** expose the service role key in frontend code or commit it to public repositories!
 The service role key should ONLY be used in backend/server code.
 
+
