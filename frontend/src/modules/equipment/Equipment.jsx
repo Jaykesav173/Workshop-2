@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, ChevronDown, Upload, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronDown, Upload, Search, ChevronLeft, ChevronRight, Trash2, Plus } from "lucide-react";
 
 import {
   createEquipment,
@@ -10,50 +10,57 @@ import {
   updateEquipment,
   deleteEquipment,
   getEquipmentById,
-  getEquipmentOptions
+  getEquipmentOptions,
+  getPartViewOptions,
+  getMaterialOptions
 } from "./equipmentApi.jsx";
 
 // Form Row Component
-const FormRow = React.memo(({ label, placeholder, type = "input", name, form, setForm, onChange, error, options, required, className }) => (
-  <div className={`flex flex-col gap-1 ${className}`}>
-    <label className="text-sm font-bold text-gray-800">
-      {required && <span className="text-red-500 mr-1">*</span>}
-      {label}
-    </label>
+const FormRow = React.memo(({ label, placeholder, type = "input", name, form, setForm, onChange, error, options = [], valueKey = "id", labelKey = "description", required, className }) => {
+  if (type === "select" && label === "Material:") {
+    console.log(`[FormRow] Material Options:`, options);
+  }
+  return (
+    <div className={`flex flex-col gap-1 ${className}`}>
+      <label className="text-sm font-bold text-gray-800">
+        {required && <span className="text-red-500 mr-1">*</span>}
+        {label}
+      </label>
 
-    {type === "input" ? (
-      <input
-        type="text"
-        name={name}
-        placeholder={placeholder}
-        value={form[name] || ""}
-        onChange={onChange || ((e) => setForm({ ...form, [name]: e.target.value }))}
-        className={`w-full px-3 text-base text-gray-800 focus:outline-none placeholder-gray-500 bg-white h-10 rounded-lg border shadow-sm focus:ring-1 
-          ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
-      />
-    ) : (
-      <div className="relative w-full">
-        <select
+      {type === "input" ? (
+        <input
+          type="text"
           name={name}
+          placeholder={placeholder}
           value={form[name] || ""}
-          onChange={(e) => setForm({ ...form, [name]: e.target.value })}
-          className="w-full px-3 text-base text-gray-800 focus:outline-none bg-white h-10 rounded-lg appearance-none cursor-pointer border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-        >
-          <option disabled value="">
-            {placeholder}
-          </option>
-          {options.types.map((t) => (
-            <option key={t.id} value={t.id}>{t.description}</option>
-          ))}
-        </select>
-        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-          <ChevronDown size={18} className="text-gray-500" />
+          onChange={onChange || ((e) => setForm({ ...form, [name]: e.target.value }))}
+          className={`w-full px-3 text-base text-gray-800 focus:outline-none placeholder-gray-500 bg-white h-10 rounded-lg border shadow-sm focus:ring-1 
+          ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
+        />
+      ) : (
+        <div className="relative w-full">
+          <select
+            name={name}
+            value={form[name] || ""}
+            onChange={(e) => setForm({ ...form, [name]: e.target.value })}
+            className="w-full px-3 text-base text-gray-800 focus:outline-none bg-white h-10 rounded-lg appearance-none cursor-pointer border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          >
+            <option disabled value="">
+              {placeholder}
+            </option>
+            {Array.isArray(options) && options.map((opt) => (
+              <option key={opt.id} value={opt[valueKey]}>{opt[labelKey]}</option>
+            ))}
+          </select>
+          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+            <ChevronDown size={18} className="text-gray-500" />
+          </div>
         </div>
-      </div>
-    )}
-    {error && <span className="text-red-500 text-xs font-semibold">{error}</span>}
-  </div>
-));
+      )}
+      {error && <span className="text-red-500 text-xs font-semibold">{error}</span>}
+    </div>
+  );
+});
 
 const DetailsRow = ({ label, value }) => (
   <div className="flex items-center mb-1 w-full justify-center">
@@ -89,7 +96,8 @@ export default function EquipmentDetailsRegistration() {
   // States
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Equipment Registration");
-  const [options, setOptions] = useState({ types: [] });
+  const [options, setOptions] = useState({ types: [], materials: [] });
+  const [partViewOptions, setPartViewOptions] = useState([]); // Dynamic part views from DB
 
   const [form, setForm] = useState({
     equipment_tag_no: "",
@@ -97,7 +105,7 @@ export default function EquipmentDetailsRegistration() {
     plant_area: "",
     dosh_registration_no: "",
     type_id: "",
-    material: "",
+    material_id: "",
     nominal_thickness: "",
     corrosion_allowance: "",
     design_pressure: "",
@@ -114,6 +122,7 @@ export default function EquipmentDetailsRegistration() {
   const [equipmentList, setEquipmentList] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [viewingItem, setViewingItem] = useState(null);
+  const [viewParts, setViewParts] = useState([]); // Array of { id, file, viewType, previewUrl, existingUrl }
 
   // Filter State
   const [filterCategory, setFilterCategory] = useState("");
@@ -133,6 +142,25 @@ export default function EquipmentDetailsRegistration() {
     if (activeTab === "Equipment Details") {
       loadAllEquipment();
     }
+  }, [activeTab]);
+
+  // Load part views on mount
+  useEffect(() => {
+    async function loadPartViews() {
+      try {
+        const res = await getPartViewOptions(token);
+        if (res.data && res.data.part_views) {
+          setPartViewOptions(res.data.part_views);
+        } else {
+          setPartViewOptions(["East Side", "South Side", "West Side", "North Side", "Nameplate", "Top View"]);
+        }
+      } catch (err) {
+        console.error("Failed to load part views", err);
+        // Fallback defaults
+        setPartViewOptions(["East Side", "South Side", "West Side", "North Side", "Nameplate", "Top View"]);
+      }
+    }
+    loadPartViews();
   }, [activeTab]);
 
   async function loadAllEquipment() {
@@ -157,6 +185,25 @@ export default function EquipmentDetailsRegistration() {
       setErrors((prev) => ({ ...prev, [name]: "Please insert numbers only" }));
     } else {
       setErrors((prev) => ({ ...prev, [name]: null }));
+    }
+  };
+
+  // View Parts Handlers
+  const handleAddPart = () => {
+    setViewParts([...viewParts, { id: Date.now(), file: null, partView: "", previewUrl: null }]);
+  };
+
+  const handleRemovePart = (id) => {
+    setViewParts(viewParts.filter(p => p.id !== id));
+  };
+
+  const handlePartChange = (id, field, value) => {
+    setViewParts(viewParts.map(p => p.id === id ? { ...p, [field]: value } : p));
+  };
+
+  const handlePartImageChange = (id, file) => {
+    if (file) {
+      setViewParts(viewParts.map(p => p.id === id ? { ...p, file, previewUrl: URL.createObjectURL(file) } : p));
     }
   };
 
@@ -205,6 +252,7 @@ export default function EquipmentDetailsRegistration() {
       const payload = {
         ...form,
         type_id: parseInt(form.type_id),
+        material_id: form.material_id ? parseInt(form.material_id) : null,
         nominal_thickness: parseFloat(form.nominal_thickness) || 0,
         corrosion_allowance: parseFloat(form.corrosion_allowance) || 0,
         design_pressure: parseFloat(form.design_pressure) || 0,
@@ -227,7 +275,19 @@ export default function EquipmentDetailsRegistration() {
       }
 
       if (imageFile) {
-        await uploadEquipmentImage(equipmentId, imageFile, token);
+        await uploadEquipmentImage(equipmentId, imageFile, token, "General");
+      }
+
+      // Upload View Parts
+      console.log("Starting view parts upload. Total parts:", viewParts.length);
+      for (const part of viewParts) {
+        console.log(`Processing part ${part.id}. File: ${!!part.file}, PartView: ${part.partView}`);
+        if (part.file && part.partView) {
+          console.log(`Uploading part ${part.id} with view: ${part.partView}`);
+          await uploadEquipmentImage(equipmentId, part.file, token, part.partView);
+        } else {
+          console.warn(`Skipping part ${part.id} - Missing file or view type`);
+        }
       }
 
       if (editingId) {
@@ -261,6 +321,7 @@ export default function EquipmentDetailsRegistration() {
       setImageFile(null);
       setEditImageUrl(null);
       setEditingId(null);
+      setViewParts([]);
 
     } catch (error) {
       console.error("Error saving equipment:", error);
@@ -321,7 +382,7 @@ export default function EquipmentDetailsRegistration() {
       location: item.location || "",
       dosh_registration_no: item.dosh_registration_no,
       type_id: item.type_id,
-      material: item.material,
+      material_id: item.material_id, // Use ID
       nominal_thickness: item.nominal_thickness,
       corrosion_allowance: item.corrosion_allowance,
       design_pressure: item.design_pressure,
@@ -331,6 +392,22 @@ export default function EquipmentDetailsRegistration() {
     setErrors({});
     setEditingId(item.id);
     setEditImageUrl(item.image_url); // Set existing image URL
+
+    if (item.photos && item.photos.length > 0) {
+      const parts = item.photos
+        .filter(p => p.part_view !== "General") // Exclude main image if strictly "General"
+        .map(p => ({
+          id: p.id,
+          file: null,
+          partView: p.part_view || "",
+          previewUrl: null,
+          existingUrl: p.file_path ? `/static/uploads/${p.file_path.split(/[\\/]/).pop()}` : null // Construct URL
+        }));
+      setViewParts(parts);
+    } else {
+      setViewParts([]);
+    }
+
     setActiveTab("Equipment Details Update");
   }
 
@@ -341,11 +418,31 @@ export default function EquipmentDetailsRegistration() {
   }, []);
 
   async function loadOptions() {
+    console.log("[Equipment] loadOptions called");
     try {
-      const res = await getEquipmentOptions(token);
-      setOptions({ types: res.data.types });
+      // Load types
+      try {
+        const resTypes = await getEquipmentOptions(token);
+        console.log("[Equipment] Types loaded:", resTypes.data);
+        setOptions(prev => ({ ...prev, types: resTypes.data.types || [] }));
+      } catch (e) {
+        console.error("[Equipment] Failed to load types", e);
+      }
+
+      // Load materials
+      try {
+        const resMaterials = await getMaterialOptions(token);
+        console.log("[Equipment] Materials loaded:", resMaterials.data);
+        setOptions(prev => ({ ...prev, materials: resMaterials.data.materials || [] }));
+      } catch (e) {
+        console.error("[Equipment] Failed to load materials", e);
+        if (e.response) {
+          console.error("[Equipment] Server Error Details:", e.response.data);
+        }
+      }
+
     } catch (err) {
-      console.error("Failed to load options", err);
+      console.error("[Equipment] Unexpected error in loadOptions", err);
     }
   }
 
@@ -408,6 +505,7 @@ export default function EquipmentDetailsRegistration() {
                   status: "ACTIVE"
                 });
                 setErrors({});
+                setViewParts([]);
               }
             }}
             className={`
@@ -502,11 +600,11 @@ export default function EquipmentDetailsRegistration() {
                   <FormRow label="Equipment Description:" placeholder="eg. Nitrogen Vessel" name="equipment_description" form={form} setForm={setForm} options={options} required className="md:col-span-2" />
 
                   <FormRow label="DOSH Registration No:" placeholder="eg. MK PMT 1001" name="dosh_registration_no" form={form} setForm={setForm} options={options} required />
-                  <FormRow label="Type:" placeholder="Select Type" type="select" name="type_id" form={form} setForm={setForm} options={options} required />
+                  <FormRow label="Type:" placeholder="Select Type" type="select" name="type_id" form={form} setForm={setForm} options={options.types} valueKey="id" required />
 
                   <div className="md:col-span-2 h-px bg-gray-200 my-2"></div>
 
-                  <FormRow label="Material:" placeholder="eg. Carbon Steel" name="material" form={form} setForm={setForm} options={options} />
+                  <FormRow label="Material:" placeholder="Select Material" type="select" name="material_id" form={form} setForm={setForm} options={options.materials} valueKey="id" />
 
                   {/* Numeric Fields with Validation */}
                   <FormRow
@@ -554,6 +652,94 @@ export default function EquipmentDetailsRegistration() {
                 </div>
               </div>
 
+              {/* View Parts Section */}
+              <div className="mt-8 border-t border-gray-200 pt-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Additional View Parts</h3>
+                <div className="flex flex-wrap gap-6">
+                  {viewParts.map((part) => (
+                    <div key={part.id} className="flex flex-col gap-2 relative group">
+                      {/* Image Box */}
+                      <div
+                        className="w-40 h-40 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 overflow-hidden cursor-pointer hover:border-blue-500 transition-colors relative"
+                        onClick={() => document.getElementById(`part-file-${part.id}`).click()}
+                      >
+                        {part.previewUrl || part.existingUrl ? (
+                          <img
+                            src={part.previewUrl || `http://localhost:8000${part.existingUrl}`}
+                            alt="View Part"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="text-center p-2">
+                            <Plus className="mx-auto text-gray-400 mb-1" />
+                            <span className="text-xs text-gray-500">Add Photo</span>
+                          </div>
+                        )}
+
+                        <input
+                          type="file"
+                          id={`part-file-${part.id}`}
+                          className="hidden"
+                          accept="image/*"
+                          onChange={(e) => handlePartImageChange(part.id, e.target.files[0])}
+                        />
+                      </div>
+
+                      {/* Dropdown and Custom Input */}
+                      <div className="flex flex-col gap-2">
+                        <select
+                          value={partViewOptions.includes(part.partView) ? part.partView : (part.partView ? "Other" : "")}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "Other") {
+                              handlePartChange(part.id, "partView", "Custom");
+                            } else {
+                              handlePartChange(part.id, "partView", val);
+                            }
+                          }}
+                          className="w-40 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="" disabled>Select View</option>
+                          {partViewOptions.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                          <option value="Other">Other</option>
+                        </select>
+
+                        {/* Custom Input */}
+                        {(!partViewOptions.includes(part.partView) && part.partView !== "") && (
+                          <input
+                            type="text"
+                            placeholder="Type Custom View..."
+                            value={part.partView === "Custom" ? "" : part.partView} // clear "Custom" placeholder visual
+                            onChange={(e) => handlePartChange(part.id, "partView", e.target.value)}
+                            className="w-40 px-2 py-1 text-sm border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            autoFocus
+                          />
+                        )}
+                      </div>
+
+                      {/* Remove Button */}
+                      <button
+                        onClick={() => handleRemovePart(part.id)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add Button */}
+                  <button
+                    onClick={handleAddPart}
+                    className="w-40 h-40 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center bg-white hover:bg-gray-50 transition-colors text-blue-500"
+                  >
+                    <Plus size={32} />
+                    <span className="font-semibold text-sm mt-2">Add Part</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Save button */}
               <div className="mt-16 flex flex-col items-center gap-2">
                 <span className="text-red-700 text-base">
@@ -584,6 +770,7 @@ export default function EquipmentDetailsRegistration() {
                         location: "",
                         status: "ACTIVE"
                       });
+                      setViewParts([]);
                       setActiveTab("Equipment Registration"); // Switch back to registration
                     }}
                     className="px-8 py-2 text-base font-semibold bg-blue-500 text-white border border-blue-500 rounded-lg shadow-sm hover:bg-blue-600"
@@ -862,7 +1049,7 @@ export default function EquipmentDetailsRegistration() {
                       <DetailsRow label="DOSH Registration No:" value={viewingItem.dosh_registration_no} />
                       <div className="h-1"></div>
                       <DetailsRow label="Type:" value={options.types.find(t => t.id === viewingItem.type_id)?.description || viewingItem.type_id} />
-                      <DetailsRow label="Material:" value={viewingItem.material} />
+                      <DetailsRow label="Material:" value={options.materials.find(m => m.id === viewingItem.material_id)?.description || viewingItem.material_id || "-"} />
                       <DetailsRow label="Nominal Thickness (mm):" value={viewingItem.nominal_thickness} />
                       <DetailsRow label="Corrosion Allowance (mm):" value={viewingItem.corrosion_allowance} />
                       <DetailsRow label="Design Pressure (barg):" value={viewingItem.design_pressure} />
@@ -885,6 +1072,33 @@ export default function EquipmentDetailsRegistration() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Additional View Parts Gallery */}
+                  {viewingItem.photos && viewingItem.photos.some(p => !["General", "General View"].includes(p.part_view)) && (
+                    <div className="mt-8 px-4 w-full">
+                      <h3 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Additional Views</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {viewingItem.photos
+                          .filter(p => !["General", "General View"].includes(p.part_view))
+                          .map((photo) => {
+                            const filename = photo.file_path ? photo.file_path.split(/[\\/]/).pop() : "";
+                            return (
+                              <div key={photo.id} className="flex flex-col items-center bg-white p-2 rounded-lg shadow-sm border border-gray-200">
+                                <div className="w-full h-40 bg-gray-100 rounded-md overflow-hidden mb-2">
+                                  <img
+                                    src={`http://localhost:8000/static/uploads/${filename}`}
+                                    alt={photo.part_view}
+                                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
+                                    onClick={() => window.open(`http://localhost:8000/static/uploads/${filename}`, '_blank')}
+                                  />
+                                </div>
+                                <span className="font-semibold text-sm text-gray-700">{photo.part_view || "Unknown View"}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Buttons */}
                   <div className="mt-12 flex flex-col items-center gap-4">
@@ -913,7 +1127,7 @@ export default function EquipmentDetailsRegistration() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }

@@ -57,7 +57,7 @@ class EquipmentBase(BaseModel):
     equipment_tag_no: str
     equipment_description: str
     type_id: int
-    material: Optional[str] = None
+    material_id: Optional[int] = None
     location: Optional[str] = None
     inspection_due_date: Optional[datetime] = None
     dosh_registration_no: Optional[str] = None
@@ -76,11 +76,19 @@ class EquipmentResponse(EquipmentBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     image_url: Optional[str] = None
+    photos: Optional[list["PhotoResponse"]] = []
 
 class Config:
     from_attributes = True
 class EquipmentOptionsResponse(BaseModel):
     types: list[TypeResponse]
+
+class MaterialBase(BaseModel):
+    description: str
+class MaterialResponse(MaterialBase):
+    id: int
+class MaterialOptionsResponse(BaseModel):
+    materials: list[MaterialResponse]
 
 # ============================================
 # 3. Photo Schemas - Asillah (Photo Upload)
@@ -90,6 +98,7 @@ class PhotoBase(BaseModel):
     file_path: str
     file_name: Optional[str] = None
     file_size: Optional[int] = None
+    part_view: Optional[str] = "General"
 
 class PhotoCreate(PhotoBase):
     pass
@@ -98,6 +107,7 @@ class PhotoResponse(PhotoBase):
     id: int
     uploaded_by: int
     storage_url: Optional[str] = None
+    part_view: Optional[str] = None
     uploaded_at: datetime
     
     class Config:

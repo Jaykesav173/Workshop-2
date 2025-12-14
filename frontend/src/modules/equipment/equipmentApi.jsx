@@ -14,9 +14,16 @@ export async function createEquipment(data, token) {
 }
 
 // Upload equipment image (general view) function
-export async function uploadEquipmentImage(equipmentId, file, token) {
+export async function uploadEquipmentImage(equipmentId, file, token, partView = "General") {
+  console.log(`[API] uploadEquipmentImage called. ID: ${equipmentId}, PartView Arg: "${partView}"`);
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("part_view", partView);
+
+  // Log FormData keys
+  for (var pair of formData.entries()) {
+    console.log('[API] FormData ' + pair[0] + ', ' + pair[1]);
+  }
 
   return await API.post(`/${equipmentId}/upload-image`, formData, {
     headers: {
@@ -47,12 +54,19 @@ export async function getEquipmentOptions(token) {
   });
 }
 
-// // Get material options function
-// export async function getMaterialOptions(token) {
-//   return await API.get("/material-options", {
-//     headers: { Authorization: `Bearer ${token}` },
-//   });
-// }
+// Get unique part views function
+export async function getPartViewOptions(token) {
+  return await API.get("/part-views", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// Get material options function
+export async function getMaterialOptions(token) {
+  return await API.get("/material-options", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
 
 // Edit and update equipment information function
 export async function updateEquipment(id, data, token) {

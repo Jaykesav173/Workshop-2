@@ -21,7 +21,7 @@ class EquipmentService:
             equipment_data = {
                 "equipment_tag_no": equipment.equipment_tag_no,
                 "type_id": equipment.type_id,
-                "material": equipment.material,
+                "material_id": equipment.material_id,
                 "location": equipment.location,
                 "inspection_due_date": str(equipment.inspection_due_date) if equipment.inspection_due_date else None,
                 "equipment_description": equipment.equipment_description,
@@ -45,7 +45,7 @@ class EquipmentService:
             raise HTTPException(status_code=500, detail=f"Error creating equipment: {str(e)}")
 
     # Upload equipment image
-    async def upload_equipment_image(self, equipment_id: str, file: UploadFile, current_user: dict):
+    async def upload_equipment_image(self, equipment_id: str, file: UploadFile, current_user: dict, part_view: str = "General"):
         try:
             # Verify if the equipment exists in the database
             await self.get_equipment(equipment_id)
@@ -66,7 +66,9 @@ class EquipmentService:
                 "file_path": file_path,
                 "file_name": file.filename,
                 "file_size": file_size,
+                "file_size": file_size,
                 "storage_url": None,
+                "part_view": part_view,
                 "uploaded_at": str(datetime.utcnow())
             }
 
@@ -98,8 +100,18 @@ class EquipmentService:
                 
                 for eq in equipment_list:
                     if eq['id'] in photos_map:
-                        filename = os.path.basename(photos_map[eq['id']]['file_path'])
-                        eq['image_url'] = f"/static/uploads/{filename}"
+                        # Find main photo or just use the first found
+                        # We need to filter photos for THIS equipment
+                        eq_photos = [p for p in photos_res.data if p['equipment_id'] == eq['id']]
+                        if eq_photos:
+                            # Set main image (first one or general)
+                            filename = os.path.basename(eq_photos[0]['file_path'])
+                            eq['image_url'] = f"/static/uploads/{filename}"
+                            eq['photos'] = eq_photos
+                        else:
+                            eq['photos'] = []
+                    else:
+                        eq['photos'] = []
             
             return [EquipmentResponse(**eq) for eq in equipment_list]
         except Exception as e:
@@ -115,8 +127,11 @@ class EquipmentService:
             equipment = res.data[0]
             
             # Fetch photo
-            photo_res = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).limit(1).execute()
+            photo_res = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).execute()
+            equipment['photos'] = photo_res.data if photo_res.data else []
+            
             if photo_res.data:
+                # Use the first one or logic to pick 'General' as main
                 filename = os.path.basename(photo_res.data[0]['file_path'])
                 equipment['image_url'] = f"/static/uploads/{filename}"
                 
@@ -131,7 +146,7 @@ class EquipmentService:
                 "equipment_tag_no": equipment.equipment_tag_no,
                 "equipment_description": equipment.equipment_description,
                 "type_id": equipment.type_id,
-                "material": equipment.material,
+                "material_id": equipment.material_id,
                 "location": equipment.location,
                 "inspection_due_date": str(equipment.inspection_due_date) if equipment.inspection_due_date else None,
                 "dosh_registration_no": equipment.dosh_registration_no,
@@ -186,10 +201,38 @@ class EquipmentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching types: {str(e)}")
 
-    # # Get material options
-    # async def get_material_options(self):
-    #     try:
-    #         res = self.db.table("material").select("id, description").execute()
-    #         return {"materials": res.data if res.data else []}
-    #     except Exception as e:
-    #         raise HTTPException(status_code=500, detail=f"Error fetching materials: {str(e)}")
+    # Get material options
+    async def get_material_options(self):
+        try:
+            res = self.db.table("material").select("id, description").execute()
+            return {"materials": res.data if res.data else []}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching materials: {str(e)}")
+
+    # Get Unique Part Views
+    async def get_unique_part_views(self):
+        try:
+            # Fetch distinct part views from Photo table (column part_view)
+            res = self.db.table("Photo").select("part_view").execute()
+            existing_views = set()
+            if res.data:
+                for row in res.data:
+                    if row.get("part_view"):
+                         existing_views.add(row["part_view"])
+            
+            # Default types
+            defaults = ["East Side", "South Side", "West Side", "North Side", "Nameplate", "Top View"]
+            
+            # Merge
+            all_views = sorted(list(existing_views.union(defaults)))
+            
+            # Filter out General if it exists in DB (case-insensitive)
+            # We want to exclude "General", "General View", and their case variants
+            exclude_views = {"general", "general view", "generalview"}
+            all_views = [v for v in all_views if v.lower() not in exclude_views]
+            
+            return {"part_views": all_views}
+        except Exception as e:
+            # Fallback to defaults
+            defaults = ["East Side", "South Side", "West Side", "North Side", "Nameplate", "Top View"]
+            return {"part_views": sorted(defaults)}

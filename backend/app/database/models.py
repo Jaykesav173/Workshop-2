@@ -9,6 +9,7 @@ Models:
 4. Report - Abdalla (Intelligent Report Generation) & Jay (Report History & Review)
 """
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -36,13 +37,21 @@ class Type(Base):
 
     equipments = relationship("Equipment", back_populates="type")
 
+class Material(Base):
+    __tablename__ = "material"
+    id = Column(Integer, primary_key=True, index=True)
+    description = Column(String, nullable=False)
+
+    equipments = relationship("Equipment", back_populates="material")
+
 class Equipment(Base):
     __tablename__ = "Equipment"
     id = Column(Integer, primary_key=True, index=True)
     equipment_tag_no = Column(String, nullable=False, index=True)
     equipment_description = Column(String, nullable=False)
     type_id = Column(Integer, ForeignKey("Type.id"), nullable=False)
-    material = Column(String, nullable=True)
+    # material = Column(String, nullable=True) # DEPRECATED
+    material_id = Column(Integer, ForeignKey("material.id"), nullable=True) # New FK
     location = Column(String, nullable=True)
     inspection_due_date = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("User.id"), nullable=True)  # optional link to who created
@@ -53,10 +62,11 @@ class Equipment(Base):
     corrosion_allowance = Column(String, nullable=True)
     design_pressure = Column(String, nullable=True)
     design_temperature = Column(String, nullable=True)
-    status = Column(String, default="ACTIVE")  # ACTIVE, INACTIVE, DECOMMISSIONED
+    status = Column(String, default="ACTIVE")  # ACTIVE, INACTIVE, MAINTENANCE
 
     # relationships
-    type = relationship("type", back_populates="equipments")
+    type = relationship("Type", back_populates="equipments")
+    material = relationship("Material", back_populates="equipments")
     creator = relationship("User", back_populates="equipment_created")
     photos = relationship("Photo", back_populates="equipment", cascade="all, delete-orphan")
     reports = relationship("Report", back_populates="equipment")
@@ -69,9 +79,10 @@ class Photo(Base):
     equipment_id = Column(Integer, ForeignKey("Equipment.id"), nullable=True)  # Optional link to equipment
     uploaded_by = Column(Integer, ForeignKey("User.id"), nullable=False)  # Who uploaded the photo
     file_path = Column(String, nullable=False)
-    storage_url = Column(String)  # Supabase storage URL
+    storage_url = Column(String) 
     file_name = Column(String)
-    file_size = Column(Integer)  # Size in bytes
+    file_size = Column(Integer) 
+    part_view = Column(String, nullable=True)  # e.g., "Front View", "Nameplate", "General View"
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
 # 4. Report Model - Abdalla (Intelligent Report Generation) & Jay (Report History & Review)
