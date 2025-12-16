@@ -253,3 +253,50 @@ class API510ReportRequest(BaseModel):
     ndt_text: Optional[str] = None  # NDT section text
     initial_inspection_text: Optional[str] = "Initial/Pre-Inspection — Not applicable"
 
+# ============================================
+# Template Management Schemas
+# ============================================
+class FindingTemplateBase(BaseModel):
+    label: str
+    text: str
+    is_active: Optional[str] = "ACTIVE"
+
+class FindingTemplateCreate(FindingTemplateBase):
+    pass
+
+class FindingTemplateUpdate(BaseModel):
+    label: Optional[str] = None
+    text: Optional[str] = None
+    is_active: Optional[str] = None
+
+class FindingTemplateResponse(FindingTemplateBase):
+    id: int
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+class RecommendationTemplateBase(BaseModel):
+    label: str
+    text: str
+    is_active: Optional[str] = "ACTIVE"
+
+class RecommendationTemplateCreate(RecommendationTemplateBase):
+    pass
+
+class RecommendationTemplateUpdate(BaseModel):
+    label: Optional[str] = None
+    text: Optional[str] = None
+    is_active: Optional[str] = None
+
+class RecommendationTemplateResponse(RecommendationTemplateBase):
+    id: int
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+

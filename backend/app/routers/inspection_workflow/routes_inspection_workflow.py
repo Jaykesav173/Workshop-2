@@ -44,6 +44,15 @@ async def update_inspection_status(
     """Update inspection status"""
     return await inspection_service.update_status(inspection_id, status)
 
+@router.put("/{inspection_id}", response_model=InspectionResponse)
+async def update_inspection(
+    inspection_id: int,
+    inspection: InspectionCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update inspection details"""
+    return await inspection_service.update_inspection(inspection_id, inspection, current_user)
+
 @router.delete("/{inspection_id}")
 async def delete_inspection(
     inspection_id: int,

@@ -2,13 +2,16 @@
  * Inspection Details Page
  * 4-tab layout: Overview, Observations, Photos, Report
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import axios from 'axios'
 import { API_BASE } from '../../services/api'
 import { photoService } from '../../services/photoService'
 import { reportService } from '../../services/reportService'
 import observationService from '../../services/observationService'
+import templateService from '../../services/templateService'
+import TemplateManagement from './TemplateManagement'
 
 const Icons = {
   Plus: () => (
@@ -36,6 +39,11 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
     </svg>
   ),
+  Pen: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+    </svg>
+  ),
   Trash: () => (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -50,6 +58,21 @@ const Icons = {
   Link: () => (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+    </svg>
+  ),
+  Undo: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+    </svg>
+  ),
+  Redo: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+    </svg>
+  ),
+  Clear: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     </svg>
   ),
 }
@@ -72,11 +95,41 @@ const recommendationTemplates = [
 
 function InspectionDetails() {
   const { id } = useParams()
+  const inspectionId = id ? parseInt(id, 10) : null
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
   const [inspection, setInspection] = useState(null)
   const [equipment, setEquipment] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showTemplateManagement, setShowTemplateManagement] = useState(false) // false, 'findings', or 'recommendations'
+  const [findingTemplates, setFindingTemplates] = useState([])
+  const [recommendationTemplates, setRecommendationTemplates] = useState([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+
+  // Debug: Watch showTemplateManagement state changes
+  useEffect(() => {
+    console.log('🔄 showTemplateManagement state changed to:', showTemplateManagement, 'type:', typeof showTemplateManagement, 'truthy?', !!showTemplateManagement)
+    console.log('🔄 Component should re-render now with showTemplateManagement =', showTemplateManagement)
+  }, [showTemplateManagement])
+  
+  // Debug: Log every render
+  useEffect(() => {
+    console.log('🔄 InspectionDetails component rendered, showTemplateManagement =', showTemplateManagement)
+  })
+  const [editFormData, setEditFormData] = useState({
+    inspection_type: '',
+    priority: '',
+    status: '',
+    inspection_date: '',
+    scheduled_date: '',
+    due_date: '',
+    next_inspection_date: '',
+    findings_summary: '',
+    remarks_general: '',
+    plant_unit_area: '',
+    defect_type: '',
+  })
   
   // Observations state
   const [observations, setObservations] = useState([])
@@ -101,6 +154,70 @@ function InspectionDetails() {
   const [viewingPhoto, setViewingPhoto] = useState(null) // Photo being viewed in modal
   const [linkedPhotos, setLinkedPhotos] = useState({}) // Map of photo_id -> finding_key
   const [photoNumbers, setPhotoNumbers] = useState({}) // Map of photo_id -> photo_number (e.g., "1.1", "1.2")
+  const [annotatingPhoto, setAnnotatingPhoto] = useState(null) // Photo being annotated
+  const [annotatedImages, setAnnotatedImages] = useState({}) // Map of photo_id -> annotated image URL/blob
+
+  // Helper function to get canonical photo key (always string for consistency)
+  const getPhotoKey = (photo) => {
+    if (!photo) return null
+    // Try all possible ID fields, convert to string for consistency
+    return String(photo.id || photo.photo_id || photo.image_id || photo.file_id || '')
+  }
+
+  // Helper function to save annotated images to localStorage
+  const saveAnnotatedImagesToStorage = (images) => {
+    if (!inspectionId) return
+    const storageKey = `annotated_images_${inspectionId}`
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(images))
+      console.log(`💾 Saved ${Object.keys(images).length} annotated images to localStorage`)
+    } catch (err) {
+      console.error('Error saving annotated images to localStorage:', err)
+      if (err.name === 'QuotaExceededError') {
+        console.warn('⚠️ localStorage quota exceeded. Consider cleaning up old annotated images.')
+      }
+    }
+  }
+
+  // Load annotated images from localStorage on mount
+  useEffect(() => {
+    if (inspectionId) {
+      const storageKey = `annotated_images_${inspectionId}`
+      const saved = localStorage.getItem(storageKey)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          // Ensure all keys are strings (localStorage returns string keys)
+          const normalized = {}
+          Object.keys(parsed).forEach(key => {
+            normalized[String(key)] = parsed[key]
+          })
+          console.log(`📦 Loaded ${Object.keys(normalized).length} annotated images from localStorage for inspection ${inspectionId}`)
+          console.log(`   Photo keys: ${Object.keys(normalized).join(', ')}`)
+          setAnnotatedImages(normalized)
+        } catch (err) {
+          console.error('Error loading annotated images from localStorage:', err)
+        }
+      }
+    }
+  }, [inspectionId])
+
+  // Save annotated images to localStorage whenever they change
+  useEffect(() => {
+    if (inspectionId && Object.keys(annotatedImages).length > 0) {
+      // Only save data URLs (they can be large, but we need them)
+      const toSave = {}
+      Object.keys(annotatedImages).forEach(photoId => {
+        const dataUrl = annotatedImages[photoId]
+        if (dataUrl && dataUrl.startsWith('data:image/')) {
+          toSave[String(photoId)] = dataUrl // Ensure keys are strings
+        }
+      })
+      if (Object.keys(toSave).length > 0) {
+        saveAnnotatedImagesToStorage(toSave)
+      }
+    }
+  }, [annotatedImages, inspectionId])
   
   // Get current group photos based on selected group
   const currentGroupPhotos = photoGroupNumber ? (photoGroups[photoGroupNumber] || []) : []
@@ -114,8 +231,42 @@ function InspectionDetails() {
   const [report, setReport] = useState(null)
   const [generatingReport, setGeneratingReport] = useState(false)
 
+  // Fetch templates on mount and when modal closes
+  const fetchTemplates = async () => {
+    try {
+      setTemplatesLoading(true)
+      const token = localStorage.getItem('token')
+      if (!token) {
+        console.warn('⚠️ No token found, skipping template fetch')
+        return
+      }
+      
+      // Fetch only ACTIVE templates for dropdowns
+      const [findings, recommendations] = await Promise.all([
+        templateService.getFindingTemplates(token, true), // true = only active
+        templateService.getRecommendationTemplates(token, true) // true = only active
+      ])
+      
+      setFindingTemplates(findings || [])
+      setRecommendationTemplates(recommendations || [])
+      
+      console.log('✅ Templates fetched - Findings:', findings?.length || 0, 'Recommendations:', recommendations?.length || 0)
+      console.log('📋 Finding templates:', findings)
+      console.log('📋 Recommendation templates:', recommendations)
+    } catch (error) {
+      console.error('❌ Error fetching templates:', error)
+      console.error('❌ Error details:', error.response?.data || error.message)
+      // Don't show alert - just log error
+      setFindingTemplates([])
+      setRecommendationTemplates([])
+    } finally {
+      setTemplatesLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetchInspection()
+    fetchTemplates() // Fetch templates on mount
   }, [id])
 
   useEffect(() => {
@@ -144,10 +295,66 @@ function InspectionDetails() {
         headers: { Authorization: `Bearer ${token}` }
       })
       setInspection(response.data)
+      // Populate edit form with current inspection data
+      if (response.data) {
+        setEditFormData({
+          inspection_type: response.data.inspection_type || '',
+          priority: response.data.priority || '',
+          status: response.data.status || '',
+          inspection_date: response.data.inspection_date ? new Date(response.data.inspection_date).toISOString().split('T')[0] : '',
+          scheduled_date: response.data.scheduled_date ? new Date(response.data.scheduled_date).toISOString().split('T')[0] : '',
+          due_date: response.data.due_date ? new Date(response.data.due_date).toISOString().split('T')[0] : '',
+          next_inspection_date: response.data.next_inspection_date ? new Date(response.data.next_inspection_date).toISOString().split('T')[0] : '',
+          findings_summary: response.data.findings_summary || '',
+          remarks_general: response.data.remarks_general || '',
+          plant_unit_area: response.data.plant_unit_area || '',
+          defect_type: response.data.defect_type || '',
+        })
+      }
     } catch (err) {
       console.error('Error fetching inspection:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSaveEdit = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const inspectionIdToUse = inspection?.inspection_id || inspectionId || id
+      
+      if (!inspectionIdToUse) {
+        alert('Inspection ID not found')
+        return
+      }
+
+      // Prepare update data - convert date strings to ISO format
+      const updateData = {
+        inspection_date: editFormData.inspection_date ? new Date(editFormData.inspection_date).toISOString() : (inspection.inspection_date ? new Date(inspection.inspection_date).toISOString() : null),
+        inspection_type: editFormData.inspection_type || null,
+        priority: editFormData.priority || null,
+        status: editFormData.status || inspection.status || 'Draft',
+        scheduled_date: editFormData.scheduled_date ? new Date(editFormData.scheduled_date).toISOString() : null,
+        due_date: editFormData.due_date ? new Date(editFormData.due_date).toISOString() : null,
+        next_inspection_date: editFormData.next_inspection_date ? new Date(editFormData.next_inspection_date).toISOString() : null,
+        findings_summary: editFormData.findings_summary || null,
+        remarks_general: editFormData.remarks_general || null,
+        plant_unit_area: editFormData.plant_unit_area || null,
+        defect_type: editFormData.defect_type || null,
+        equipment_tag_no: inspection.equipment_tag_no || null,
+      }
+
+      await axios.put(`${API_BASE}/inspections/${inspectionIdToUse}`, updateData, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      // Refresh inspection data
+      await fetchInspection()
+      setShowEditModal(false)
+      alert('Inspection details updated successfully!')
+    } catch (err) {
+      console.error('Error updating inspection:', err)
+      alert('Failed to update inspection details. Please try again.')
     }
   }
 
@@ -498,20 +705,22 @@ function InspectionDetails() {
   }
 
   const handleApplyFindingTemplate = (index, templateId) => {
-    const template = findingTemplates.find(t => t.id === templateId)
+    // Convert templateId to number for comparison (backend returns integer IDs)
+    const template = findingTemplates.find(t => String(t.id) === String(templateId))
     if (!template) return
     const updated = [...observationForm.findings]
-    // Only update the text, keep the existing auto-generated key
-    updated[index] = { ...updated[index], text: template.text }
+    // Update the text and store template_id so we can show the selected label
+    updated[index] = { ...updated[index], text: template.text, template_id: template.id }
     setObservationForm({ ...observationForm, findings: updated })
   }
 
   const handleApplyRecommendationTemplate = (index, templateId) => {
-    const template = recommendationTemplates.find(t => t.id === templateId)
+    // Convert templateId to number for comparison (backend returns integer IDs)
+    const template = recommendationTemplates.find(t => String(t.id) === String(templateId))
     if (!template) return
     const updated = [...observationForm.recommendations]
-    // Only update the text, keep the existing auto-generated key
-    updated[index] = { ...updated[index], text: template.text }
+    // Update the text and store template_id so we can show the selected label
+    updated[index] = { ...updated[index], text: template.text, template_id: template.id }
     setObservationForm({ ...observationForm, recommendations: updated })
   }
 
@@ -896,6 +1105,10 @@ function InspectionDetails() {
   }
 
   const handleGenerateReport = async () => {
+
+    
+
+    
     setGeneratingReport(true)
     try {
       const token = localStorage.getItem('token')
@@ -930,27 +1143,134 @@ function InspectionDetails() {
       // Collect all photos from all groups and match with findings
       const reportPhotos = []
       
+      // Debug: Log annotated images state
+      console.log('📋 Report Generation - Annotated Images State:')
+      console.log(`   Total annotated images: ${Object.keys(annotatedImages).length}`)
+      console.log(`   Annotated photo IDs: ${Object.keys(annotatedImages).join(', ')}`)
+      
       // Iterate through all photo groups
       Object.keys(photoGroups).forEach(groupNum => {
         const groupPhotos = photoGroups[groupNum] || []
         
+        // Debug: Log all photos in this group
+        console.log(`🔍 RAW PHOTO OBJECTS USED IN REPORT FOR GROUP ${groupNum}:`)
         groupPhotos.forEach(photo => {
-          // Get finding key from linkedPhotos or photoNumbers
-          const findingKey = linkedPhotos[photo.id] || photoNumbers[photo.id] || ''
+          console.log("  Photo object:", photo)
+          console.log("    - ID:", photo.id)
+          console.log("    - photo_id:", photo.photo_id)
+          console.log("    - storage_url:", photo.storage_url)
+          console.log("    - Canonical key:", getPhotoKey(photo))
+        })
+        
+        groupPhotos.forEach(photo => {
+          // Get canonical photo key (standardized identifier)
+          const photoKey = getPhotoKey(photo)
+          if (!photoKey) {
+            console.warn(`⚠️ Photo has no valid ID, skipping:`, photo)
+            return
+          }
+          
+
+
+
+          // Debug: Check if this photo has an annotated version
+          console.log(`📸 Processing photo for report:`)
+          console.log(`   Photo object:`, photo)
+          console.log(`   Canonical key: ${photoKey}`)
+          console.log(`   Available annotated keys: ${Object.keys(annotatedImages).join(', ')}`)
+          
+          // Get finding key from linkedPhotos or photoNumbers (check both canonical key and photo.id for compatibility)
+          const findingKey = linkedPhotos[photoKey] || linkedPhotos[photo.id] || photoNumbers[photoKey] || photoNumbers[photo.id] || ''
           
           // Find matching finding and recommendation by key
           const matchingFinding = allFindings.find(f => f.key === findingKey)
           const matchingRecommendation = allRecommendations.find(r => r.key === findingKey)
           
-          reportPhotos.push({
-            finding_key: findingKey,
-            finding_text: matchingFinding?.text || '',
-            recommendation_text: matchingRecommendation?.text || 'Nil',
-            storage_url: photo.storage_url || photoService.getPhotoFileUrl(photo.id),
-            file_path: photo.file_path,
-          })
+          // Use annotated image if available - check canonical key first, then fallback to photo.id for compatibility
+          const annotated = annotatedImages[photoKey] || annotatedImages[String(photo.id)] || annotatedImages[photo.id]
+          
+          // Get photo number for debug logging
+          const photoNum = photoNumbers[photoKey] || photoNumbers[photo.id] || findingKey || 'N/A'
+          
+          // Determine which image to use: annotated version OR original photo
+          let photoUrl = null
+          let photoFilePath = null
+          
+          if (annotated) {
+            // Use annotated image (data URL)
+            photoUrl = annotated
+            console.log(`✅ Using ANNOTATED image for photo key: ${photoKey} (${photoNum}) in report generation`)
+            console.log(`   Photo object ID: ${photo.id}, photo_id: ${photo.photo_id}, image_id: ${photo.image_id}`)
+            console.log(`   Data URL length: ${photoUrl.length} characters`)
+            console.log(`   Data URL starts with: ${photoUrl.substring(0, 30)}...`)
+            console.log(`   Is valid data URL: ${photoUrl.startsWith('data:image/')}`)
+          } else {
+            // Use original photo - prioritize file_path (backend can access directly)
+            // Try multiple possible field names for file_path
+            photoFilePath = photo.file_path || photo.path || photo.filepath
+            
+            // For storage_url, try multiple field names
+            photoUrl = photo.storage_url || photo.url || photo.image_url || photo.photo_url
+            
+            // CRITICAL: If we have file_path, prefer it over storage_url for backend access
+            // The backend can read file_path directly without HTTP requests
+            if (!photoFilePath && !photoUrl && (photo.id || photo.photo_id)) {
+              // Last resort: construct API URL (backend will need to handle this)
+              const photoId = photo.id || photo.photo_id || photoKey
+              photoUrl = photoService.getPhotoFileUrl(photoId)
+              console.log(`   ⚠️ No file_path or storage_url found, constructed API URL from ID: ${photoUrl}`)
+            }
+            
+            console.log(`ℹ️ Using ORIGINAL image for photo key: ${photoKey} (${photoNum})`)
+            console.log(`   Photo object:`, photo)
+            console.log(`   Photo object ID: ${photo.id}, photo_id: ${photo.photo_id}`)
+            console.log(`   storage_url: ${photoUrl || 'N/A'}`)
+            console.log(`   file_path: ${photoFilePath || 'N/A'}`)
+            console.log(`   ❌ No annotated image found for key: ${photoKey}, using original`)
+          }
+          
+          // Ensure we have a valid photo URL or file path
+          if (!photoUrl && !photoFilePath) {
+            console.error(`❌ Photo ${photoKey} has no storage_url or file_path, skipping`)
+            console.error(`   Photo object:`, photo)
+            return // Skip this photo
+          }
+          
+          // Backend PhotoItem schema requires storage_url to be a string (not null)
+          // If we have file_path but no storage_url, use empty string for storage_url
+          // The backend will prioritize file_path over storage_url for non-annotated photos
+          const finalStorageUrl = photoUrl || '' // Must be string, not null
+          const finalFilePath = photoFilePath || null // Optional, can be null
+          
+          // Validate required fields before pushing
+          if (!findingKey) {
+            console.warn(`⚠️ Photo ${photoKey} has no finding_key, using empty string`)
+          }
+          
+          const photoItem = {
+            finding_key: findingKey || '', // Required string
+            finding_text: matchingFinding?.text || '', // Required string
+            recommendation_text: matchingRecommendation?.text || 'Nil', // Required string
+            storage_url: finalStorageUrl, // Required string (data URL, regular URL, or empty string)
+            file_path: finalFilePath, // Optional file path (preferred for backend access)
+          }
+          
+          // Validate all required fields are strings
+          if (typeof photoItem.finding_key !== 'string' || 
+              typeof photoItem.finding_text !== 'string' || 
+              typeof photoItem.recommendation_text !== 'string' || 
+              typeof photoItem.storage_url !== 'string') {
+            console.error(`❌ Invalid photo item format:`, photoItem)
+            return // Skip invalid photo
+          }
+          
+          reportPhotos.push(photoItem)
         })
+        
+        // Debug: Log summary for this group after processing
+        console.log(`✅ Finished processing group ${groupNum}: ${groupPhotos.length} photos processed`)
       })
+
 
       const equipmentTagNo = inspection.equipment_tag_no || equipment?.equipment_tag_no || equipment?.name || 'N/A'
       
@@ -1016,25 +1336,44 @@ function InspectionDetails() {
       // Generate proper report number
       const generatedReportNo = generateReportNumber(plantValue, equipmentTagNo, reportDate, inspectionType)
       
+      // Validate findings and recommendations format (ensure all fields are strings)
+      const validatedFindings = allFindings.map(f => ({
+        key: String(f.key || ''),
+        text: String(f.text || '')
+      }))
+      const validatedRecommendations = allRecommendations.map(r => ({
+        key: String(r.key || ''),
+        text: String(r.text || '')
+      }))
+      
+      // Validate photos format (ensure all required fields are strings)
+      const validatedPhotos = reportPhotos.map(p => ({
+        finding_key: String(p.finding_key || ''),
+        finding_text: String(p.finding_text || ''),
+        recommendation_text: String(p.recommendation_text || ''),
+        storage_url: String(p.storage_url || ''), // Must be string, not null
+        file_path: p.file_path ? String(p.file_path) : null // Optional
+      }))
+      
       const reportData = {
         inspection_id: inspectionId, // CRITICAL: Include inspection_id as integer
         equipment_id: equipment?.id || inspection.equipment_id,
         header: {
-          equipment_tag: equipmentTagNo,
-          equipment_description: equipment?.equipment_description || '',
-          plant: plantValue, // Must come from inspection.plant_unit_area
-          dosh_no: equipment?.dosh_registration_no || '',
-          report_no: generatedReportNo, // Properly formatted report number
-          report_date: reportDate,
-          inspector_name: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).username : 'Inspector',
-          reviewed_by: '',
-          client_approver: '',
-          inspection_type: mapInspectionTypeToCode(inspectionType), // Include mapped inspection type
+          equipment_tag: String(equipmentTagNo || ''),
+          equipment_description: String(equipment?.equipment_description || ''),
+          plant: String(plantValue || ''), // Must come from inspection.plant_unit_area
+          dosh_no: String(equipment?.dosh_registration_no || ''),
+          report_no: String(generatedReportNo || ''), // Properly formatted report number
+          report_date: String(reportDate || ''),
+          inspector_name: String(localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).username : 'Inspector'),
+          reviewed_by: String(''),
+          client_approver: String(''),
+          inspection_type: String(mapInspectionTypeToCode(inspectionType) || 'VI'), // Include mapped inspection type
         },
-        findings: allFindings, // Already in { key, text } format
-        recommendations: allRecommendations, // Already in { key, text } format
-        photos: reportPhotos,
-        ndt_text: '',
+        findings: validatedFindings, // Validated format
+        recommendations: validatedRecommendations, // Validated format
+        photos: validatedPhotos, // Validated format
+        ndt_text: String(''),
       }
 
       // Debug logging: Log what we're sending
@@ -1046,7 +1385,9 @@ function InspectionDetails() {
         recommendations_count: reportData.recommendations.length,
         photos_count: reportData.photos.length,
       })
-      console.log('📋 Full report payload:', JSON.stringify(reportData, null, 2))
+      console.log('📋 Sample photo:', reportData.photos[0])
+      console.log('📋 Sample finding:', reportData.findings[0])
+      console.log('📋 Sample recommendation:', reportData.recommendations[0])
 
       const response = await reportService.generateReport(reportData)
       console.log('📋 Report generation response:', response)
@@ -1151,6 +1492,17 @@ function InspectionDetails() {
                   <p className="text-gray-900">{inspection.defect_type}</p>
                 </div>
               )}
+              
+              {/* Edit Inspection Details Button - Bottom Left */}
+              <div className="flex justify-start mt-6">
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                >
+                  <Icons.Pencil />
+                  <span>Edit Inspection Details</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -1286,17 +1638,46 @@ function InspectionDetails() {
                             {finding.key}
                           </div>
                           <select
-                            defaultValue=""
+                            value={finding.template_id || ''}
                             onChange={(e) => {
-                              handleApplyFindingTemplate(idx, e.target.value)
-                              e.target.selectedIndex = 0
+                              const value = e.target.value
+                              console.log('🔍 Finding template select changed to:', value)
+                              if (value === '__edit_templates__') {
+                                console.log('✅ About to open template management for findings')
+                                e.preventDefault()
+                                e.stopPropagation()
+                                // Force state change by first setting to false, then to 'findings'
+                                // This ensures React re-renders even if state was already 'findings'
+                                console.log('📝 Step 1: Setting to false to force state change')
+                                setShowTemplateManagement(false)
+                                setTimeout(() => {
+                                  console.log('📝 Step 2: Setting to "findings"')
+                                  setShowTemplateManagement('findings')
+                                }, 10)
+                              } else if (value) {
+                                handleApplyFindingTemplate(idx, value)
+                              } else {
+                                // Clear template selection
+                                const updated = [...observationForm.findings]
+                                updated[idx].template_id = null
+                                setObservationForm({ ...observationForm, findings: updated })
+                              }
                             }}
                             className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
                           >
                             <option value="">Select template...</option>
-                            {findingTemplates.map(t => (
-                              <option key={t.id} value={t.id}>{t.label}</option>
-                            ))}
+                            {(() => {
+                              console.log('🔍 Rendering finding templates dropdown - count:', findingTemplates.length, 'templates:', findingTemplates)
+                              if (findingTemplates.length === 0) {
+                                return <option value="" disabled>No templates available</option>
+                              }
+                              return findingTemplates.map(t => (
+                                <option key={t.id} value={t.id}>{t.label}</option>
+                              ))
+                            })()}
+                            <option value="__edit_templates__" style={{ fontStyle: 'italic', color: '#666' }}>
+                              ⚙️ Edit Templates...
+                            </option>
                           </select>
                         </div>
                         <textarea
@@ -1332,17 +1713,45 @@ function InspectionDetails() {
                             {rec.key}
                           </div>
                           <select
-                            defaultValue=""
+                            value={rec.template_id || ''}
                             onChange={(e) => {
-                              handleApplyRecommendationTemplate(idx, e.target.value)
-                              e.target.selectedIndex = 0
+                              const value = e.target.value
+                              console.log('🔍 Recommendation template select changed to:', value)
+                              if (value === '__edit_templates__') {
+                                console.log('✅ About to open template management for recommendations')
+                                e.preventDefault()
+                                e.stopPropagation()
+                                // Force state change by first setting to false, then to 'recommendations'
+                                console.log('📝 Step 1: Setting to false to force state change')
+                                setShowTemplateManagement(false)
+                                setTimeout(() => {
+                                  console.log('📝 Step 2: Setting to "recommendations"')
+                                  setShowTemplateManagement('recommendations')
+                                }, 10)
+                              } else if (value) {
+                                handleApplyRecommendationTemplate(idx, value)
+                              } else {
+                                // Clear template selection
+                                const updated = [...observationForm.recommendations]
+                                updated[idx].template_id = null
+                                setObservationForm({ ...observationForm, recommendations: updated })
+                              }
                             }}
                             className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
                           >
                             <option value="">Select template...</option>
-                            {recommendationTemplates.map(t => (
-                              <option key={t.id} value={t.id}>{t.label}</option>
-                            ))}
+                            {(() => {
+                              console.log('🔍 Rendering recommendation templates dropdown - count:', recommendationTemplates.length, 'templates:', recommendationTemplates)
+                              if (recommendationTemplates.length === 0) {
+                                return <option value="" disabled>No templates available</option>
+                              }
+                              return recommendationTemplates.map(t => (
+                                <option key={t.id} value={t.id}>{t.label}</option>
+                              ))
+                            })()}
+                            <option value="__edit_templates__" style={{ fontStyle: 'italic', color: '#666' }}>
+                              ⚙️ Edit Templates...
+                            </option>
                           </select>
                         </div>
                         <textarea
@@ -1681,7 +2090,7 @@ function InspectionDetails() {
                         }}
                       >
                         <img
-                          src={photo.storage_url || `${API_BASE}/photos/${photo.id}/file`}
+                          src={annotatedImages[getPhotoKey(photo)] || annotatedImages[photo.id] || photo.storage_url || `${API_BASE}/photos/${photo.id}/file`}
                           alt="Inspection photo"
                           className="w-full h-32 object-cover"
                         />
@@ -1716,6 +2125,16 @@ function InspectionDetails() {
                             title="View photo"
                           >
                             <Icons.Eye className="w-5 h-5 text-gray-800" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setAnnotatingPhoto(photo)
+                            }}
+                            className="p-2 bg-white rounded-full shadow-lg hover:bg-blue-50 transition-colors"
+                            title="Annotate photo"
+                          >
+                            <Icons.Pen className="w-5 h-5 text-blue-600" />
                           </button>
                           <button
                             onClick={(e) => handleDeletePhoto(photo.id, e)}
@@ -1762,6 +2181,56 @@ function InspectionDetails() {
                     )}
                   </div>
                 </div>
+              )}
+
+              {/* Photo Annotation/Drawing Modal */}
+              {annotatingPhoto && (
+                <PhotoAnnotationEditor
+                  photo={annotatingPhoto}
+                  photoNumber={photoNumbers[annotatingPhoto.id] || ''}
+                  onClose={() => setAnnotatingPhoto(null)}
+                  onSave={async (annotatedImageBlob) => {
+                    // Convert blob to data URL for use in reports
+                    const reader = new FileReader()
+                    reader.onloadend = () => {
+                      // Use canonical photo key
+                      const photoKey = getPhotoKey(annotatingPhoto)
+                      if (!photoKey) {
+                        console.error('❌ Cannot save annotated image: photo has no valid ID')
+                        alert('Error: Photo ID not found. Cannot save annotation.')
+                        return
+                      }
+                      
+                      const dataUrl = reader.result
+                      console.log(`💾 Saving annotated image for photo key: ${photoKey}`)
+                      console.log(`   Photo object:`, annotatingPhoto)
+                      console.log(`   Data URL length: ${dataUrl.length} characters`)
+                      console.log(`   Data URL preview: ${dataUrl.substring(0, 100)}...`)
+                      
+                      setAnnotatedImages(prev => {
+                        const updated = {
+                          ...prev,
+                          [photoKey]: dataUrl // Use canonical key
+                        }
+                        console.log(`   ✅ Stored in annotatedImages with key: ${photoKey}`)
+                        console.log(`   Total annotated photos: ${Object.keys(updated).length}`)
+                        console.log(`   All keys: ${Object.keys(updated).join(', ')}`)
+                        
+                        // Save to localStorage immediately
+                        saveAnnotatedImagesToStorage(updated)
+                        
+                        return updated
+                      })
+                      setAnnotatingPhoto(null)
+                      alert('Photo annotated successfully! The annotated version will be saved and used in reports.')
+                    }
+                    reader.onerror = (error) => {
+                      console.error('Error reading blob:', error)
+                      alert('Failed to save annotated image. Please try again.')
+                    }
+                    reader.readAsDataURL(annotatedImageBlob)
+                  }}
+                />
               )}
             </div>
           )}
@@ -1848,7 +2317,695 @@ function InspectionDetails() {
           )}
         </div>
       </div>
+
+      {/* Edit Inspection Details Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Edit Inspection Details</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Icons.X />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Inspection Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Inspection Type
+                </label>
+                <select
+                  value={editFormData.inspection_type}
+                  onChange={(e) => setEditFormData({ ...editFormData, inspection_type: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select type</option>
+                  <option value="Visual Inspection">Visual Inspection</option>
+                  <option value="NDT">NDT</option>
+                  <option value="Comprehensive">Comprehensive</option>
+                  <option value="Routine">Routine</option>
+                </select>
+              </div>
+
+              {/* Priority and Status */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Priority
+                  </label>
+                  <select
+                    value={editFormData.priority}
+                    onChange={(e) => setEditFormData({ ...editFormData, priority: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select priority</option>
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="CRITICAL">Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={editFormData.status}
+                    onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Draft">Draft</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Inspection Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.inspection_date}
+                    onChange={(e) => setEditFormData({ ...editFormData, inspection_date: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Scheduled Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.scheduled_date}
+                    onChange={(e) => setEditFormData({ ...editFormData, scheduled_date: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.due_date}
+                    onChange={(e) => setEditFormData({ ...editFormData, due_date: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Next Inspection Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.next_inspection_date}
+                    onChange={(e) => setEditFormData({ ...editFormData, next_inspection_date: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Plant/Unit/Area */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Plant/Unit/Area <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.plant_unit_area}
+                  onChange={(e) => setEditFormData({ ...editFormData, plant_unit_area: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Plant 1, Unit A"
+                />
+              </div>
+
+              {/* Findings Summary */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Findings Summary
+                </label>
+                <textarea
+                  value={editFormData.findings_summary}
+                  onChange={(e) => setEditFormData({ ...editFormData, findings_summary: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter findings summary..."
+                />
+              </div>
+
+              {/* General Remarks */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  General Remarks
+                </label>
+                <textarea
+                  value={editFormData.remarks_general}
+                  onChange={(e) => setEditFormData({ ...editFormData, remarks_general: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter general remarks..."
+                />
+              </div>
+
+              {/* Defect Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Defect Type
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.defect_type}
+                  onChange={(e) => setEditFormData({ ...editFormData, defect_type: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter defect type..."
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-4 pt-4">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="px-6 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Template Management Modal - Using React Portal to render at body level */}
+      {showTemplateManagement && typeof document !== 'undefined' && createPortal(
+        <TemplateManagement
+          initialTab={showTemplateManagement === 'findings' ? 'findings' : showTemplateManagement === 'recommendations' ? 'recommendations' : 'findings'}
+          onClose={() => {
+            console.log('Closing template management modal')
+            setShowTemplateManagement(false)
+            fetchTemplates()
+          }}
+        />,
+        document.body
+      )}
     </>
+  )
+}
+
+// Photo Annotation Editor Component
+function PhotoAnnotationEditor({ photo, photoNumber, onClose, onSave }) {
+  const canvasRef = useRef(null)
+  const imageRef = useRef(null)
+  const [drawingMode, setDrawingMode] = useState('freehand') // freehand, circle, line, arrow, box
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 })
+  const [history, setHistory] = useState([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const [color, setColor] = useState('#FF0000') // Red color
+  const [lineWidth, setLineWidth] = useState(3)
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [loadingError, setLoadingError] = useState(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) {
+      console.error('Canvas ref is null')
+      return
+    }
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      console.error('Could not get 2d context')
+      return
+    }
+
+    // Load image as blob to avoid CORS issues
+    const loadImage = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const photoUrl = photo.storage_url || `${API_BASE}/photos/${photo.id}/file`
+        
+        // If it's already a data URL, use it directly
+        if (photoUrl.startsWith('data:image/')) {
+          const img = new Image()
+          img.onload = () => {
+            drawImageOnCanvas(img, ctx, canvas)
+          }
+          img.onerror = (error) => {
+            console.error('Error loading data URL image:', error)
+            setLoadingError('Failed to load image.')
+            setImageLoaded(false)
+          }
+          img.src = photoUrl
+          return
+        }
+        
+        // Otherwise, fetch as blob with authentication
+        console.log('Fetching image as blob from:', photoUrl)
+        const response = await axios.get(photoUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+          responseType: 'blob'
+        })
+        
+        const imageBlob = response.data
+        const imageUrl = URL.createObjectURL(imageBlob)
+        
+        const img = new Image()
+        img.onload = () => {
+          drawImageOnCanvas(img, ctx, canvas)
+          // Clean up object URL after loading
+          URL.revokeObjectURL(imageUrl)
+        }
+        img.onerror = (error) => {
+          console.error('Error loading image:', error)
+          setLoadingError('Failed to load image.')
+          setImageLoaded(false)
+          URL.revokeObjectURL(imageUrl)
+        }
+        img.src = imageUrl
+        
+      } catch (error) {
+        console.error('Error fetching image:', error)
+        setLoadingError(`Failed to load image: ${error.message || 'Unknown error'}`)
+        setImageLoaded(false)
+      }
+    }
+    
+    const drawImageOnCanvas = (img, ctx, canvas) => {
+      console.log('Image loaded successfully:', img.width, 'x', img.height)
+      setImageLoaded(true)
+      setLoadingError(null)
+      
+      // Calculate display size (max 1200px width or height, maintain aspect ratio)
+      const maxDisplaySize = 1200
+      let displayWidth = img.width
+      let displayHeight = img.height
+      
+      if (img.width > maxDisplaySize || img.height > maxDisplaySize) {
+        const scale = Math.min(maxDisplaySize / img.width, maxDisplaySize / img.height)
+        displayWidth = Math.floor(img.width * scale)
+        displayHeight = Math.floor(img.height * scale)
+      }
+      
+      // Set canvas internal size to match image (for high quality)
+      canvas.width = img.width
+      canvas.height = img.height
+      
+      // Set canvas display size (CSS) - this controls how it appears on screen
+      canvas.style.width = displayWidth + 'px'
+      canvas.style.height = displayHeight + 'px'
+      
+      // Draw image on canvas at full resolution
+      ctx.drawImage(img, 0, 0, img.width, img.height)
+      
+      // Draw photo number label on top-left corner
+      if (photoNumber) {
+        const labelX = 10
+        const labelY = 10
+        const labelWidth = 60
+        const labelHeight = 25
+        
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+        ctx.fillRect(labelX, labelY, labelWidth, labelHeight)
+        ctx.fillStyle = 'white'
+        ctx.font = 'bold 14px Arial'
+        ctx.fillText(photoNumber, labelX + 5, labelY + 18)
+      }
+      
+      // Save initial state
+      saveState()
+      
+      // Store image reference
+      imageRef.current = img
+      console.log('Canvas initialized:', canvas.width, 'x', canvas.height, 'display:', displayWidth, 'x', displayHeight)
+    }
+    
+    loadImage()
+  }, [photo, photoNumber])
+
+  const saveState = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    
+    const state = canvas.toDataURL('image/png')
+    const newHistory = history.slice(0, historyIndex + 1)
+    newHistory.push(state)
+    setHistory(newHistory)
+    setHistoryIndex(newHistory.length - 1)
+  }
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      const canvas = canvasRef.current
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(imageRef.current, 0, 0)
+        // Redraw photo number label
+        if (photoNumber) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+          ctx.fillRect(10, 10, 60, 25)
+          ctx.fillStyle = 'white'
+          ctx.font = 'bold 14px Arial'
+          ctx.fillText(photoNumber, 15, 28)
+        }
+        ctx.drawImage(img, 0, 0)
+      }
+      img.src = history[historyIndex - 1]
+      setHistoryIndex(historyIndex - 1)
+    }
+  }
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const canvas = canvasRef.current
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(imageRef.current, 0, 0)
+        // Redraw photo number label
+        if (photoNumber) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+          ctx.fillRect(10, 10, 60, 25)
+          ctx.fillStyle = 'white'
+          ctx.font = 'bold 14px Arial'
+          ctx.fillText(photoNumber, 15, 28)
+        }
+        ctx.drawImage(img, 0, 0)
+      }
+      img.src = history[historyIndex + 1]
+      setHistoryIndex(historyIndex + 1)
+    }
+  }
+
+  const clearDrawing = () => {
+    const canvas = canvasRef.current
+    if (!canvas || !imageRef.current) return
+    
+    const ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height)
+    
+    // Redraw photo number label (scaled)
+    if (photoNumber) {
+      const scaleX = canvas._scaleX || 1
+      const scaleY = canvas._scaleY || 1
+      const labelX = 10 * scaleX
+      const labelY = 10 * scaleY
+      const labelWidth = 60 * scaleX
+      const labelHeight = 25 * scaleY
+      
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+      ctx.fillRect(labelX, labelY, labelWidth, labelHeight)
+      ctx.fillStyle = 'white'
+      ctx.font = `bold ${14 * scaleY}px Arial`
+      ctx.fillText(photoNumber, labelX + 5 * scaleX, labelY + 18 * scaleY)
+    }
+    saveState()
+  }
+
+  const getMousePos = (e) => {
+    const canvas = canvasRef.current
+    if (!canvas) return { x: 0, y: 0 }
+    
+    const rect = canvas.getBoundingClientRect()
+    // Canvas internal size vs display size
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    }
+  }
+
+  const handleMouseDown = (e) => {
+    setIsDrawing(true)
+    const pos = getMousePos(e)
+    setStartPos(pos)
+  }
+
+  const handleMouseMove = (e) => {
+    if (!isDrawing) return
+    
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!canvas || !ctx) return
+    
+    const currentPos = getMousePos(e)
+    
+    ctx.strokeStyle = color
+    ctx.lineWidth = lineWidth
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    
+    if (drawingMode === 'freehand') {
+      ctx.beginPath()
+      ctx.moveTo(startPos.x, startPos.y)
+      ctx.lineTo(currentPos.x, currentPos.y)
+      ctx.stroke()
+      setStartPos(currentPos)
+    }
+  }
+
+  const handleMouseUp = (e) => {
+    if (!isDrawing) return
+    
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!canvas || !ctx) return
+    
+    const endPos = getMousePos(e)
+    
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
+    ctx.lineWidth = lineWidth
+    
+    if (drawingMode === 'circle') {
+      const radius = Math.sqrt(Math.pow(endPos.x - startPos.x, 2) + Math.pow(endPos.y - startPos.y, 2))
+      ctx.beginPath()
+      ctx.arc(startPos.x, startPos.y, radius, 0, 2 * Math.PI)
+      ctx.stroke()
+    } else if (drawingMode === 'line') {
+      ctx.beginPath()
+      ctx.moveTo(startPos.x, startPos.y)
+      ctx.lineTo(endPos.x, endPos.y)
+      ctx.stroke()
+    } else if (drawingMode === 'arrow') {
+      // Draw arrow
+      const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x)
+      ctx.beginPath()
+      ctx.moveTo(startPos.x, startPos.y)
+      ctx.lineTo(endPos.x, endPos.y)
+      ctx.lineTo(endPos.x - 10 * Math.cos(angle - Math.PI / 6), endPos.y - 10 * Math.sin(angle - Math.PI / 6))
+      ctx.moveTo(endPos.x, endPos.y)
+      ctx.lineTo(endPos.x - 10 * Math.cos(angle + Math.PI / 6), endPos.y - 10 * Math.sin(angle + Math.PI / 6))
+      ctx.stroke()
+    } else if (drawingMode === 'box') {
+      ctx.strokeRect(startPos.x, startPos.y, endPos.x - startPos.x, endPos.y - startPos.y)
+    }
+    
+    setIsDrawing(false)
+    saveState()
+  }
+
+  const handleSave = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    
+    // Ensure photo number label is on top (red box style to match report)
+    const ctx = canvas.getContext('2d')
+    if (photoNumber) {
+      // Draw red box with white text (matching report style)
+      const labelX = 10
+      const labelY = 10
+      const labelWidth = 60
+      const labelHeight = 25
+      
+      // Red background box
+      ctx.fillStyle = '#FF0000'
+      ctx.fillRect(labelX, labelY, labelWidth, labelHeight)
+      
+      // White text
+      ctx.fillStyle = 'white'
+      ctx.font = 'bold 14px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(photoNumber, labelX + labelWidth / 2, labelY + labelHeight / 2)
+    }
+    
+    // Export as high-quality PNG
+    canvas.toBlob((blob) => {
+      if (blob) {
+        onSave(blob)
+      } else {
+        console.error('Failed to create blob from canvas')
+        alert('Failed to save annotated image. Please try again.')
+      }
+    }, 'image/png', 1.0)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 max-w-7xl w-full max-h-[95vh] flex flex-col">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between mb-4 pb-4 border-b">
+          <h2 className="text-xl font-bold text-gray-900">Annotate Photo</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Icons.X className="w-6 h-6" />
+          </button>
+        </div>
+
+        {/* Drawing Tools */}
+        <div className="flex items-center gap-4 mb-4 pb-4 border-b flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Tool:</span>
+            <select
+              value={drawingMode}
+              onChange={(e) => setDrawingMode(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="freehand">Freehand</option>
+              <option value="line">Line</option>
+              <option value="arrow">Arrow</option>
+              <option value="circle">Circle</option>
+              <option value="box">Box</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Color:</span>
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="w-10 h-10 border border-gray-300 rounded cursor-pointer"
+            />
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Width:</span>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={lineWidth}
+              onChange={(e) => setLineWidth(parseInt(e.target.value))}
+              className="w-24"
+            />
+            <span className="text-sm text-gray-600">{lineWidth}px</span>
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={undo}
+              disabled={historyIndex <= 0}
+              className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Undo"
+            >
+              <Icons.Undo className="w-5 h-5" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={historyIndex >= history.length - 1}
+              className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Redo"
+            >
+              <Icons.Redo className="w-5 h-5" />
+            </button>
+            <button
+              onClick={clearDrawing}
+              className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+              title="Clear all drawings"
+            >
+              <Icons.Clear className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Canvas Container */}
+        <div className="flex-1 overflow-auto flex items-center justify-center bg-gray-100 rounded-lg p-4 min-h-[400px]">
+          {loadingError && (
+            <div className="text-center text-red-600 p-4">
+              <p className="font-semibold">Error loading image</p>
+              <p className="text-sm mt-2">{loadingError}</p>
+              <button
+                onClick={() => {
+                  setLoadingError(null)
+                  setImageLoaded(false)
+                  // Reload by re-triggering useEffect
+                  const img = new Image()
+                  img.crossOrigin = 'anonymous'
+                  const photoUrl = photo.storage_url || `${API_BASE}/photos/${photo.id}/file`
+                  img.src = photoUrl
+                }}
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {!imageLoaded && !loadingError && (
+            <div className="text-center text-gray-500">
+              <p className="text-lg">Loading image...</p>
+              <p className="text-sm mt-2">Please wait</p>
+            </div>
+          )}
+          <canvas
+            ref={canvasRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={() => setIsDrawing(false)}
+            className="border border-gray-300 rounded-lg cursor-crosshair bg-white"
+            style={{ 
+              maxWidth: '100%', 
+              maxHeight: '70vh',
+              display: imageLoaded ? 'block' : 'none'
+            }}
+          />
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-4 mt-4 pt-4 border-t">
+          <button
+            onClick={onClose}
+            className="px-6 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+          >
+            Save Annotations
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

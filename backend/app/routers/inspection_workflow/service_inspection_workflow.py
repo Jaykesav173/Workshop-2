@@ -135,6 +135,67 @@ class InspectionWorkflowService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error updating inspection: {str(e)}")
     
+    async def update_inspection(self, inspection_id: int, inspection: InspectionCreate, current_user: dict) -> InspectionResponse:
+        """Update inspection details"""
+        try:
+            # Prepare update data from inspection object
+            update_data = {}
+            
+            if inspection.inspection_date:
+                if isinstance(inspection.inspection_date, datetime):
+                    update_data["inspection_date"] = inspection.inspection_date.isoformat()
+                else:
+                    update_data["inspection_date"] = inspection.inspection_date
+            
+            if inspection.equipment_tag_no is not None:
+                update_data["equipment_tag_no"] = inspection.equipment_tag_no
+            if inspection.defect_type is not None:
+                update_data["defect_type"] = inspection.defect_type
+            if inspection.remarks is not None:
+                update_data["remarks"] = inspection.remarks
+            if inspection.inspection_type is not None:
+                update_data["inspection_type"] = inspection.inspection_type
+            if inspection.status is not None:
+                update_data["status"] = inspection.status
+            if inspection.priority is not None:
+                update_data["priority"] = inspection.priority
+            
+            if inspection.scheduled_date:
+                if isinstance(inspection.scheduled_date, datetime):
+                    update_data["scheduled_date"] = inspection.scheduled_date.isoformat()
+                else:
+                    update_data["scheduled_date"] = inspection.scheduled_date
+            
+            if inspection.due_date:
+                if isinstance(inspection.due_date, datetime):
+                    update_data["due_date"] = inspection.due_date.isoformat()
+                else:
+                    update_data["due_date"] = inspection.due_date
+            
+            if inspection.next_inspection_date:
+                if isinstance(inspection.next_inspection_date, datetime):
+                    update_data["next_inspection_date"] = inspection.next_inspection_date.isoformat()
+                else:
+                    update_data["next_inspection_date"] = inspection.next_inspection_date
+            
+            if inspection.remarks_general is not None:
+                update_data["remarks_general"] = inspection.remarks_general
+            if inspection.findings_summary is not None:
+                update_data["findings_summary"] = inspection.findings_summary
+            if inspection.plant_unit_area is not None:
+                update_data["plant_unit_area"] = inspection.plant_unit_area
+            
+            res = self.db.table("Inspection").update(update_data).eq("inspection_id", inspection_id).execute()
+            
+            if not res.data:
+                raise HTTPException(status_code=404, detail="Inspection not found")
+            
+            return InspectionResponse(**res.data[0])
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error updating inspection: {str(e)}")
+    
     async def delete_inspection(self, inspection_id: int) -> dict:
         """Delete inspection"""
         try:

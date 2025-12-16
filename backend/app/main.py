@@ -8,6 +8,7 @@ from app.routers.report_generation.router import router as report_generation_rou
 from app.routers.equipment.router import router as equipment_router
 from app.routers.photo_upload.router import router as photo_upload_router
 from app.routers.inspection_workflow.router import router as inspection_workflow_router
+from app.routers.template_management.routes_template_management import router as template_management_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ app.include_router(report_generation_router, prefix="/api")
 app.include_router(equipment_router, prefix="/api")
 app.include_router(photo_upload_router, prefix="/api")
 app.include_router(inspection_workflow_router, prefix="/api")
+app.include_router(template_management_router, prefix="/api")
 
 @app.get("/")
 def root():

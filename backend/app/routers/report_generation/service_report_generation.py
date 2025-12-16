@@ -457,9 +457,25 @@ class ReportGenerationService:
             id='photo'
         )
         
-        # Page template for standard pages (no footer)
+        # Track if this is the first page (for border drawing)
+        self.is_first_page = True
+        
+        # Page template for standard pages (with border on first page)
         def on_standard_page(canvas, doc):
-            pass  # No footer on standard pages
+            # Draw full-page border on first page only
+            if self.is_first_page:
+                canvas.setStrokeColor(colors.black)
+                canvas.setLineWidth(1)
+                # Draw border around content area (inside margins)
+                canvas.rect(
+                    doc.leftMargin,
+                    doc.bottomMargin,
+                    doc.width,
+                    doc.height,
+                    fill=0,
+                    stroke=1
+                )
+                self.is_first_page = False
         
         standard_template = PageTemplate(
             id='standard',
@@ -514,32 +530,8 @@ class ReportGenerationService:
         styles = getSampleStyleSheet()
         
         # ============================================
-        # PART 1: HEADER SECTION - 2-Column Table with Borders
+        # PART 1: HEADER SECTION - EXACT TEMPLATE MATCH
         # ============================================
-        # Left column: Title (bold, large, centered in cell)
-        title_style = ParagraphStyle(
-            'Title',
-            parent=styles['Normal'],
-            fontSize=14,
-            textColor=colors.black,
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            spaceAfter=0,
-            spaceBefore=0,
-            leading=16
-        )
-        
-        # Right column: Report info
-        report_info_style = ParagraphStyle(
-            'ReportInfo',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.black,
-            alignment=TA_LEFT,
-            fontName='Helvetica',
-            spaceAfter=2,
-            leading=11
-        )
         
         # Format report date properly
         report_date = report_data.header.report_date or ''
@@ -572,42 +564,29 @@ class ReportGenerationService:
             )
             print(f"📋 PDF Generation: Auto-generated report number: {report_data.header.report_no}")
         
-        # Create header table with 2 columns
-        header_table_data = [
-            [
-                Paragraph("MAJOR TURNAROUND 2025<br/>PRESSURE VESSEL INSPECTION REPORT", title_style),
-                Paragraph(
-                    f"Report no.: {report_data.header.report_no}<br/>"
-                    f"Report date.: {report_date}",
-                    report_info_style
-                )
-            ]
-        ]
+        # Calculate exact column widths to match template
+        # Left empty box + Title + Right report box = full width
+        # Based on template: left box ~20%, title ~50%, right box ~30%
+        left_box_width = doc.width * 0.20
+        title_width = doc.width * 0.50
+        right_box_width = doc.width * 0.30
         
-        header_table = Table(header_table_data, colWidths=[doc.width * 0.65, doc.width * 0.35])
-        header_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (0, 0), 'CENTER'),  # Title centered
-            ('ALIGN', (1, 0), (1, 0), 'LEFT'),    # Report info left-aligned
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (0, 0), 14),
-            ('FONTSIZE', (1, 0), (1, 0), 9),
-            ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Borders
-        ]))
+        # Title style - exact match
+        title_style = ParagraphStyle(
+            'Title',
+            parent=styles['Normal'],
+            fontSize=14,
+            textColor=colors.black,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            spaceAfter=0,
+            spaceBefore=0,
+            leading=16
+        )
         
-        story.append(header_table)
-        story.append(Spacer(1, 8*mm))
-        
-        # ============================================
-        # PART 2: EQUIPMENT INFORMATION - 2-Column Table with Borders
-        # ============================================
-        equipment_info_style = ParagraphStyle(
-            'EquipmentInfo',
+        # Report info style - exact match
+        report_info_style = ParagraphStyle(
+            'ReportInfo',
             parent=styles['Normal'],
             fontSize=9,
             textColor=colors.black,
@@ -617,38 +596,122 @@ class ReportGenerationService:
             leading=11
         )
         
-        equipment_table_data = [
+        # Create header table with 3 columns: Left empty box, Title, Right report box
+        header_table_data = [
             [
-                Paragraph(f"Equipment tag no.: {report_data.header.equipment_tag or ''}", equipment_info_style),
-                Paragraph(f"Plant/Unit/Area: {report_data.header.plant or ''}", equipment_info_style)
-            ],
-            [
-                Paragraph(f"Equipment description: {report_data.header.equipment_description or ''}", equipment_info_style),
-                Paragraph(f"DOSH registration no.: {report_data.header.dosh_no or ''}", equipment_info_style)
+                '',  # Left empty alignment box
+                Paragraph("MAJOR TURNAROUND 2025<br/>PRESSURE VESSEL INSPECTION REPORT", title_style),
+                Paragraph(
+                    f"Report no.: {report_data.header.report_no}<br/>"
+                    f"Report date.: {report_date}",
+                    report_info_style
+                )
             ]
         ]
         
-        equipment_table = Table(equipment_table_data, colWidths=[doc.width * 0.5, doc.width * 0.5])
-        equipment_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        header_table = Table(header_table_data, colWidths=[left_box_width, title_width, right_box_width])
+        header_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),      # Left empty box
+            ('ALIGN', (1, 0), (1, 0), 'CENTER'),   # Title centered
+            ('ALIGN', (2, 0), (2, 0), 'LEFT'),     # Report info left-aligned
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (1, 0), (1, 0), 14),
+            ('FONTSIZE', (2, 0), (2, 0), 9),
+            ('FONTNAME', (1, 0), (1, 0), 'Helvetica-Bold'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # All borders
+        ]))
+        
+        story.append(header_table)
+        story.append(Spacer(1, 5*mm))  # Reduced from 6mm to 5mm to save space
+        
+        # ============================================
+        # PART 2: EQUIPMENT INFORMATION - EXACT 4-BOX LAYOUT
+        # ============================================
+        # Equipment info style with bold labels
+        equipment_label_style = ParagraphStyle(
+            'EquipmentLabel',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica-Bold',
+            spaceAfter=0,
+            leading=11
+        )
+        
+        equipment_value_style = ParagraphStyle(
+            'EquipmentValue',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica',
+            spaceAfter=0,
+            leading=11
+        )
+        
+        # Create equipment table - SINGLE BOX PER ROW with two columns inside
+        # Row 1: Single box divided into two columns
+        row1_data = [
+            [
+                Paragraph(f"<b>Equipment tag no.:</b> {report_data.header.equipment_tag or ''}", equipment_value_style),
+                Paragraph(f"<b>Plant/Unit/Area:</b> {report_data.header.plant or ''}", equipment_value_style)
+            ]
+        ]
+        
+        row1_table = Table(row1_data, colWidths=[doc.width * 0.5, doc.width * 0.5])
+        row1_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),  # Left-aligned, not centered
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Top-aligned
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 0), (-1, -1), 9),
             ('TOPPADDING', (0, 0), (-1, -1), 6),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
             ('LEFTPADDING', (0, 0), (-1, -1), 6),
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Borders
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Outer border + vertical divider
+            ('LINEBELOW', (0, 0), (0, 0), 0, colors.white),  # No line below left cell
+            ('LINEBELOW', (1, 0), (1, 0), 0, colors.white),  # No line below right cell
         ]))
         
-        story.append(equipment_table)
-        story.append(Spacer(1, 8*mm))
+        # Row 2: Single box divided into two columns
+        row2_data = [
+            [
+                Paragraph(f"<b>Equipment description:</b> {report_data.header.equipment_description or ''}", equipment_value_style),
+                Paragraph(f"<b>DOSH registration no.:</b> {report_data.header.dosh_no or ''}", equipment_value_style)
+            ]
+        ]
+        
+        row2_table = Table(row2_data, colWidths=[doc.width * 0.5, doc.width * 0.5])
+        row2_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),  # Left-aligned, not centered
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Top-aligned
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Outer border + vertical divider
+        ]))
+        
+        # Combine rows with spacing
+        equipment_table_elements = [row1_table, Spacer(1, 0), row2_table]
+        
+        # Add equipment rows
+        story.extend(equipment_table_elements)
+        story.append(Spacer(1, 6*mm))  # Exact spacing match
         
         # ============================================
         # PART 3: MAIN CONTENT BOX - FINDINGS, NDTS & RECOMMENDATIONS
         # ============================================
         
-        # Main title with grey background
+        # Main title with grey background - EXACT COLOR MATCH #DCDCDC
         main_title_style = ParagraphStyle(
             'MainTitle',
             parent=styles['Normal'],
@@ -656,25 +719,26 @@ class ReportGenerationService:
             textColor=colors.black,
             alignment=TA_CENTER,
             fontName='Helvetica-Bold',
-            backColor=colors.HexColor('#E0E0E0'),  # Grey background
+            backColor=colors.HexColor('#DCDCDC'),  # Exact grey match from template
             spaceAfter=6,
             spaceBefore=0,
             leading=13
         )
         
-        # Introduction paragraph style
+        # Introduction paragraph style - exact match
         intro_style = ParagraphStyle(
             'Intro',
             parent=styles['Normal'],
             fontSize=9,
             textColor=colors.black,
-            alignment=TA_JUSTIFY,
+            alignment=TA_LEFT,  # Left aligned to match template
             fontName='Helvetica',
             spaceAfter=4,
-            leading=11
+            leading=11,
+            leftIndent=0  # No indentation
         )
         
-        # Section header style (bold, underlined)
+        # Section header style (bold, underlined) - reduced spacing
         section_header_style = ParagraphStyle(
             'SectionHeader',
             parent=styles['Normal'],
@@ -682,12 +746,12 @@ class ReportGenerationService:
             textColor=colors.black,
             alignment=TA_LEFT,
             fontName='Helvetica-Bold',
-            spaceAfter=3,
-            spaceBefore=4,
+            spaceAfter=2,  # Reduced from 3 to 2
+            spaceBefore=2,  # Reduced from 4 to 2
             leading=12
         )
         
-        # Finding item style
+        # Finding item style - reduced spacing
         finding_item_style = ParagraphStyle(
             'FindingItem',
             parent=styles['Normal'],
@@ -696,50 +760,50 @@ class ReportGenerationService:
             alignment=TA_LEFT,
             fontName='Helvetica',
             leftIndent=6*mm,  # Indentation for numbered items
-            spaceAfter=2,
+            spaceAfter=1,  # Reduced from 2 to 1
             leading=11
         )
         
-        # Title with grey background in a bordered table
+        # Title with grey background in a bordered table - EXACT MATCH
         title_table = Table([[Paragraph("FINDINGS, NDTS & RECOMMENDATIONS", main_title_style)]], colWidths=[doc.width])
         title_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 7),  # Reduced from 8 to 7 to save space
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 7),  # Reduced from 8 to 7 to save space
             ('LEFTPADDING', (0, 0), (-1, -1), 8),
             ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Borders
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Borders - exact match
         ]))
         story.append(title_table)
-        story.append(Spacer(1, 4*mm))
+        story.append(Spacer(1, 3*mm))  # Reduced from 4mm to 3mm to save space
         
-        # Introduction paragraph (exact text from template)
+        # Introduction paragraph - exact text and formatting from template
+        # Based on template: "Condition: With respect to the internal surface, describe and state location..."
         intro_text = (
-            "This section describes the condition of the equipment. Findings include description of: "
-            "Scales, deposits, corrosion, erosion, defects, changes since last inspection, and including "
-            "pressure gauge. Deviations such as: Absence of significant damage, cracks, bulges, dents, "
-            "corrosion, erosion, etc... Report changes or repairs since the last NDT exam, such as leaks "
-            "or cracks, buildup of dirt/scale, overall condition of closing, lining, baffles, support, etc., "
-            "especially erosion through or repair history does not exist / not requested."
+            "Condition: With respect to the internal surface, describe and state location of any corrosion "
+            "and state whether active or inactive. State location and extent of any erosion, grooving, "
+            "bulging, warping, cracking or similar condition. Report on any defective rivets bowed, loose "
+            "or broken stays. State condition of all tubes, tube end, coils, major changes or repairs made "
+            "since last inspection."
         )
         story.append(Paragraph(intro_text, intro_style))
-        story.append(Spacer(1, 4*mm))
+        story.append(Spacer(1, 3*mm))  # Reduced from 4mm to 3mm to save space
         
         # FINDINGS Section
         story.append(Paragraph("<u>FINDINGS</u>", section_header_style))
-        story.append(Spacer(1, 2*mm))
+        story.append(Spacer(1, 1*mm))  # Reduced from 1.5mm to 1mm to save space
         
         # Initial/Pre-Inspection
         story.append(Paragraph(
             f"Initial/Pre-Inspection - {report_data.initial_inspection_text or 'Not applicable'}",
             finding_item_style
         ))
-        story.append(Spacer(1, 3*mm))
+        story.append(Spacer(1, 1.5*mm))  # Reduced from 2mm to 1.5mm to save space
         
         # Post/Final Inspection
         story.append(Paragraph("Post/Final Inspection", section_header_style))
-        story.append(Spacer(1, 2*mm))
+        story.append(Spacer(1, 1*mm))  # Reduced from 1.5mm to 1mm to save space
         
         # External Findings (1.x) - ALWAYS show this section
         story.append(Paragraph("<u>External</u>", section_header_style))
@@ -751,7 +815,7 @@ class ReportGenerationService:
         else:
             # Show placeholder if no external findings
             story.append(Paragraph("No external findings recorded.", finding_item_style))
-        story.append(Spacer(1, 3*mm))
+        story.append(Spacer(1, 1.5*mm))  # Reduced from 2mm to 1.5mm to save space
         
         # Internal Findings (2.x) - ALWAYS show this section
         story.append(Paragraph("<u>Internal</u>", section_header_style))
@@ -763,7 +827,7 @@ class ReportGenerationService:
         else:
             # Show placeholder if no internal findings
             story.append(Paragraph("No internal findings recorded.", finding_item_style))
-        story.append(Spacer(1, 3*mm))
+        story.append(Spacer(1, 1.5*mm))  # Reduced from 2mm to 1.5mm to save space
         
         # Other Findings (not 1.x or 2.x)
         other_findings = sorted([f for f in report_data.findings if not f.key.startswith('1.') and not f.key.startswith('2.')],
@@ -771,7 +835,7 @@ class ReportGenerationService:
         if other_findings:
             for finding in other_findings:
                 story.append(Paragraph(f"{finding.key}: {finding.text}", finding_item_style))
-            story.append(Spacer(1, 3*mm))
+            story.append(Spacer(1, 1.5*mm))  # Reduced from 2mm to 1.5mm to save space
         
         # NON-DESTRUCTIVE TESTINGS Section - ALWAYS show
         story.append(Paragraph("<u>NON-DESTRUCTIVE TESTINGS</u>", section_header_style))
@@ -779,7 +843,7 @@ class ReportGenerationService:
             story.append(Paragraph(f"UTTM: {report_data.ndt_text}", finding_item_style))
         else:
             story.append(Paragraph("UTTM: No significant wall lost detected compared to nominal thickness. Please refer attachment report.", finding_item_style))
-        story.append(Spacer(1, 4*mm))
+        story.append(Spacer(1, 1.5*mm))  # Reduced from 2mm to 1.5mm to save space
         
         # RECOMMENDATIONS Section - ALWAYS show (on same page)
         story.append(Paragraph("<u>RECOMMENDATIONS</u>", section_header_style))
@@ -791,6 +855,198 @@ class ReportGenerationService:
         else:
             # Show placeholder if no recommendations
             story.append(Paragraph("No recommendations recorded.", finding_item_style))
+        
+        story.append(Spacer(1, 3*mm))  # Reduced from 4mm to 3mm - Space before signature section
+        
+        # ============================================
+        # PART 4: SIGNATURE/APPROVAL SECTION - 5-Row Table (on first page)
+        # ============================================
+        
+        signature_label_style = ParagraphStyle(
+            'SignatureLabel',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica',
+            spaceAfter=0,
+            leading=11
+        )
+        
+        signature_value_style = ParagraphStyle(
+            'SignatureValue',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica',
+            spaceAfter=0,
+            leading=11
+        )
+        
+        signature_section_style = ParagraphStyle(
+            'SignatureSection',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            fontName='Helvetica-Bold',
+            spaceAfter=2,
+            leading=11
+        )
+        
+        # Create 5-row signature table with proper structure
+        col_width = doc.width / 3
+        
+        # Row 1: Three columns - Inspected by, Reviewed by, Approved by
+        # Each cell contains label and value on separate lines
+        row1 = [
+            Paragraph(f"Inspected by:<br/>{report_data.header.inspector_name or ''}", signature_label_style),
+            Paragraph(f"Reviewed by:<br/>{report_data.header.reviewed_by or ''}", signature_label_style),
+            Paragraph(f"Approved by (Client):<br/>{report_data.header.client_approver or ''}", signature_label_style)
+        ]
+        
+        # Row 2: Full width - DOSH Officer section - SINGLE BOX with horizontal Name/Signature/Date row
+        # Simple structure: Title + Comment space + Name/Signature/Date (all in one box)
+        dosh_col_width = (doc.width - 12) / 3  # Equal width for 3 columns
+        
+        # Create simple table with all content
+        dosh_table_data = [
+            [Paragraph("Recommendation/Comment by DOSH Officer (if applicable):", signature_section_style)],  # Title
+            [Paragraph("", signature_label_style)],  # Empty space for comments (reduced height)
+            [  # Name/Signature/Date in one horizontal row
+                Paragraph("Name:", signature_label_style),
+                Paragraph("Signature:", signature_label_style),
+                Paragraph("Date:", signature_label_style)
+            ]
+        ]
+        
+        # Create table - use 3 equal columns (will span for title/comment rows)
+        dosh_table = Table(dosh_table_data, colWidths=[dosh_col_width, dosh_col_width, dosh_col_width])
+        dosh_table.setStyle(TableStyle([
+            # Row 1: Title - span all 3 columns
+            ('SPAN', (0, 0), (2, 0)),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('VALIGN', (0, 0), (0, 0), 'TOP'),
+            ('TOPPADDING', (0, 0), (0, 0), 0),
+            ('BOTTOMPADDING', (0, 0), (0, 0), 3),  # Reduced from 4 to 3 to save space
+            # Row 2: Empty space - span all 3 columns (reduced to single row)
+            ('SPAN', (0, 1), (2, 1)),
+            ('TOPPADDING', (0, 1), (0, 1), 0),
+            ('BOTTOMPADDING', (0, 1), (0, 1), 0),
+            # Row 3: Name/Signature/Date - 3 separate columns, all inside box (was row 4, now row 3)
+            ('ALIGN', (0, 2), (0, 2), 'LEFT'),      # Name - left
+            ('ALIGN', (1, 2), (1, 2), 'CENTER'),   # Signature - center
+            ('ALIGN', (2, 2), (2, 2), 'RIGHT'),    # Date - right
+            ('VALIGN', (0, 2), (2, 2), 'MIDDLE'),
+            ('TOPPADDING', (0, 2), (2, 2), 3),  # Reduced from 4 to 3 to save space
+            ('BOTTOMPADDING', (0, 2), (2, 2), 0),
+            # Common styles
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        
+        # Outer table with border - SINGLE BOX containing everything
+        row2_content = Table([[dosh_table]], colWidths=[doc.width])
+        row2_content.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),  # Reduced from 6 to 5 to save space
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),  # Reduced from 6 to 5 to save space
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Single box border
+        ]))
+        
+        # Row 3: REMOVED - Name/Signature/Date are now inside row2_content
+        
+        # Row 4: Full width - Plant action section - SINGLE BOX with horizontal Name/Signature/Date row
+        # Simple structure: Title + Comment space + Name/Signature/Date (all in one box)
+        plant_col_width = (doc.width - 12) / 3  # Equal width for 3 columns
+        
+        # Create simple table with all content
+        plant_table_data = [
+            [Paragraph("Action taken by Plant 1 on recommendation by DOSH (if applicable):", signature_section_style)],  # Title
+            [Paragraph("", signature_label_style)],  # Empty space for comments (reduced height)
+            [  # Name/Signature/Date in one horizontal row
+                Paragraph("Name:", signature_label_style),
+                Paragraph("Signature:", signature_label_style),
+                Paragraph("Date:", signature_label_style)
+            ]
+        ]
+        
+        # Create table - use 3 equal columns (will span for title/comment rows)
+        plant_table = Table(plant_table_data, colWidths=[plant_col_width, plant_col_width, plant_col_width])
+        plant_table.setStyle(TableStyle([
+            # Row 1: Title - span all 3 columns
+            ('SPAN', (0, 0), (2, 0)),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('VALIGN', (0, 0), (0, 0), 'TOP'),
+            ('TOPPADDING', (0, 0), (0, 0), 0),
+            ('BOTTOMPADDING', (0, 0), (0, 0), 3),  # Reduced from 4 to 3 to save space
+            # Row 2: Empty space - span all 3 columns (reduced to single row)
+            ('SPAN', (0, 1), (2, 1)),
+            ('TOPPADDING', (0, 1), (0, 1), 0),
+            ('BOTTOMPADDING', (0, 1), (0, 1), 0),
+            # Row 3: Name/Signature/Date - 3 separate columns, all inside box (was row 4, now row 3)
+            ('ALIGN', (0, 2), (0, 2), 'LEFT'),      # Name - left
+            ('ALIGN', (1, 2), (1, 2), 'CENTER'),   # Signature - center
+            ('ALIGN', (2, 2), (2, 2), 'RIGHT'),    # Date - right
+            ('VALIGN', (0, 2), (2, 2), 'MIDDLE'),
+            ('TOPPADDING', (0, 2), (2, 2), 3),  # Reduced from 4 to 3 to save space
+            ('BOTTOMPADDING', (0, 2), (2, 2), 0),
+            # Common styles
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        
+        # Outer table with border - SINGLE BOX containing everything
+        row4_content = Table([[plant_table]], colWidths=[doc.width])
+        row4_content.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),  # Reduced from 6 to 5 to save space
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),  # Reduced from 6 to 5 to save space
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Single box border
+        ]))
+        
+        # Row 5: REMOVED - Name/Signature/Date are now inside row4_content
+        
+        # Build signature table - use separate tables for rows 2 and 4, and a 3-column table for rows 1, 3, 5
+        # Wrap entire signature section in KeepTogether to ensure it never splits across pages
+        signature_section_elements = []
+        
+        # First, add row 1 table
+        row1_table = Table([row1], colWidths=[col_width, col_width, col_width])
+        row1_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),  # Reduced from 8 to 6
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),  # Reduced from 8 to 6
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),  # Reduced from 8 to 6
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),  # Reduced from 8 to 6
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        signature_section_elements.append(row1_table)
+        signature_section_elements.append(Spacer(1, 1.5*mm))  # Reduced to save space
+        
+        # Add row 2 (full width - DOSH section with all fields inside)
+        signature_section_elements.append(row2_content)
+        signature_section_elements.append(Spacer(1, 1.5*mm))  # Reduced to save space
+        
+        # Add row 4 (full width - Plant section with all fields inside)
+        signature_section_elements.append(row4_content)
+        
+        # Wrap entire signature section in KeepTogether to ensure it never splits
+        story.append(KeepTogether(signature_section_elements))
         
         # Only add page break if there are photos to show
         if report_data.photos and len(report_data.photos) > 0:
@@ -1035,11 +1291,9 @@ class ReportGenerationService:
                 group_photos = photo_groups[group_num]
                 print(f"📸 Processing photo group {group_num} with {len(group_photos)} photos")
                 
-                # Add header and banner when starting a new group (ensures headers on new pages)
-                # This handles both explicit page breaks and auto-created pages by ReportLab
-                if previous_group_num is not None or first_photo_page:
-                    # Add header before new group - will appear at top of page when group starts
-                    # If group fits on same page, header from previous group will be at top (correct)
+                # Add header and banner when starting a new group
+                if first_photo_page:
+                    # First photo page - add header and banner
                     header_elements = create_photo_page_header(report_data)
                     story.extend(header_elements)
                     
@@ -1047,8 +1301,18 @@ class ReportGenerationService:
                     banner_elements = create_photos_report_banner()
                     story.extend(banner_elements)
                     
-                    if first_photo_page:
-                        first_photo_page = False
+                    first_photo_page = False
+                elif previous_group_num is not None:
+                    # New photo group - add page break first, then header on new page
+                    story.append(PageBreak())
+                    
+                    # Add header on new page
+                    header_elements = create_photo_page_header(report_data)
+                    story.extend(header_elements)
+                    
+                    # Add "PHOTOS REPORT" grey banner
+                    banner_elements = create_photos_report_banner()
+                    story.extend(banner_elements)
                 
                 previous_group_num = group_num
                 
@@ -1085,11 +1349,57 @@ class ReportGenerationService:
                             if hasattr(p, 'finding_key') and p.finding_key:
                                 finding_keys.append(p.finding_key)
                         
-                        # Get photo URL/path
-                        photo_url = photo.storage_url if hasattr(photo, 'storage_url') and photo.storage_url else None
-                        photo_path = photo.file_path if hasattr(photo, 'file_path') and photo.file_path else None
+                        # Get photo URL/path - handle both dict and object styles
+                        if isinstance(photo, dict):
+                            photo_url = photo.get('storage_url') or photo.get('url') or photo.get('image_url') or photo.get('photo_url')
+                            photo_path = photo.get('file_path') or photo.get('path') or photo.get('filepath')
+                            photo_id = photo.get('id') or photo.get('photo_id')
+                        else:
+                            photo_url = getattr(photo, 'storage_url', None) or getattr(photo, 'url', None) or getattr(photo, 'image_url', None)
+                            photo_path = getattr(photo, 'file_path', None) or getattr(photo, 'path', None)
+                            photo_id = getattr(photo, 'id', None) or getattr(photo, 'photo_id', None)
                         
-                        print(f"📸 Loading image: URL={photo_url is not None}, Path={photo_path is not None}, Labels={finding_keys}")
+                        # If photo_url is an API endpoint (e.g., /api/photos/88/file), try to get file_path from database
+                        if photo_url and ('/api/photos/' in photo_url or '/photos/' in photo_url) and not photo_path:
+                            try:
+                                # Extract photo ID from URL
+                                import re
+                                match = re.search(r'/photos/(\d+)/file', photo_url)
+                                if match:
+                                    db_photo_id = int(match.group(1))
+                                    print(f"   🔍 API URL detected, fetching file_path from database for photo ID: {db_photo_id}")
+                                    # Fetch photo from database to get file_path
+                                    photo_res = self.db.table("Photo").select("file_path").eq("id", db_photo_id).execute()
+                                    if photo_res.data and photo_res.data[0].get('file_path'):
+                                        photo_path = photo_res.data[0]['file_path']
+                                        print(f"   ✅ Found file_path in database: {photo_path}")
+                                        # Prefer file_path over API URL
+                                        photo_url = None
+                            except Exception as e:
+                                print(f"   ⚠️ Could not fetch file_path from database: {e}")
+                        
+                        # Check if this is an annotated image (data URL)
+                        is_annotated = photo_url and photo_url.startswith('data:image/')
+                        if is_annotated:
+                            print(f"📸 Loading ANNOTATED image (data URL)")
+                            print(f"   Data URL length: {len(photo_url)} characters")
+                            print(f"   Data URL preview: {photo_url[:50]}...")
+                            print(f"   Labels to add: {finding_keys}")
+                        else:
+                            print(f"📸 Loading ORIGINAL image: URL={photo_url is not None}, Path={photo_path is not None}, Labels={finding_keys}")
+                            if not photo_url and not photo_path:
+                                print(f"   ⚠️ WARNING: Photo has no storage_url or file_path! Photo object: {photo}")
+                                # Last resort: try to get file_path from database using photo_id
+                                if photo_id:
+                                    try:
+                                        print(f"   🔍 Attempting to fetch file_path from database for photo ID: {photo_id}")
+                                        photo_res = self.db.table("Photo").select("file_path").eq("id", photo_id).execute()
+                                        if photo_res.data and photo_res.data[0].get('file_path'):
+                                            photo_path = photo_res.data[0]['file_path']
+                                            print(f"   ✅ Found file_path in database: {photo_path}")
+                                    except Exception as e:
+                                        print(f"   ❌ Could not fetch file_path from database: {e}")
+                        
                         img = await self._load_image_with_labels(
                             photo_url,
                             photo_path,
@@ -1269,160 +1579,6 @@ class ReportGenerationService:
                             banner_elements = create_photos_report_banner()
                             story.extend(banner_elements)
         
-        # Add page break before signature section if there were photos
-        if report_data.photos and len(report_data.photos) > 0:
-            # Switch back to standard template (no footer) for signature section
-            story.append(NextPageTemplate('standard'))
-            story.append(PageBreak())
-        
-        # ============================================
-        # PART 4: SIGNATURE/APPROVAL SECTION (FINAL) - 5-Row Table
-        # ============================================
-        
-        signature_label_style = ParagraphStyle(
-            'SignatureLabel',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.black,
-            alignment=TA_LEFT,
-            fontName='Helvetica',
-            spaceAfter=0,
-            leading=11
-        )
-        
-        signature_value_style = ParagraphStyle(
-            'SignatureValue',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.black,
-            alignment=TA_LEFT,
-            fontName='Helvetica',
-            spaceAfter=0,
-            leading=11
-        )
-        
-        signature_section_style = ParagraphStyle(
-            'SignatureSection',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.black,
-            alignment=TA_LEFT,
-            fontName='Helvetica-Bold',
-            spaceAfter=2,
-            leading=11
-        )
-        
-        # Create 5-row signature table with proper structure
-        col_width = doc.width / 3
-        
-        # Row 1: Three columns - Inspected by, Reviewed by, Approved by
-        # Each cell contains label and value on separate lines
-        row1 = [
-            Paragraph(f"Inspected by:<br/>{report_data.header.inspector_name or ''}", signature_label_style),
-            Paragraph(f"Reviewed by:<br/>{report_data.header.reviewed_by or ''}", signature_label_style),
-            Paragraph(f"Approved by (Client):<br/>{report_data.header.client_approver or ''}", signature_label_style)
-        ]
-        
-        # Row 2: Full width - DOSH Officer comment section
-        # Create a table cell that will span all 3 columns
-        row2_content = Table(
-            [[Paragraph("Recommendation/Comment by DOSH Officer (if applicable):", signature_section_style)]],
-            colWidths=[doc.width]
-        )
-        row2_content.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 40),  # Extra space for comments
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ]))
-        
-        # Row 3: Three columns - Name, Signature, Date (for DOSH)
-        row3 = [
-            Paragraph("Name:", signature_label_style),
-            Paragraph("Signature:", signature_label_style),
-            Paragraph("Date:", signature_label_style)
-        ]
-        
-        # Row 4: Full width - Plant action section
-        row4_content = Table(
-            [[Paragraph("Action taken by Plant 1 on recommendation by DOSH (if applicable):", signature_section_style)]],
-            colWidths=[doc.width]
-        )
-        row4_content.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 40),  # Extra space for comments
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ]))
-        
-        # Row 5: Three columns - Name, Signature, Date (for Plant)
-        row5 = [
-            Paragraph("Name:", signature_label_style),
-            Paragraph("Signature:", signature_label_style),
-            Paragraph("Date:", signature_label_style)
-        ]
-        
-        # Build signature table - use separate tables for rows 2 and 4, and a 3-column table for rows 1, 3, 5
-        # First, add row 1 table
-        row1_table = Table([row1], colWidths=[col_width, col_width, col_width])
-        row1_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ]))
-        story.append(row1_table)
-        story.append(Spacer(1, 2*mm))
-        
-        # Add row 2 (full width)
-        story.append(row2_content)
-        story.append(Spacer(1, 2*mm))
-        
-        # Add row 3 table
-        row3_table = Table([row3], colWidths=[col_width, col_width, col_width])
-        row3_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ]))
-        story.append(row3_table)
-        story.append(Spacer(1, 2*mm))
-        
-        # Add row 4 (full width)
-        story.append(row4_content)
-        story.append(Spacer(1, 2*mm))
-        
-        # Add row 5 table
-        row5_table = Table([row5], colWidths=[col_width, col_width, col_width])
-        row5_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ]))
-        story.append(row5_table)
         
         # Build PDF and ensure file is properly closed
         try:
@@ -1451,31 +1607,65 @@ class ReportGenerationService:
     
     async def _safe_load_pil_image(self, storage_url: str = None, file_path: str = None):
         """
-        Safely load PIL image from URL or file path.
+        Safely load PIL image from URL, data URL, or file path.
         Handles all image types and corrupted files.
         Returns PIL Image object or None if failed.
+        
+        IMPORTANT: If storage_url is a data URL (annotated image), it takes priority over file_path.
+        This ensures annotated images are used instead of original files.
         """
         pil_img = None
         try:
-            if file_path and os.path.exists(file_path):
+            # CRITICAL: Check storage_url FIRST (especially for data URLs/annotated images)
+            # Annotated images (data URLs) must take priority over file_path
+            if storage_url:
+                # Check if it's a data URL (base64 encoded image - annotated image)
+                if storage_url.startswith('data:image/'):
+                    print(f"   📝 Loading ANNOTATED image from data URL (ignoring file_path)")
+                    # Extract base64 data from data URL
+                    import base64
+                    header, encoded = storage_url.split(',', 1)
+                    img_data = base64.b64decode(encoded)
+                    img_buffer = io.BytesIO(img_data)
+                    pil_img = PILImage.open(img_buffer)
+                    # Verify it's a valid image
+                    pil_img.verify()
+                    # Reopen because verify() closes the image
+                    img_buffer.seek(0)
+                    pil_img = PILImage.open(img_buffer)
+                    print(f"   ✅ Successfully loaded annotated image: {pil_img.size[0]}x{pil_img.size[1]}")
+                    # Return immediately - do NOT fall back to file_path
+                    if pil_img:
+                        # Convert to RGB if needed (required for JPEG)
+                        if pil_img.mode not in ('RGB', 'L', 'P'):
+                            pil_img = pil_img.convert('RGB')
+                        elif pil_img.mode == 'P':
+                            # Palette mode - convert to RGB
+                            pil_img = pil_img.convert('RGB')
+                        return pil_img
+                else:
+                    # Regular URL - download from URL
+                    print(f"   📥 Loading image from URL: {storage_url[:50]}...")
+                    response = requests.get(storage_url, timeout=10, stream=True)
+                    if response.status_code == 200:
+                        # Read into memory
+                        img_data = io.BytesIO(response.content)
+                        pil_img = PILImage.open(img_data)
+                        # Verify it's a valid image
+                        pil_img.verify()
+                        # Reopen because verify() closes the image
+                        img_data.seek(0)
+                        pil_img = PILImage.open(img_data)
+            
+            # Only try file_path if storage_url was not provided or failed (and it's not a data URL)
+            if not pil_img and file_path and os.path.exists(file_path):
+                print(f"   📁 Loading image from file path: {file_path}")
                 # Try to open local file
                 pil_img = PILImage.open(file_path)
                 # Verify it's a valid image
                 pil_img.verify()
                 # Reopen because verify() closes the image
                 pil_img = PILImage.open(file_path)
-            elif storage_url:
-                # Download from URL
-                response = requests.get(storage_url, timeout=10, stream=True)
-                if response.status_code == 200:
-                    # Read into memory
-                    img_data = io.BytesIO(response.content)
-                    pil_img = PILImage.open(img_data)
-                    # Verify it's a valid image
-                    pil_img.verify()
-                    # Reopen because verify() closes the image
-                    img_data.seek(0)
-                    pil_img = PILImage.open(img_data)
             
             if pil_img:
                 # Convert to RGB if needed (required for JPEG)
@@ -1858,15 +2048,38 @@ class ReportGenerationService:
         """
         Load image, overlay red finding number labels, validate, resize, and convert to ReportLab Image.
         All images pass through safe loader, validation, and resizing.
+        
+        IMPORTANT: If storage_url is a data URL (base64), it's an annotated image with user drawings.
+        The annotated image is loaded FIRST, then finding key labels are added AFTER (preserving user annotations).
         """
         try:
             # If PIL is not available, just load image without labels
             if not HAS_PIL:
                 return await self._load_image(storage_url, file_path)
             
-            # Load PIL image safely
-            pil_img = await self._safe_load_pil_image(storage_url, file_path)
+            # Check if this is an annotated image (data URL)
+            is_annotated = storage_url and storage_url.startswith('data:image/')
+            
+            if is_annotated:
+                print(f"   📝 Detected ANNOTATED image (data URL) - will use annotated image directly and add finding labels")
+                # CRITICAL: For annotated images, ONLY use storage_url, ignore file_path
+                # This prevents overwriting the annotated image with the original file
+                pil_img = await self._safe_load_pil_image(storage_url=storage_url, file_path=None)
+            else:
+                # For regular images, prioritize file_path over storage_url
+                # file_path is more reliable as the backend can access it directly
+                if file_path:
+                    print(f"   📁 Using file_path for non-annotated photo: {file_path}")
+                    pil_img = await self._safe_load_pil_image(storage_url=None, file_path=file_path)
+                elif storage_url:
+                    print(f"   📥 Using storage_url for non-annotated photo: {storage_url[:50]}...")
+                    pil_img = await self._safe_load_pil_image(storage_url=storage_url, file_path=None)
+                else:
+                    print(f"   ❌ No file_path or storage_url provided for non-annotated photo")
+                    pil_img = None
+            
             if not pil_img:
+                print(f"   ❌ ERROR: Unable to load image from storage_url or file_path")
                 # Fallback to regular image loading
                 return await self._load_image(storage_url, file_path)
             
