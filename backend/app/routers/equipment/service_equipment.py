@@ -14,14 +14,14 @@ class EquipmentService:
     def __init__(self):
         self.db = get_db()
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    
-    async def create_equipment(self, equipment: EquipmentCreate, current_user: dict) -> EquipmentResponse:
-        """Create new equipment record (register equipment not in database)"""
+
+    # Create equipment
+    async def create_equipment(self, equipment: EquipmentCreate, current_user: dict):
         try:
             equipment_data = {
                 "equipment_tag_no": equipment.equipment_tag_no,
                 "type_id": equipment.type_id,
-                "material": equipment.material,
+                "material_id": equipment.material_id,
                 "location": equipment.location,
                 "inspection_due_date": str(equipment.inspection_due_date) if equipment.inspection_due_date else None,
                 "equipment_description": equipment.equipment_description,
@@ -30,167 +30,209 @@ class EquipmentService:
                 "corrosion_allowance": equipment.corrosion_allowance,
                 "design_pressure": equipment.design_pressure,
                 "design_temperature": equipment.design_temperature,
-                "status": "Active",
+                "status": equipment.status,
+                # "created_by": None,
                 "created_at": str(datetime.utcnow())
             }
-            
+
             res = self.db.table("equipment").insert(equipment_data).execute()
-            
+
             if res.data:
                 return EquipmentResponse(**res.data[0])
-            else:
-                raise HTTPException(status_code=400, detail="Failed to create equipment")
-        except HTTPException:
-            raise
+            raise HTTPException(status_code=400, detail="Failed to create equipment")
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error creating equipment: {str(e)}")
-    
-    async def upload_equipment_image(self, equipment_id: int, file: UploadFile, current_user: dict) -> dict:
-        """Upload image for equipment (automatically saved to database under equipment record)"""
+
+    # Upload equipment image
+    async def upload_equipment_image(self, equipment_id: str, file: UploadFile, current_user: dict, part_view: str = "General"):
         try:
-            # Verify equipment exists
-            equipment = await self.get_equipment(equipment_id)
-            
-            # Generate unique filename
+            # Verify if the equipment exists in the database
+            await self.get_equipment(equipment_id)
+
             file_ext = os.path.splitext(file.filename)[1]
             unique_filename = f"{uuid.uuid4()}{file_ext}"
             file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
-            
-            # Save file locally
+
             with open(file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
-            
+
             file_size = len(content)
-            
-            # Save to database under equipment record
+
             photo_data = {
-                "equipment_id": equipment_id,
+                "equipment_id": int(equipment_id), 
                 "uploaded_by": current_user.get("id"),
                 "file_path": file_path,
-                "storage_url": None,  # TODO: Upload to Supabase storage
                 "file_name": file.filename,
                 "file_size": file_size,
+                "file_size": file_size,
+                "storage_url": None,
+                "part_view": part_view,
                 "uploaded_at": str(datetime.utcnow())
             }
-            
+
             res = self.db.table("Photo").insert(photo_data).execute()
-            
+
             if res.data:
                 return {
                     "success": True,
-                    "message": "Image uploaded and saved to equipment record",
+                    "message": "Image uploaded successfully",
                     "photo": res.data[0],
                     "equipment_id": equipment_id
                 }
-            else:
-                raise HTTPException(status_code=400, detail="Failed to save image")
-        except HTTPException:
-            raise
+            raise HTTPException(status_code=400, detail="Failed to save photo record")
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
-    
-    async def get_all_equipment(self) -> list[EquipmentResponse]:
-        """Get all equipment"""
+
+    # to get all equipment
+    async def get_all_equipment(self):
         try:
-            res = self.db.table("equipment").select("*").execute()
-            print(f"DEBUG: Equipment query result: {res.data}")  # Debug log
-            if res.data:
-                # Add backward compatibility fields for Reports module
-                equipment_list = []
-                for eq in res.data:
-                    try:
-                        # Ensure equipment_tag_no has a value (required for display)
-                        if not eq.get("equipment_tag_no"):
-                            eq["equipment_tag_no"] = f"EQ-{eq.get('id', 'UNKNOWN')}"  # Fallback
-                        # Add name and type aliases for backward compatibility
-                        eq_with_aliases = {**eq, "name": eq.get("equipment_tag_no", ""), "type": ""}
-                        equipment_list.append(EquipmentResponse(**eq_with_aliases))
-                    except Exception as parse_error:
-                        print(f"DEBUG: Error parsing equipment {eq.get('id', 'unknown')}: {parse_error}")
-                        print(f"DEBUG: Equipment data: {eq}")
-                        import traceback
-                        traceback.print_exc()
-                        # Skip invalid equipment records
-                        continue
-                print(f"DEBUG: Returning {len(equipment_list)} equipment items")
-                return equipment_list
-            print("DEBUG: No equipment data returned from database")
-            return []
+            res = self.db.table("equipment").select("*").order("id").execute()
+            equipment_list = res.data if res.data else []
+            
+            # Fetch photos for all equipment
+            if equipment_list:
+                eq_ids = [e['id'] for e in equipment_list]
+                photos_res = self.db.table("Photo").select("*").in_("equipment_id", eq_ids).execute()
+                photos_map = {p['equipment_id']: p for p in photos_res.data} if photos_res.data else {}
+                
+                for eq in equipment_list:
+                    if eq['id'] in photos_map:
+                        # Find main photo or just use the first found
+                        # We need to filter photos for THIS equipment
+                        eq_photos = [p for p in photos_res.data if p['equipment_id'] == eq['id']]
+                        if eq_photos:
+                            # Set main image (first one or general)
+                            filename = os.path.basename(eq_photos[0]['file_path'])
+                            eq['image_url'] = f"/static/uploads/{filename}"
+                            eq['photos'] = eq_photos
+                        else:
+                            eq['photos'] = []
+                    else:
+                        eq['photos'] = []
+            
+            return [EquipmentResponse(**eq) for eq in equipment_list]
         except Exception as e:
-            print(f"DEBUG: Exception in get_all_equipment: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
-    
-    async def get_equipment(self, equipment_id: int) -> EquipmentResponse:
-        """Get equipment by ID"""
+
+    # Get the equipment by ID
+    async def get_equipment(self, equipment_id: str):
         try:
             res = self.db.table("equipment").select("*").eq("id", equipment_id).execute()
             if not res.data:
                 raise HTTPException(status_code=404, detail="Equipment not found")
-            # Add backward compatibility fields
-            eq = res.data[0]
-            eq_with_aliases = {**eq, "name": eq.get("equipment_tag_no", ""), "type": ""}
-            return EquipmentResponse(**eq_with_aliases)
-        except HTTPException:
-            raise
+            
+            equipment = res.data[0]
+            
+            # Fetch photo
+            photo_res = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).execute()
+            equipment['photos'] = photo_res.data if photo_res.data else []
+            
+            if photo_res.data:
+                # Use the first one or logic to pick 'General' as main
+                filename = os.path.basename(photo_res.data[0]['file_path'])
+                equipment['image_url'] = f"/static/uploads/{filename}"
+                
+            return EquipmentResponse(**equipment)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
-    
-    async def update_equipment(self, equipment_id: int, equipment: EquipmentCreate) -> EquipmentResponse:
-        """Update equipment information (edit record)"""
+
+    # Update equipment information
+    async def update_equipment(self, equipment_id: str, equipment: EquipmentCreate):
         try:
             update_data = {
                 "equipment_tag_no": equipment.equipment_tag_no,
+                "equipment_description": equipment.equipment_description,
                 "type_id": equipment.type_id,
-                "material": equipment.material,
+                "material_id": equipment.material_id,
                 "location": equipment.location,
                 "inspection_due_date": str(equipment.inspection_due_date) if equipment.inspection_due_date else None,
-                "equipment_description": equipment.equipment_description,
                 "dosh_registration_no": equipment.dosh_registration_no,
                 "nominal_thickness": equipment.nominal_thickness,
                 "corrosion_allowance": equipment.corrosion_allowance,
                 "design_pressure": equipment.design_pressure,
                 "design_temperature": equipment.design_temperature,
+                "status": equipment.status,
                 "updated_at": str(datetime.utcnow())
             }
-            # Remove None values to avoid overwriting with null
-            update_data = {k: v for k, v in update_data.items() if v is not None}
-            
+
             res = self.db.table("equipment").update(update_data).eq("id", equipment_id).execute()
-            
+
             if not res.data:
                 raise HTTPException(status_code=404, detail="Equipment not found")
-            
-            # Add backward compatibility fields
-            eq = res.data[0]
-            eq_with_aliases = {**eq, "name": eq.get("equipment_tag_no", ""), "type": ""}
-            return EquipmentResponse(**eq_with_aliases)
-        except HTTPException:
-            raise
+
+            return EquipmentResponse(**res.data[0])
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error updating equipment: {str(e)}")
-    
-    async def delete_equipment(self, equipment_id: int) -> dict:
-        """Delete equipment record if no longer needed"""
+
+    # Delete equipment
+    async def delete_equipment(self, equipment_id: str):
         try:
-            # Hard delete - remove from database
-            # First check if equipment exists
-            equipment = await self.get_equipment(equipment_id)
-            
-            # Delete associated photos
+            # Check if exists
+            await self.get_equipment(equipment_id)
+
+            # Delete photos first
             photos = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).execute()
             if photos.data:
-                for photo in photos.data:
-                    if os.path.exists(photo.get("file_path", "")):
-                        os.remove(photo["file_path"])
+                for p in photos.data:
+                    if os.path.exists(p["file_path"]):
+                        try:
+                            os.remove(p["file_path"])
+                        except:
+                            pass
                 self.db.table("Photo").delete().eq("equipment_id", equipment_id).execute()
-            
+
             # Delete equipment
             self.db.table("equipment").delete().eq("id", equipment_id).execute()
-            
-            return {"success": True, "message": "Equipment and associated images deleted successfully"}
-        except HTTPException:
-            raise
+
+            return {"success": True, "message": "Equipment deleted successfully"}
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error deleting equipment: {str(e)}")
 
+    # Get Dropdown List Options
+    async def get_equipment_options(self):
+        try:
+            res = self.db.table("type").select("id, description").execute()
+            return {"types": res.data if res.data else []}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching types: {str(e)}")
+
+    # Get material options
+    async def get_material_options(self):
+        try:
+            res = self.db.table("material").select("id, description").execute()
+            return {"materials": res.data if res.data else []}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching materials: {str(e)}")
+
+    # Get Unique Part Views
+    async def get_unique_part_views(self):
+        try:
+            # Fetch distinct part views from Photo table (column part_view)
+            res = self.db.table("Photo").select("part_view").execute()
+            existing_views = set()
+            if res.data:
+                for row in res.data:
+                    if row.get("part_view"):
+                         existing_views.add(row["part_view"])
+            
+            # Default types
+            defaults = ["East Side", "South Side", "West Side", "North Side", "Nameplate", "Top View"]
+            
+            # Merge
+            all_views = sorted(list(existing_views.union(defaults)))
+            
+            # Filter out General if it exists in DB (case-insensitive)
+            # We want to exclude "General", "General View", and their case variants
+            exclude_views = {"general", "general view", "generalview"}
+            all_views = [v for v in all_views if v.lower() not in exclude_views]
+            
+            return {"part_views": all_views}
+        except Exception as e:
+            # Fallback to defaults
+            defaults = ["East Side", "South Side", "West Side", "North Side", "Nameplate", "Top View"]
+            return {"part_views": sorted(defaults)}
