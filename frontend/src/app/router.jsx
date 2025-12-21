@@ -6,7 +6,8 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 
 // Layout
 import Dashboard from '../components/Dashboard.jsx'
-
+import UserDashboard from "../components/InspectorDashboard/UserDashboard.jsx";
+import AdminDashboard from "../components/AdminDashboard/AdminDashboard.jsx";
 // Module imports
 import AuthModule from '../modules/auth/Login.jsx'
 import PhotoUploadModule from '../modules/photoUpload/PhotoUpload.jsx'
@@ -18,12 +19,32 @@ import MonitoringModule from '../modules/monitoring/Monitoring.jsx'
 import EquipmentModule from '../modules/equipment/Equipment.jsx'
 import AnalyticsModule from '../modules/analytics/Analytics.jsx'
 
+
+import ForgotPassword from "../modules/auth/ForgotPassword.jsx";
+import OTPVerification from "../modules/auth/OTPVerification.jsx";
+import ResetPassword from "../modules/auth/ResetPassword.jsx";
+import Recovered from "../modules/auth/Recovered.jsx";
+import {ChangePassword} from "../modules/auth/ChangePassword.jsx";
+import CompleteProfile from "../modules/auth/CompleteProfile.jsx";
+import SecurityQuestions from "../modules/auth/SecurityQuestions.jsx";
 function Router() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<AuthModule />} />
       
+      <Route path="/recover/forgot" element={<ForgotPassword />} />
+      <Route path="/recover/otp" element={<OTPVerification />} />
+      <Route path="/recover/reset" element={<ResetPassword />} />
+      <Route path="/recover/done" element={<Recovered />} />
+
+      <Route path="/user_dashboard" element={<UserDashboard />} />
+      <Route path="/admin_dashboard" element={<AdminDashboard />} />
+
+      {/* Change password & profile completion */}
+      <Route path="/change-password" element={<ChangePassword />} />
+      <Route path="/recover/security-questions" element={<SecurityQuestions />} />
+      <Route path="/complete-profile" element={<CompleteProfile />} />
       {/* Dashboard routes - wrapped in Dashboard layout */}
       <Route element={<Dashboard />}>
         <Route path="/monitoring" element={<MonitoringModule />} />

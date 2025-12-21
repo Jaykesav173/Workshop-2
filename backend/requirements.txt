@@ -9,5 +9,4 @@ supabase
 pydantic
 pydantic-settings
 opencv-python
-tensorflow-lite
 python-multipart
