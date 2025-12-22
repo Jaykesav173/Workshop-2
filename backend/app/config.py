@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # Email Configuration (for notifications)
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER: str = os.getenv("SMTP_USER", "")
+    SMTP_EMAIL: str = os.getenv("SMTP_EMAIL", "")  # <-- added to match main.py
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     
     class Config:
@@ -71,4 +71,3 @@ elif settings.SUPABASE_KEY:
 # Validate required settings
 if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
     raise ValueError("❌ Missing SUPABASE_URL or SUPABASE_KEY in environment variables")
-
