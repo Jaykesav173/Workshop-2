@@ -15,8 +15,6 @@ class ReportReviewService:
 
     async def get_all_reports(self) -> List[ReportReviewItem]:
         try:
-            # Fetch specific columns to avoid timeout on large JSON fields
-            # We avoid fetching 'content', 'labeled_photos', etc.
             columns = "report_id, title, inspection_date, equipment_id, created_by, created_at, status"
             res = self.db.table("Report").select(columns).order("created_at", desc=True).limit(50).execute()
             
@@ -36,7 +34,6 @@ class ReportReviewService:
                 equipment_map = {}
                 if equipment_ids:
                     try:
-                        # Using 'equipment' (lowercase) based on service_equipment.py
                         eq_res = self.db.table("equipment").select("id, equipment_tag_no, location").in_("id", equipment_ids).execute()
                         if eq_res.data:
                             equipment_map = {e['id']: e for e in eq_res.data}
@@ -47,7 +44,6 @@ class ReportReviewService:
                 user_map = {}
                 if user_ids:
                     try:
-                        # Using 'User' (PascalCase) based on service_auth.py
                         user_res = self.db.table("User").select("id, name").in_("id", user_ids).execute()
                         if user_res.data:
                             user_map = {u['id']: u for u in user_res.data}
@@ -125,9 +121,23 @@ class ReportReviewService:
                 except Exception as e:
                     print(f"Error fetching user for report {report_id}: {e}")
 
-            # 4. Construct Response
-            # We import ReportDetailItem inside method to avoid circular imports if any, 
-            # or just rely on the file import if it's already there (it is not imported yet).
+            # 4. Fetch Latest Review & Feedback (if any)
+            feedback_items = []
+            try:
+                # Get latest review for this report
+                review_res = self.db.table("report_review").select("review_id").eq("report_id", report_id).order("reviewed_at", desc=True).limit(1).execute()
+                
+                if review_res.data and len(review_res.data) > 0:
+                    review_id = review_res.data[0]['review_id']
+                    
+                    # Get feedback items for this review
+                    fb_res = self.db.table("section_feedback").select("*").eq("review_id", review_id).execute()
+                    if fb_res.data:
+                        feedback_items = fb_res.data
+            except Exception as e:
+                print(f"Error fetching feedback for report {report_id}: {e}")
+
+            # 5. Construct Response
             from app.database.schemas import ReportDetailItem
 
             item = ReportDetailItem(
@@ -150,7 +160,10 @@ class ReportReviewService:
                 report_url=r.get("report_url"),
                 api_510_compliant=r.get("api_510_compliant", False),
                 equipment_description=eq_desc,
-                dosh_registration_no=dosh_no
+                dosh_registration_no=dosh_no,
+                
+                # Attach feedback
+                feedback_items=feedback_items
             )
             return item
 
@@ -160,20 +173,53 @@ class ReportReviewService:
 
     async def create_review(self, review_data: schemas.ReportReviewCreate, reviewed_by: int):
         try:
-            # 1. Insert Review Record
-            review_entry = {
-                "report_id": review_data.report_id,
-                "reviewed_by": reviewed_by,
-                "status": review_data.status,
-                "reviewed_at": datetime.utcnow().isoformat()
-            }
-            
-            res = self.db.table("report_review").insert(review_entry).execute()
-            
-            if not res.data:
-                raise Exception("Failed to create review record")
+            # Normalize status
+            normalized_status = review_data.status
+            if review_data.status == "In Progress":
+                normalized_status = "IN_PROGRESS"
+            elif review_data.status == "Rejected":
+                normalized_status = "NEEDS REVISION"
+            elif review_data.status == "Approved":
+                normalized_status = "APPROVED"
+
+            # 1. Check for existing 'IN_PROGRESS' draft by this user
+            existing_draft = self.db.table("report_review")\
+                .select("review_id")\
+                .eq("report_id", review_data.report_id)\
+                .eq("reviewed_by", reviewed_by)\
+                .eq("status", "IN_PROGRESS")\
+                .order("reviewed_at", desc=True)\
+                .limit(1)\
+                .execute()
+
+            if existing_draft.data:
+                # UPDATE existing draft
+                review_id = existing_draft.data[0]['review_id']
+                print(f"🔄 FOUND existing draft review {review_id} for user {reviewed_by}")
                 
-            review_id = res.data[0]['review_id']
+                # Update status and timestamp
+                self.db.table("report_review").update({
+                    "status": "IN_PROGRESS", # Keep it in progress if updating draft
+                    "reviewed_at": datetime.utcnow().isoformat()
+                }).eq("review_id", review_id).execute()
+                
+                # Wipe old feedback (to handle deletions)
+                del_res = self.db.table("section_feedback").delete().eq("review_id", review_id).execute()
+                print(f"🗑️ DELETE section_feedback result: {del_res}")
+            else:
+                print(f"🆕 NO existing draft found for user {reviewed_by}. Creating new.")
+                # CREATE new review record
+                review_entry = {
+                    "report_id": review_data.report_id,
+                    "reviewed_by": reviewed_by,
+                    "status": normalized_status,
+                    "reviewed_at": datetime.utcnow().isoformat()
+                }
+                res = self.db.table("report_review").insert(review_entry).execute()
+                if not res.data:
+                    raise Exception("Failed to create review record")
+                review_id = res.data[0]['review_id']
+                print(f"✅ Created new review {review_id}")
             
             # 2. Insert Feedback Items (if any)
             if review_data.feedback_items:
@@ -189,12 +235,7 @@ class ReportReviewService:
                     self.db.table("section_feedback").insert(feedback_entries).execute()
 
             # 3. Update Report Status
-            # If rejected, set report status to 'Needs Revision'
-            # If approved, set report status to 'Approved'
-            new_status = "NEEDS REVISION" if review_data.status == "Rejected" else "APPROVED"
-            
-            # Use Report ID string directly as per schema fix
-            self.db.table("Report").update({"status": new_status}).eq("report_id", review_data.report_id).execute()
+            self.db.table("Report").update({"status": normalized_status}).eq("report_id", review_data.report_id).execute()
 
             return True
 

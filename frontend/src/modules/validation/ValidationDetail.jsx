@@ -23,14 +23,22 @@ export default function ValidationDetail() {
     const [newFeedback, setNewFeedback] = useState({
         section: "",
         issue: "",
-        customComment: ""
+        customComment: "",
+        labelId: ""
     });
 
     const handleAddFeedback = () => {
         if (!newFeedback.section || !newFeedback.issue) return;
-        setFeedbackItems([...feedbackItems, { ...newFeedback, id: Date.now() }]);
+
+        let finalComment = newFeedback.customComment;
+        // Prepend Label ID if exists
+        if (newFeedback.labelId) {
+            finalComment = `(Ref: ${newFeedback.labelId}) ${finalComment}`;
+        }
+
+        setFeedbackItems([...feedbackItems, { ...newFeedback, customComment: finalComment, id: Date.now() }]);
         setIsAddingFeedback(false);
-        setNewFeedback({ section: "", issue: "", customComment: "" });
+        setNewFeedback({ section: "", issue: "", customComment: "", labelId: "" });
     };
 
     const removeFeedback = (id) => {
@@ -38,7 +46,16 @@ export default function ValidationDetail() {
     };
 
     const handleSubmitReview = async (status) => {
-        if (!confirm(`Are you sure you want to ${status === "Approved" ? "APPROVE" : "REJECT"} this report?`)) return;
+        let confirmMessage = "";
+        if (status === "Approved") {
+            confirmMessage = "Are you sure you want to APPROVE this report?";
+        } else if (status === "Rejected") {
+            confirmMessage = "Are you sure you want to REJECT this report?";
+        } else if (status === "In Progress") {
+            confirmMessage = "Are you sure you want to stop reviewing and save the progress?";
+        }
+
+        if (!confirm(confirmMessage)) return;
 
         try {
             setLoading(true);
@@ -76,6 +93,24 @@ export default function ValidationDetail() {
             setLoading(true);
             const res = await getReportById(id, token);
             setReport(res.data);
+
+            // Load existing feedback if any
+            if (res.data.feedback_items && res.data.feedback_items.length > 0) {
+                const loadedFeedback = res.data.feedback_items.map(item => {
+                    // split feedback "Issue: Comment"
+                    const parts = item.feedback.split(': ');
+                    const issue = parts[0];
+                    const comment = parts.length > 1 ? parts.slice(1).join(': ') : "";
+
+                    return {
+                        id: item.feedback_id || Date.now() + Math.random(),
+                        section: item.section_name,
+                        issue: issue,
+                        customComment: comment
+                    };
+                });
+                setFeedbackItems(loadedFeedback);
+            }
         } catch (err) {
             console.error("Failed to fetch report detail", err);
             setError("Failed to load report. It may not exist.");
@@ -263,10 +298,25 @@ export default function ValidationDetail() {
                                 {FEEDBACK_SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
 
+                            {/* Conditional Label ID Input for Findings/Photos */}
+                            {(newFeedback.section === "Description of Findings" ||
+                                newFeedback.section === "Photo Evidence" ||
+                                newFeedback.section === "Methods of Inspection" ||
+                                newFeedback.section === "Start-up / Shut-down Recommendation") && (
+                                    <input
+                                        type="text"
+                                        className="w-full p-2 text-sm border border-gray-300 rounded bg-white"
+                                        placeholder="Ref ID (e.g., 1.1, 1.2)..."
+                                        value={newFeedback.labelId || ""}
+                                        onChange={(e) => setNewFeedback({ ...newFeedback, labelId: e.target.value })}
+                                    />
+                                )}
+
                             <select
                                 className="w-full p-2 text-sm border border-gray-300 rounded bg-white"
                                 value={newFeedback.issue}
                                 onChange={(e) => setNewFeedback({ ...newFeedback, issue: e.target.value })}
+                                disabled={!newFeedback.section}
                             >
                                 <option value="" disabled>Select Issue</option>
                                 {FEEDBACK_ISSUES.map(i => <option key={i} value={i}>{i}</option>)}
@@ -302,7 +352,7 @@ export default function ValidationDetail() {
                         <button
                             onClick={() => {
                                 setIsAddingFeedback(true);
-                                setNewFeedback({ section: "", issue: "", customComment: "" });
+                                setNewFeedback({ section: "", issue: "", customComment: "", labelId: "" });
                             }}
                             className="w-[300px] h-[200px] bg-white border border-black flex flex-col items-center justify-center hover:bg-gray-50 transition-colors"
                         >
@@ -314,6 +364,13 @@ export default function ValidationDetail() {
             </div>
             {/* Action Buttons */}
             <div className="w-full max-w-[210mm] mt-8 mb-16 flex justify-end gap-4">
+                <button
+                    onClick={() => handleSubmitReview("In Progress")}
+                    className="flex items-center gap-2 px-6 py-3 bg-yellow-500 text-white rounded-xl shadow-md hover:bg-yellow-600 transition-all font-semibold"
+                >
+                    <FileText size={20} />
+                    Save Progress
+                </button>
                 <button
                     onClick={() => handleSubmitReview("Rejected")}
                     disabled={feedbackItems.length === 0}
@@ -334,16 +391,17 @@ export default function ValidationDetail() {
                     Approve Report
                 </button>
             </div>
-        </div>
+        </div >
     );
 }
 
 const FEEDBACK_SECTIONS = [
     "Report Header",
     "Client Details",
-    "Findings",
-    "Recommendations",
-    "Site Photos",
+    //"Methods of Inspection",
+    "Description of Findings",
+    "Recommendation",
+    "Photo Evidence",
     "General"
 ];
 
@@ -353,5 +411,6 @@ const FEEDBACK_ISSUES = [
     "Wrong Classification",
     "Missing/Incomplete Details",
     "Photo Mismatch",
+    "Not Clear",
     "Other"
 ];

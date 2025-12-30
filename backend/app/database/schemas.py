@@ -208,32 +208,7 @@ class ReportResponse(ReportBase):
     class Config:
         from_attributes = True
 
-class ReportReviewItem(BaseModel):
-    report_id: str
-    report_title: Optional[str] = None
-    inspection_date: Optional[datetime] = None
-    equipment_tag: Optional[str] = None
-    equipment_location: Optional[str] = None
-    created_at: Optional[datetime] = None
-    inspector_name: Optional[str] = None
-    status: str
 
-    class Config:
-        from_attributes = True
-
-class ReportDetailItem(ReportReviewItem):
-    content: Optional[str] = None
-    labeled_photos: Optional[str] = None
-    labeled_defects: Optional[str] = None
-    defect_types_summary: Optional[str] = None
-    report_type: Optional[str] = None
-    pdf_url: Optional[str] = None
-    report_url: Optional[str] = None
-    api_510_compliant: bool = False
-    
-    # Extra fields for display
-    equipment_description: Optional[str] = None
-    dosh_registration_no: Optional[str] = None
 
 # Report Search Schema - Jay (Report History & Review)
 class ReportSearchRequest(BaseModel):
@@ -355,6 +330,39 @@ class ReportReviewResponse(ReportReviewCreate):
     reviewed_at: datetime
     feedback_items: List[SectionFeedbackResponse] = []
 
+
     class Config:
         from_attributes = True
+
+
+class ReportReviewItem(BaseModel):
+    report_id: str
+    report_title: Optional[str] = None
+    inspection_date: Optional[datetime] = None
+    equipment_tag: Optional[str] = None
+    equipment_location: Optional[str] = None
+    created_at: Optional[datetime] = None
+    inspector_name: Optional[str] = None
+    status: str
+
+    class Config:
+        from_attributes = True
+
+class ReportDetailItem(ReportReviewItem):
+    content: Optional[str] = None
+    labeled_photos: Optional[str] = None
+    labeled_defects: Optional[str] = None
+    defect_types_summary: Optional[str] = None
+    report_type: Optional[str] = None
+    pdf_url: Optional[str] = None
+    report_url: Optional[str] = None
+    api_510_compliant: bool = False
+    
+    # Extra fields for display
+    equipment_description: Optional[str] = None
+    dosh_registration_no: Optional[str] = None
+    
+    # Feedback Items
+    feedback_items: Optional[List[SectionFeedbackResponse]] = []
+
 

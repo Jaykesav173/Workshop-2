@@ -1,6 +1,5 @@
 /**
- * Validation Module - (Formerly Report Review)
- * Component for report review and QA approval
+ * Report Review and Quality Assurance Module
  */
 
 import React, { useState, useEffect } from "react";
@@ -247,12 +246,45 @@ export default function Validation() {
                                         <td className="py-3 px-4 text-center">{highlightText(report.equipment_tag || "-", searchQuery)}</td>
                                         <td className="py-3 px-4 text-center">{highlightText(report.equipment_location || "-", searchQuery)}</td>
                                         <td className="py-3 px-4 text-center">
-                                            <button
-                                                onClick={() => navigate(`/validation/${report.report_id}`)}
-                                                className="bg-blue-600 text-white px-4 py-1 rounded text-sm font-semibold hover:bg-blue-700"
-                                            >
-                                                View
-                                            </button>
+                                            {(() => {
+                                                const status = report.status ? report.status.toUpperCase() : 'COMPLETED';
+
+                                                if (status === 'APPROVED') {
+                                                    return (
+                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                            Approved
+                                                        </span>
+                                                    );
+                                                } else if (status === 'IN_PROGRESS') {
+                                                    return (
+                                                        <button
+                                                            onClick={() => navigate(`/validation/${report.report_id}`)}
+                                                            className="inline-flex items-center px-4 py-1 rounded-md text-sm font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 hover:bg-yellow-200"
+                                                        >
+                                                            Continue Review
+                                                        </button>
+                                                    );
+                                                } else if (status === 'NEEDS REVISION') {
+                                                    return (
+                                                        <button
+                                                            onClick={() => navigate(`/validation/${report.report_id}`)}
+                                                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200 hover:bg-red-200"
+                                                        >
+                                                            Needs Revision
+                                                        </button>
+                                                    );
+                                                } else {
+                                                    // COMPLETED, DRAFT, etc.
+                                                    return (
+                                                        <button
+                                                            onClick={() => navigate(`/validation/${report.report_id}`)}
+                                                            className="bg-blue-600 text-white px-4 py-1 rounded text-sm font-semibold hover:bg-blue-700"
+                                                        >
+                                                            Review
+                                                        </button>
+                                                    );
+                                                }
+                                            })()}
                                         </td>
                                     </tr>
                                 ))
