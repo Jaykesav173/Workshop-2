@@ -10,7 +10,7 @@ Schemas for 4 core models:
 """
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 # ============================================
 # 1. User Schemas - Haifa (User Authentication)
@@ -55,10 +55,12 @@ class EquipmentBase(BaseModel):
     inspection_due_date: Optional[datetime] = None  # Next inspection due date
     equipment_description: Optional[str] = None  # Full equipment description
     dosh_registration_no: Optional[str] = None  # DOSH registration number
+    material_id: Optional[int] = None  # FK to Material Table
     nominal_thickness: Optional[float] = None  # Nominal thickness
     corrosion_allowance: Optional[float] = None  # Corrosion allowance
     design_pressure: Optional[float] = None  # Design pressure
     design_temperature: Optional[float] = None  # Design temperature
+    status: Optional[str] = "ACTIVE"  # Status default ACTIVE
 
 class EquipmentCreate(EquipmentBase):
     pass
@@ -68,10 +70,13 @@ class EquipmentResponse(EquipmentBase):
     status: str  # Active, Inactive, Decommissioned
     created_at: datetime
     updated_at: Optional[datetime] = None
-    # Backward compatibility fields (added by service layer)
     name: Optional[str] = None  # Alias for equipment_tag_no
     type: Optional[str] = None  # Type description (from type table if available)
     
+    # Image fields
+    image_url: Optional[str] = None
+    photos: Optional[list] = []
+
     class Config:
         from_attributes = True
 
@@ -203,6 +208,33 @@ class ReportResponse(ReportBase):
     class Config:
         from_attributes = True
 
+class ReportReviewItem(BaseModel):
+    report_id: str
+    report_title: Optional[str] = None
+    inspection_date: Optional[datetime] = None
+    equipment_tag: Optional[str] = None
+    equipment_location: Optional[str] = None
+    created_at: Optional[datetime] = None
+    inspector_name: Optional[str] = None
+    status: str
+
+    class Config:
+        from_attributes = True
+
+class ReportDetailItem(ReportReviewItem):
+    content: Optional[str] = None
+    labeled_photos: Optional[str] = None
+    labeled_defects: Optional[str] = None
+    defect_types_summary: Optional[str] = None
+    report_type: Optional[str] = None
+    pdf_url: Optional[str] = None
+    report_url: Optional[str] = None
+    api_510_compliant: bool = False
+    
+    # Extra fields for display
+    equipment_description: Optional[str] = None
+    dosh_registration_no: Optional[str] = None
+
 # Report Search Schema - Jay (Report History & Review)
 class ReportSearchRequest(BaseModel):
     start_date: Optional[datetime] = None
@@ -297,6 +329,32 @@ class RecommendationTemplateResponse(RecommendationTemplateBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     
+    class Config:
+        from_attributes = True
+
+# Feedback/Review Schemas
+class SectionFeedbackCreate(BaseModel):
+    section_name: str
+    feedback: str
+
+class ReportReviewCreate(BaseModel):
+    report_id: str
+    status: str  # Approved, Pending, Rejected
+    feedback_items: List[SectionFeedbackCreate] = []
+
+class SectionFeedbackResponse(SectionFeedbackCreate):
+    feedback_id: int
+    review_id: int
+
+    class Config:
+        from_attributes = True
+
+class ReportReviewResponse(ReportReviewCreate):
+    review_id: int
+    reviewed_by: str
+    reviewed_at: datetime
+    feedback_items: List[SectionFeedbackResponse] = []
+
     class Config:
         from_attributes = True
 

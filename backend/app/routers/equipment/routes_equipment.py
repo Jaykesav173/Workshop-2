@@ -4,7 +4,7 @@ API endpoints for equipment management with image upload
 """
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form
-from app.database.schemas import EquipmentCreate, EquipmentResponse, EquipmentOptionsResponse
+from app.database.schemas import EquipmentCreate, EquipmentResponse #, EquipmentOptionsResponse
 from app.routers.equipment.service_equipment import EquipmentService
 from app.dependencies import get_current_user
 from fastapi import APIRouter, Depends

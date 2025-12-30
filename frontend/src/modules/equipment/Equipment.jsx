@@ -470,7 +470,7 @@ export default function EquipmentDetailsRegistration() {
   // RENDER UI
   return (
 
-    <div className="bg-white min-h-screen font-sans text-black ml-[250px] mt-[80px]">
+    <div className="bg-white min-h-screen font-sans text-black w-full">
 
       {/* Page Title */}
       <div className="px-8 py-6">

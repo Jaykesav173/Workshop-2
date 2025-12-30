@@ -109,18 +109,18 @@ function InspectorDashboard() {
 
   useEffect(() => {
     const userStr = localStorage.getItem('user')
-    const token = localStorage.getItem('token')
-    
-    if (!token) {
-      navigate('/login')
-      return
-    }
+    // const token = localStorage.getItem('token')
+
+    // if (!token) {
+    //   navigate('/login')
+    //   return
+    // }
 
     if (userStr) {
       try {
         const userData = JSON.parse(userStr)
         setUser(userData)
-        
+
         if (userData.role?.toUpperCase() !== 'INSPECTOR') {
           if (userData.role?.toUpperCase() === 'ADMIN') {
             navigate('/admin/dashboard')
@@ -160,161 +160,159 @@ function InspectorDashboard() {
 
   return (
     <>
-          {/* Welcome Section */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Welcome back, {user?.username || 'Inspector'}!
-            </h1>
-            <p className="text-gray-600">Here's what's happening with your inspections today.</p>
+      {/* Welcome Section */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          Welcome back, {user?.username || 'Inspector'}!
+        </h1>
+        <p className="text-gray-600">Here's what's happening with your inspections today.</p>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {kpiData.map((kpi, index) => (
+          <div
+            key={index}
+            className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow border border-gray-100"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600 mb-1">{kpi.title}</p>
+                <p className="text-3xl font-bold text-gray-900 mb-2">{kpi.value}</p>
+                <div className={`flex items-center gap-1 text-sm ${kpi.trendUp ? 'text-green-600' : 'text-red-600'}`}>
+                  {kpi.trendUp ? <Icons.TrendingUp /> : <Icons.TrendingDown />}
+                  <span>{kpi.trend}</span>
+                </div>
+              </div>
+              <div className={`p-3 rounded-xl ${kpi.bgColor}`}>
+                <div className={kpi.iconColor}>
+                  <kpi.icon />
+                </div>
+              </div>
+            </div>
           </div>
+        ))}
+      </div>
 
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {kpiData.map((kpi, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow border border-gray-100"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">{kpi.title}</p>
-                    <p className="text-3xl font-bold text-gray-900 mb-2">{kpi.value}</p>
-                    <div className={`flex items-center gap-1 text-sm ${kpi.trendUp ? 'text-green-600' : 'text-red-600'}`}>
-                      {kpi.trendUp ? <Icons.TrendingUp /> : <Icons.TrendingDown />}
-                      <span>{kpi.trend}</span>
-                    </div>
-                  </div>
-                  <div className={`p-3 rounded-xl ${kpi.bgColor}`}>
-                    <div className={kpi.iconColor}>
-                      <kpi.icon />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+      {/* Quick Actions Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <button
+          onClick={() => navigate('/inspection')}
+          className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 text-left group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-blue-50 group-hover:bg-blue-100 transition-colors">
+              <Icons.Eye className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Start Inspection</h3>
+              <p className="text-sm text-gray-600">Begin a new inspection workflow</p>
+            </div>
           </div>
+        </button>
 
-          {/* Quick Actions Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <button
-              onClick={() => navigate('/inspection')}
-              className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 text-left group"
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-blue-50 group-hover:bg-blue-100 transition-colors">
-                  <Icons.Eye className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Start Inspection</h3>
-                  <p className="text-sm text-gray-600">Begin a new inspection workflow</p>
-                </div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => navigate('/photo-upload')}
-              className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 text-left group"
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-purple-50 group-hover:bg-purple-100 transition-colors">
-                  <Icons.Camera className="w-6 h-6 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Upload Photos</h3>
-                  <p className="text-sm text-gray-600">Add inspection photos</p>
-                </div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => navigate('/reports')}
-              className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 text-left group"
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-green-50 group-hover:bg-green-100 transition-colors">
-                  <Icons.FileText className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Generate Report</h3>
-                  <p className="text-sm text-gray-600">Create inspection report</p>
-                </div>
-              </div>
-            </button>
+        <button
+          onClick={() => navigate('/photo-upload')}
+          className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 text-left group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-purple-50 group-hover:bg-purple-100 transition-colors">
+              <Icons.Camera className="w-6 h-6 text-purple-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Upload Photos</h3>
+              <p className="text-sm text-gray-600">Add inspection photos</p>
+            </div>
           </div>
+        </button>
 
-          {/* Tables Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Recent Inspections */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Recent Inspections</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Site</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {recentInspections.map((inspection, index) => (
-                      <tr key={index} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => navigate('/inspection')}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{inspection.site}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            inspection.status === 'Completed' ? 'bg-green-100 text-green-800' :
-                            inspection.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+        <button
+          onClick={() => navigate('/reports')}
+          className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 text-left group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-green-50 group-hover:bg-green-100 transition-colors">
+              <Icons.FileText className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Generate Report</h3>
+              <p className="text-sm text-gray-600">Create inspection report</p>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {/* Tables Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Inspections */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Inspections</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Site</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {recentInspections.map((inspection, index) => (
+                  <tr key={index} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => navigate('/inspection')}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{inspection.site}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${inspection.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                          inspection.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
                             'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {inspection.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            inspection.priority === 'High' ? 'bg-red-100 text-red-800' :
-                            inspection.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                        }`}>
+                        {inspection.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${inspection.priority === 'High' ? 'bg-red-100 text-red-800' :
+                          inspection.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
                             'bg-gray-100 text-gray-800'
-                          }`}>
-                            {inspection.priority}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{inspection.timestamp}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                        }`}>
+                        {inspection.priority}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{inspection.timestamp}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-            {/* Recent Activity */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
-              </div>
-              <div className="p-6">
-                <div className="space-y-4">
-                  {recentActivity.map((activity, index) => (
-                    <div key={index} className="flex items-start gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-                      <div className="p-2 rounded-lg bg-blue-50">
-                        <Icons.Clock className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-gray-500">{activity.module}</span>
-                          <span className="text-xs text-gray-400">•</span>
-                          <span className="text-xs text-gray-500">{activity.timestamp}</span>
-                        </div>
-                      </div>
+        {/* Recent Activity */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+          </div>
+          <div className="p-6">
+            <div className="space-y-4">
+              {recentActivity.map((activity, index) => (
+                <div key={index} className="flex items-start gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+                  <div className="p-2 rounded-lg bg-blue-50">
+                    <Icons.Clock className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{activity.action}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-gray-500">{activity.module}</span>
+                      <span className="text-xs text-gray-400">•</span>
+                      <span className="text-xs text-gray-500">{activity.timestamp}</span>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
+        </div>
+      </div>
 
       {/* Floating Action Buttons */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3">

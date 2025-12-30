@@ -1,0 +1,87 @@
+Simulating ReportReviewService.get_all_reports()...
+Fetched 20 raw reports.
+Equipment IDs: [64, 16, 19, 11101]
+User IDs: [96, 80, 36]
+Fetched 4 equipment records.
+Fetched 3 user records.
+Report [0] ID: 84051ce4-7b1b-48e4-98d8-ab762eb02227
+  Inspection Date: 2025-12-29 (Type: <class 'str'>)
+  Inspector: NUR HAIFA BINTI LOKMAN
+  ✅ PASSED Pydantic validation
+Report [1] ID: 5041bb1e-c3c9-4bc3-a39f-683798d2ecbf
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [2] ID: 3e7e8bd3-c0c3-4d85-904c-dee38eb22c9e
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [3] ID: 11edb726-500e-4f52-b02b-49d0f5cd371f
+  Inspection Date: 2025-12-06 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [4] ID: 7fe3c9d2-aa34-4fe8-9c43-8672eacde4c8
+  Inspection Date: 2025-12-07 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [5] ID: 60e76b43-e40e-4157-acb2-201f7c300dfe
+  Inspection Date: 2025-12-07 (Type: <class 'str'>)
+  Inspector: ASILLAH
+  ✅ PASSED Pydantic validation
+Report [6] ID: 83ea215b-b9cd-4dcd-a9d4-5f7e68b2ad67
+  Inspection Date: 2025-12-07 (Type: <class 'str'>)
+  Inspector: ASILLAH
+  ✅ PASSED Pydantic validation
+Report [7] ID: 5ffcf896-9598-4646-a52c-dcfa2f695ca1
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [8] ID: b7168cf0-c12f-4c05-8a1b-a2ee71d4060c
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [9] ID: 042c2129-afc3-4363-bda6-859be6e20173
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [10] ID: 46ffc8cf-bc5a-44fc-9211-28ea6396d409
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [11] ID: 79090d79-aabf-4b71-8124-bda2748a07af
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [12] ID: 1e8eb1a9-beb9-4ca7-aff0-1b0f26135a11
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [13] ID: 06f7e850-3882-45ce-a9e8-c99f7f7c69d9
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [14] ID: 97e03be9-c33b-4ced-85cd-3b43a1631735
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [15] ID: 320fc95a-a6bc-4707-b805-6547357c3d58
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [16] ID: d7739914-11c9-493b-a8fc-5fdfd1bd357a
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [17] ID: 2c8deff2-087c-4d7d-92e5-fd99d8646fa9
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [18] ID: 2ab9d6c7-b7d4-40e8-bf25-ca9bcecf2b13
+  Inspection Date: 2025-12-08 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Report [19] ID: fe62b0b6-c321-4f8d-8e6a-c7f9753ef99c
+  Inspection Date: 2025-12-06 (Type: <class 'str'>)
+  Inspector: lokmanarahim
+  ✅ PASSED Pydantic validation
+Successfully processed 20 reports.

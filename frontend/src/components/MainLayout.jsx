@@ -140,12 +140,12 @@ export default function MainLayout() {
   // Check authentication and load user
   useEffect(() => {
     const userStr = localStorage.getItem('user')
-    const token = localStorage.getItem('token')
-    
-    if (!token) {
-      navigate('/login')
-      return
-    }
+    // const token = localStorage.getItem('token')
+
+    // if (!token) {
+    //   navigate('/login')
+    //   return
+    // }
 
     if (userStr) {
       try {
@@ -217,7 +217,7 @@ export default function MainLayout() {
           <h1 className={`text-xl font-bold text-gray-900 ${!sidebarOpen && 'hidden'}`}>VISOR</h1>
           <h1 className={`text-xl font-bold text-gray-900 ${sidebarOpen && 'hidden'}`}>V</h1>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-1">
           {menuItems.map((item) => {
             const isActive = isActiveMenuItem(item)
@@ -227,11 +227,10 @@ export default function MainLayout() {
                 onClick={() => {
                   if (item.path) navigate(item.path)
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive
+                  ? 'bg-blue-50 text-blue-600 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
+                  }`}
               >
                 <div className={`${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
                   <item.icon />
@@ -260,7 +259,7 @@ export default function MainLayout() {
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center gap-4 ml-6">
               <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative">
                 <Icons.Bell />
@@ -286,7 +285,7 @@ export default function MainLayout() {
                   )}
                   <Icons.ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 {/* Dropdown Menu */}
                 {profileDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-20">

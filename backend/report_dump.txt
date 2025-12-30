@@ -1,0 +1,32 @@
+Checking Report table...
+Found 5 reports.
+Report ID: 84051ce4-7b1b-48e4-98d8-ab762eb02227
+Title: API 510 Inspection Report - J-202
+Created By: 96
+Created At: 2025-12-29T17:21:52.847609
+Status: COMPLETED
+------------------------------
+Report ID: 5041bb1e-c3c9-4bc3-a39f-683798d2ecbf
+Title: API 510 Inspection Report - T-101
+Created By: 80
+Created At: 2025-12-25T15:09:36.980174
+Status: COMPLETED
+------------------------------
+Report ID: 3e7e8bd3-c0c3-4d85-904c-dee38eb22c9e
+Title: API 510 Inspection Report - T-101
+Created By: 80
+Created At: 2025-12-25T14:35:31.283856
+Status: COMPLETED
+------------------------------
+Report ID: 11edb726-500e-4f52-b02b-49d0f5cd371f
+Title: API 510 Inspection Report - HX-07
+Created By: 80
+Created At: 2025-12-25T08:17:08.803652
+Status: COMPLETED
+------------------------------
+Report ID: 7fe3c9d2-aa34-4fe8-9c43-8672eacde4c8
+Title: API 510 Inspection Report - HX-07
+Created By: 80
+Created At: 2025-12-25T08:12:18.772378
+Status: COMPLETED
+------------------------------

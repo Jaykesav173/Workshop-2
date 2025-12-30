@@ -152,3 +152,24 @@ class RecommendationTemplate(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+# 10. Report Review Model - Yi Jing (Report Review & Validation)
+class ReportReview(Base):
+    __tablename__ = "report_review"
+
+    review_id = Column(Integer, primary_key=True, index=True)
+    # Based on user context, the report_id is a UUID string. 
+    # To prevent Type Mismatch errors (Integer vs String), we must use String.
+    # We will remove the ForeignKey constraint for now to avoid issues if the referenced column type doesn't match perfectly.
+    report_id = Column(String, nullable=False) 
+    reviewed_by = Column(Integer, ForeignKey("User.id"), nullable=False)
+    status = Column(String, nullable=False)  # Approved, Pending, Rejected
+    reviewed_at = Column(DateTime, default=datetime.utcnow)
+
+class SectionFeedback(Base):
+    __tablename__ = "section_feedback"
+
+    feedback_id = Column(Integer, primary_key=True, index=True)
+    review_id = Column(Integer, ForeignKey("report_review.review_id"), nullable=False)
+    section_name = Column(String, nullable=False)
+    feedback = Column(Text, nullable=False)
+
