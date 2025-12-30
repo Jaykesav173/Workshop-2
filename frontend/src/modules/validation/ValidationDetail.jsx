@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Calendar, User, MapPin, Tag, FileText, CheckCircle, XCircle } from "lucide-react";
-import { getReportById, submitReview } from "./validationApi";
+import { ArrowLeft, Calendar, User, MapPin, Tag, FileText, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { getReportById, submitReview, fetchReportPDF } from "./validationApi";
 
 export default function ValidationDetail() {
     const { id } = useParams();
@@ -9,6 +9,11 @@ export default function ValidationDetail() {
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // PDF State
+    const [pdfUrl, setPdfUrl] = useState(null);
+    const [pdfLoading, setPdfLoading] = useState(false);
+    const [pdfError, setPdfError] = useState(null);
 
     const token = localStorage.getItem("token");
 
@@ -58,6 +63,12 @@ export default function ValidationDetail() {
 
     useEffect(() => {
         fetchReport();
+        loadPdf();
+
+        // Cleanup PDF URL on unmount
+        return () => {
+            if (pdfUrl) window.URL.revokeObjectURL(pdfUrl);
+        };
     }, [id]);
 
     const fetchReport = async () => {
@@ -70,6 +81,26 @@ export default function ValidationDetail() {
             setError("Failed to load report. It may not exist.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadPdf = async () => {
+        try {
+            setPdfLoading(true);
+            setPdfError(null);
+            const res = await fetchReportPDF(id, token);
+            console.log("📄 PDF Response Type:", res.data.type);
+            console.log("📄 PDF Blob Size:", res.data.size);
+
+            // res.data is already a Blob if axios responseType is 'blob'
+            const blob = res.data;
+            const url = window.URL.createObjectURL(blob);
+            setPdfUrl(url);
+        } catch (err) {
+            console.error("Failed to load PDF", err);
+            setPdfError("PDF not available yet or failed to load.");
+        } finally {
+            setPdfLoading(false);
         }
     };
 
@@ -124,38 +155,69 @@ export default function ValidationDetail() {
 
             {/* A4 Paper Container */}
             <div
-                className="bg-white shadow-2xl w-full max-w-[210mm] min-h-[297mm] p-[20mm] relative animate-in fade-in slide-in-from-bottom-4 duration-500"
-                style={{ aspectRatio: "210/297" }} // Maintains A4 ratio roughly, but lets it grow height-wise
+                className="bg-white shadow-2xl w-full max-w-[210mm] min-h-[297mm] relative animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col"
+                style={{ aspectRatio: "210/297" }} // Maintains A4 ratio
             >
-                {/* Header */}
-                <div className="border-b-4 border-blue-600 pb-6 mb-8 flex justify-between items-start">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-900 mb-2">{report.report_title}</h1>
-                        <p className="text-sm text-gray-500 font-mono">ID: {report.report_id}</p>
-                    </div>
-                    <div className="text-right">
-                        <div className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-bold mb-1">
-                            {report.status}
+                {/* Header (Only show if PDF failed or loading, otherwise iframe covers it) */}
+                {(!pdfUrl || pdfLoading) && (
+                    <div className="p-[20mm] pb-0">
+                        <div className="border-b-4 border-blue-600 pb-6 mb-8 flex justify-between items-start">
+                            <div>
+                                <h1 className="text-3xl font-bold text-gray-900 mb-2">{report.report_title}</h1>
+                                <p className="text-sm text-gray-500 font-mono">ID: {report.report_id}</p>
+                            </div>
+                            <div className="text-right">
+                                <div className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-bold mb-1">
+                                    {report.status}
+                                </div>
+                                <p className="text-sm text-gray-500">{report.report_type || "Inspection Report"}</p>
+                            </div>
                         </div>
-                        <p className="text-sm text-gray-500">{report.report_type || "Inspection Report"}</p>
                     </div>
-                </div>
+                )}
 
-                {/* PDF Preview Placeholder */}
-                <div className="flex flex-col items-center justify-center h-[200mm] bg-gray-100 rounded-lg border-2 border-dashed border-gray-300">
-                    <div className="text-center p-8">
-                        <FileText size={64} className="mx-auto mb-4 text-gray-400" />
-                        <h2 className="text-2xl font-bold text-gray-700 mb-2">PDF Report Preview</h2>
-                        <p className="text-gray-500 mb-6 max-w-md">
-                            The PDF version of this report is currently being generated.
-                            <br />
-                            Once available, it will be displayed here for preview and download.
-                        </p>
-                        <div className="animate-pulse flex items-center gap-2 justify-center text-blue-600 font-medium bg-blue-50 px-4 py-2 rounded-full">
-                            <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
-                            PDF Generation in Progress...
+                {/* PDF Viewer */}
+                <div className="flex-grow flex flex-col relative h-full">
+                    {pdfLoading ? (
+                        <div className="flex flex-col items-center justify-center h-full bg-gray-50">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                            <p className="text-gray-500 font-medium">Loading PDF...</p>
                         </div>
-                    </div>
+                    ) : pdfUrl ? (
+                        <object
+                            data={pdfUrl}
+                            type="application/pdf"
+                            className="w-full h-full absolute inset-0"
+                            title="Report PDF"
+                        >
+                            <div className="flex flex-col items-center justify-center h-full">
+                                <p className="text-gray-500 mb-2">Unable to display PDF directly.</p>
+                                <a
+                                    href={pdfUrl}
+                                    download={`Report_${report.report_no || id}.pdf`}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                >
+                                    Download PDF
+                                </a>
+                                <button
+                                    onClick={() => window.open(pdfUrl, '_blank')}
+                                    className="px-4 py-2 mt-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                                >
+                                    Open in New Tab
+                                </button>
+                            </div>
+                        </object>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-[200mm] bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 m-[20mm] mt-0">
+                            <div className="text-center p-8">
+                                <AlertCircle size={64} className="mx-auto mb-4 text-red-400" />
+                                <h2 className="text-2xl font-bold text-gray-700 mb-2">PDF Not Available</h2>
+                                <p className="text-gray-500 mb-6 max-w-md">
+                                    {pdfError || "The PDF for this report could not be loaded."}
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

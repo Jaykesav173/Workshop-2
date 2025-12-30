@@ -20,6 +20,10 @@ class ReportReviewService:
             columns = "report_id, title, inspection_date, equipment_id, created_by, created_at, status"
             res = self.db.table("Report").select(columns).order("created_at", desc=True).limit(50).execute()
             
+            print(f"📋 get_all_reports: Fetched {len(res.data) if res.data else 0} reports from DB")
+            if res.data and len(res.data) > 0:
+                print(f"📋 Latest report ID: {res.data[0].get('report_id')}, Created At: {res.data[0].get('created_at')}")
+            
             reports = []
             if res.data:
                 reports_data = res.data

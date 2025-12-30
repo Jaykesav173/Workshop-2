@@ -54,9 +54,14 @@ async def export_report_pdf(report_id: str, current_user: dict = Depends(get_cur
         report = await report_service.get_report(report_id)
         
         if not report.pdf_path:
+            print(f"❌ PDF Export: Report {report_id} has no pdf_path in DB")
             raise HTTPException(status_code=404, detail="PDF not generated yet")
         
+        print(f"📋 PDF Export: Checking path: {report.pdf_path}")
+        print(f"📋 PDF Export: Exists? {os.path.exists(report.pdf_path)}")
+
         if not os.path.exists(report.pdf_path):
+            print(f"❌ PDF Export: File not found at {report.pdf_path}")
             raise HTTPException(status_code=404, detail=f"PDF file not found at: {report.pdf_path}")
         
         # Return the PDF file with proper headers
@@ -65,7 +70,7 @@ async def export_report_pdf(report_id: str, current_user: dict = Depends(get_cur
             media_type="application/pdf",
             filename=os.path.basename(report.pdf_path),
             headers={
-                "Content-Disposition": f"attachment; filename={os.path.basename(report.pdf_path)}"
+                "Content-Disposition": f"inline; filename={os.path.basename(report.pdf_path)}"
             }
         )
     except HTTPException:

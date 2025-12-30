@@ -21,3 +21,12 @@ export const submitReview = (data, token) => {
         headers: { Authorization: `Bearer ${token}` }
     });
 };
+
+export const fetchReportPDF = (id, token) => {
+    // Note: The PDF export endpoint is under /api/reports, not /api/report-review
+    const PDF_API_URL = "http://localhost:8000/api/reports";
+    return axios.get(`${PDF_API_URL}/${id}/export-pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob' // Important for file handling
+    });
+};

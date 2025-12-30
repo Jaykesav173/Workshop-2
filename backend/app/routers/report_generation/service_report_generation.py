@@ -330,7 +330,7 @@ class ReportGenerationService:
                 "report_type": "API_510",
                 "title": f"API 510 Inspection Report - {report_data.header.equipment_tag}",
                 "content": json.dumps(report_data.model_dump(), indent=2),
-                "api_510_compliant": True,  # Boolean, not string
+                "api_510_compliant": "YES",  # String "YES" to match DB model, not boolean
                 "inspection_date": report_data.header.report_date,
                 "next_inspection_due": None,
                 "labeled_photos": json.dumps([{"finding_key": p.finding_key, "storage_url": p.storage_url} for p in report_data.photos]) if report_data.photos else json.dumps([]),
@@ -347,8 +347,21 @@ class ReportGenerationService:
             print(f"📋 Report record report_id type: {type(report_record.get('report_id'))}")
             print(f"📋 Report record inspection_id: {report_record.get('inspection_id')}")
             
-            res = self.db.table("Report").insert(report_record).execute()
+            print(f"📋 Report record inspection_id: {report_record.get('inspection_id')}")
             
+            res = self.db.table("Report").insert(report_record).execute()
+            print(f"📋 DB Insert Result Response: {res}")
+            print(f"📋 DB Insert Result Data: {res.data}")
+            
+            # CRITICAL: Verify insertion immediately
+            try:
+                verify_res = self.db.table("Report").select("report_id").eq("report_id", generated_report_id).execute()
+                print(f"🔍 VERIFICATION: Query for {generated_report_id} returned: {verify_res.data}")
+                if not verify_res.data:
+                    print("❌ CRITICAL ERROR: Record NOT found immediately after insert!")
+            except Exception as ve:
+                print(f"❌ VERIFICATION ERROR: {ve}")
+
             if res.data:
                 # Map database response to Pydantic schema
                 db_record = res.data[0]

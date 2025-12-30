@@ -272,7 +272,7 @@ class PhotoItem(BaseModel):
     finding_key: str  # e.g., "7.1"
     finding_text: str
     recommendation_text: str
-    storage_url: str  # URL to photo
+    storage_url: Optional[str] = None  # URL to photo
     file_path: Optional[str] = None  # Local file path if available
 
 class API510ReportRequest(BaseModel):

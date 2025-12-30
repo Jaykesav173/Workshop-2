@@ -67,6 +67,7 @@ class Report(Base):
     __tablename__ = "Report"
     
     id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(String, unique=True, nullable=False)  # UUID string
     equipment_id = Column(Integer, ForeignKey("Equipment.id"), nullable=True, index=True)  # Which equipment this report is for (searchable)
     created_by = Column(Integer, ForeignKey("User.id"), nullable=False, index=True)  # Inspector who created the report (searchable)
     report_path = Column(String)  # Local file path
