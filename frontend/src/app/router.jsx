@@ -17,6 +17,7 @@ import ValidationModule from '../modules/validation/Validation.jsx'
 import MonitoringModule from '../modules/monitoring/Monitoring.jsx'
 import EquipmentModule from '../modules/equipment/Equipment.jsx'
 import AnalyticsModule from '../modules/analytics/Analytics.jsx'
+import AnalysisModule from '../modules/Inspection Analysis/Analysis.jsx'
 
 function Router() {
   return (
@@ -34,6 +35,7 @@ function Router() {
         <Route path="/validation" element={<ValidationModule />} />
         <Route path="/equipment" element={<EquipmentModule />} />
         <Route path="/analytics" element={<AnalyticsModule />} />
+        <Route path="/analysis" element={<AnalysisModule />} />
       </Route>
     </Routes>
   )

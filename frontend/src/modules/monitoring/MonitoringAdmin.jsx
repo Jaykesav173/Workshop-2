@@ -106,17 +106,26 @@ function ReportHistory() {
           })
         })
         
-        const enrichedReports = reportsData.map(report => ({
-          ...report,
-          equipment_description: equipmentMap.get(report.equipment_id)?.description || 'No description available',
-          // Ensure all fields have proper defaults
-          defect_types_summary: report.defect_types_summary || {},
-          pdf_url: report.pdf_url || null,
-          summary: report.summary || '',
-          inspection_frequency: report.inspection_frequency || 'N/A',
-          labeled_defects: report.labeled_defects || [],
-          labeled_photos: report.labeled_photos || []
-        }))
+        // Filter and map reports with proper status handling
+        const enrichedReports = reportsData
+          .filter(report => {
+            // Only include reports with status "approved" or "rejected" (case-insensitive)
+            const status = report.status?.toLowerCase().trim();
+            return status === 'approved' || status === 'rejected';
+          })
+          .map(report => ({
+            ...report,
+            // Normalize status for display
+            status: report.status?.toLowerCase().trim() === 'approved' ? 'APPROVED' : 'REJECTED',
+            equipment_description: equipmentMap.get(report.equipment_id)?.description || 'No description available',
+            // Ensure all fields have proper defaults
+            defect_types_summary: report.defect_types_summary || {},
+            pdf_url: report.pdf_url || null,
+            summary: report.summary || '',
+            inspection_frequency: report.inspection_frequency || 'N/A',
+            labeled_defects: report.labeled_defects || [],
+            labeled_photos: report.labeled_photos || []
+          }))
         
         console.log('✅ Reports fetched:', enrichedReports.length)
         setReports(enrichedReports)
@@ -192,11 +201,9 @@ function ReportHistory() {
         return false
       }
 
-      // Status filter
-      if (filterStatus !== 'all') {
-        // Treat any non-COMPLETED status as REJECTED for filtering
-        const normalizedStatus = report.status === 'COMPLETED' ? 'COMPLETED' : 'REJECTED'
-        if (normalizedStatus !== filterStatus) return false
+      // Status filter - using normalized status
+      if (filterStatus !== 'all' && report.status !== filterStatus) {
+        return false
       }
 
       // Month filter
@@ -352,7 +359,7 @@ function ReportHistory() {
         defectTypeFrequency: defectTypes,
         inspectionsByEquipment: {},
         reportsByMonth: {},
-        statusBreakdown: { COMPLETED: 0, REJECTED: 0 },
+        statusBreakdown: { APPROVED: 0, REJECTED: 0 }, // CHANGED from COMPLETED to APPROVED
         complianceRate: 0,
         upcomingInspections: 0
       }
@@ -360,7 +367,7 @@ function ReportHistory() {
 
     const equipmentFreq = {}
     const monthFreq = {}
-    const statusFreq = { COMPLETED: 0, REJECTED: 0 }
+    const statusFreq = { APPROVED: 0, REJECTED: 0 } // CHANGED from COMPLETED to APPROVED
     let compliantReports = 0
     let upcomingCount = 0
     const today = new Date()
@@ -373,9 +380,8 @@ function ReportHistory() {
     const inspectionsToReports = new Map()
 
     filteredReports.forEach(report => {
-      // Status breakdown - treat any non-COMPLETED status as REJECTED
-      const normalizedStatus = report.status === 'COMPLETED' ? 'COMPLETED' : 'REJECTED'
-      statusFreq[normalizedStatus] = (statusFreq[normalizedStatus] || 0) + 1
+      // Status breakdown - reports are already filtered to only have APPROVED or REJECTED
+      statusFreq[report.status] = (statusFreq[report.status] || 0) + 1
 
       // Compliance - using real api_510_compliant field
       if (report.api_510_compliant) compliantReports++
@@ -391,7 +397,7 @@ function ReportHistory() {
         if (!inspectionsToReports.has(report.inspection_id)) {
           inspectionsToReports.set(report.inspection_id, {
             equipmentKey,
-            status: normalizedStatus
+            status: report.status
           })
           equipmentFreq[equipmentKey] = (equipmentFreq[equipmentKey] || 0) + 1
         }
@@ -502,19 +508,17 @@ function ReportHistory() {
 
   // Get status badge color
   const getStatusColor = (status) => {
-    // Treat any non-COMPLETED status as REJECTED for display
-    const normalizedStatus = status === 'COMPLETED' ? 'COMPLETED' : 'REJECTED'
     const colors = {
-      'COMPLETED': 'bg-green-100 text-green-800',
+      'APPROVED': 'bg-green-100 text-green-800', // CHANGED from COMPLETED to APPROVED
       'REJECTED': 'bg-red-100 text-red-800'
     }
-    return colors[normalizedStatus] || 'bg-gray-100 text-gray-800'
+    return colors[status] || 'bg-gray-100 text-gray-800'
   }
 
   // Get status display text
   const getStatusDisplay = (status) => {
-    // Treat any non-COMPLETED status as REJECTED for display
-    return status === 'COMPLETED' ? 'COMPLETED' : 'REJECTED'
+    // Status is already normalized to APPROVED or REJECTED
+    return status
   }
 
   // Download report as PDF
@@ -772,7 +776,7 @@ function ReportHistory() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Status</option>
-              <option value="COMPLETED">✅ COMPLETED</option>
+              <option value="APPROVED">✅ APPROVED</option> {/* CHANGED from COMPLETED to APPROVED */}
               <option value="REJECTED">❌ REJECTED</option>
             </select>
           </div>
@@ -843,24 +847,24 @@ function ReportHistory() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4">Report Status Distribution</h2>
           <div className="space-y-3">
-            {['COMPLETED', 'REJECTED'].map(status => (
+            {['APPROVED', 'REJECTED'].map(status => ( // CHANGED from ['COMPLETED', 'REJECTED']
               <div key={status} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    status === 'APPROVED' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' // CHANGED from COMPLETED to APPROVED
                   }`}>
-                    {status === 'COMPLETED' ? '✅' : '❌'}
+                    {status === 'APPROVED' ? '✅' : '❌'} {/* CHANGED from COMPLETED to APPROVED */}
                   </span>
                   
                   <span className="text-sm font-medium text-gray-700">
-                    {status === 'COMPLETED' ? 'Completed' : 'Rejected'}
+                    {status === 'APPROVED' ? 'Approved' : 'Rejected'} {/* CHANGED from Completed to Approved */}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-48 bg-gray-200 rounded-full h-2">
                     <div
                       className={`h-2 rounded-full ${
-                        status === 'COMPLETED' ? 'bg-green-500' : 'bg-red-500'
+                        status === 'APPROVED' ? 'bg-green-500' : 'bg-red-500' // CHANGED from COMPLETED to APPROVED
                       }`}
                       style={{
                         width: `${(analytics.statusBreakdown[status] / Math.max(1, analytics.totalReports)) * 100}%`

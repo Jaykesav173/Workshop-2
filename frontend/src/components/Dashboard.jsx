@@ -36,6 +36,7 @@ function Dashboard() {
     { path: '/reports', label: 'Reports', icon: '📄' },
     { path: '/validation', label: 'Validation', icon: '✅' },
     { path: '/analytics', label: 'Analytics', icon: '📈' },
+    { path: '/analysis', label: 'Analysis', icon: '🔬' },
   ]
 
   if (!user) {
