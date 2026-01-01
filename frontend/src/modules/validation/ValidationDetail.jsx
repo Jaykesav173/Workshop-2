@@ -372,7 +372,7 @@ export default function ValidationDetail() {
                     Save Progress
                 </button>
                 <button
-                    onClick={() => handleSubmitReview("Rejected")}
+                    onClick={() => handleSubmitReview("Rejected - Need Revisions")}
                     disabled={feedbackItems.length === 0}
                     className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-xl shadow-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold"
                     title={feedbackItems.length === 0 ? "Add changes needed first" : "Submit Rejection"}

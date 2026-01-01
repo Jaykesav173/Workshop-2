@@ -39,6 +39,11 @@ export default function Validation() {
     // Helper to get unique options for the value dropdown
     const getFilterOptions = () => {
         if (!filterCategory) return [];
+
+        if (filterCategory === "status") {
+            return ["Approved", "Rejected", "Continue Review"];
+        }
+
         const uniqueValues = new Set(reports.map(r => {
             if (filterCategory === "inspection_date") {
                 if (!r.inspection_date) return "N/A";
@@ -74,6 +79,13 @@ export default function Validation() {
                 const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
                 return monthYear === filter.value;
             }
+            if (filter.category === "status") {
+                const status = report.status ? report.status.toUpperCase() : 'COMPLETED';
+                if (filter.value === "Approved") return status === 'APPROVED';
+                if (filter.value === "Rejected") return status === 'REJECTED - NEED REVISIONS' || status === 'NEEDS REVISION' || status === 'REJECTED';
+                if (filter.value === "Continue Review") return status === 'IN_PROGRESS';
+                return false;
+            }
             const itemValue = report[filter.category];
             return (itemValue || "N/A") === filter.value;
         });
@@ -83,7 +95,8 @@ export default function Validation() {
         { value: "inspection_date", label: "Inspection Date" },
         { value: "inspector_name", label: "Inspector Name" },
         { value: "equipment_tag", label: "Equipment Name" },
-        { value: "equipment_location", label: "Equipment Location" }
+        { value: "equipment_location", label: "Equipment Location" },
+        { value: "status", label: "Status" }
     ];
 
     // Pagination Logic
@@ -264,14 +277,11 @@ export default function Validation() {
                                                             Continue Review
                                                         </button>
                                                     );
-                                                } else if (status === 'NEEDS REVISION') {
+                                                } else if (status === 'REJECTED - NEED REVISIONS' || status === 'NEEDS REVISION' || status === 'REJECTED') {
                                                     return (
-                                                        <button
-                                                            onClick={() => navigate(`/validation/${report.report_id}`)}
-                                                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200 hover:bg-red-200"
-                                                        >
-                                                            Needs Revision
-                                                        </button>
+                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                            Rejected - Need Revisions
+                                                        </span>
                                                     );
                                                 } else {
                                                     // COMPLETED, DRAFT, etc.
