@@ -8,7 +8,8 @@ Schemas for 4 core models:
 3. Equipment - Yi Jing (Equipment Information)
 4. Report - Abdalla (Intelligent Report Generation) & Jay (Report History & Review)
 """
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+from datetime import date, time
 from datetime import datetime
 from typing import Optional, List
 
@@ -89,14 +90,32 @@ class PhotoBase(BaseModel):
     file_name: Optional[str] = None
     file_size: Optional[int] = None
 
+# New schema to represent what GPT-4o returns
+class AIFindings(BaseModel):
+    description: str
+    recommendation: str
+    category: str
+    severity: str
+    box_2d: List[float] = []
+
 class PhotoCreate(PhotoBase):
-    pass
+    ai_description: Optional[str] = None
+    ai_recommendation: Optional[str] = None
+    category: Optional[str] = None
+    severity: Optional[str] = None
+    box_2d: Optional[List[float]] = []
 
 class PhotoResponse(PhotoBase):
     id: int
     uploaded_by: int
     storage_url: Optional[str] = None
     uploaded_at: datetime
+    # Add these so the UI can show previous analysis
+    ai_description: Optional[str] = None
+    ai_recommendation: Optional[str] = None
+    category: Optional[str] = None
+    severity: Optional[str] = None
+    box_2d: Optional[List[float]] = []
     
     class Config:
         from_attributes = True
@@ -259,6 +278,40 @@ class API510ReportRequest(BaseModel):
     photos: list[PhotoItem]
     ndt_text: Optional[str] = None  # NDT section text
     initial_inspection_text: Optional[str] = "Initial/Pre-Inspection — Not applicable"
+
+
+
+# SCHEDULE MODULE SCHEMAS - ASILLAH
+class ScheduleBase(BaseModel):
+    equipment_id: int
+    equipment_type: Optional[str] = None
+    safety_category: Optional[str] = None
+    location: Optional[str] = None
+    inspector_id: int
+    scheduled_date: date
+    start_time: time
+    end_time: time
+    priority: str = "Medium"
+    details: Optional[str] = None
+
+    # Backend Guard: Prevents logic errors if frontend validation is bypassed
+    @field_validator('end_time')
+    @classmethod
+    def check_time_logic(cls, v, info):
+        if 'start_time' in info.data and v <= info.data['start_time']:
+            raise ValueError('End Time must be later than Start Time')
+        return v
+
+class ScheduleCreate(ScheduleBase):
+    engineer_id: int
+
+class ScheduleResponse(ScheduleBase):
+    schedule_id: int
+    engineer_id: Optional[int] = None
+    status: str
+
+    class Config:
+        from_attributes = True
 
 # ============================================
 # Template Management Schemas

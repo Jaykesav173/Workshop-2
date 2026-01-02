@@ -65,7 +65,7 @@ const Icons = {
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: Icons.Dashboard, path: '/inspector/dashboard' },
   { id: 'inspection', label: 'Inspection Workflow', icon: Icons.Eye, path: '/inspection' },
-  { id: 'photos', label: 'Photo Upload', icon: Icons.Camera, path: '/photo-upload' },
+  { id: 'photos', label: 'Inspection Schedule', icon: Icons.Camera, path: '/photo-upload' },
   { id: 'reports', label: 'Generate Report', icon: Icons.FileText, path: '/reports' },
   { id: 'defect-ai', label: 'Defect AI', icon: Icons.Bot, path: '/defect-ai' },
   { id: 'validation', label: 'Validation', icon: Icons.CheckCircle, path: '/validation' },
@@ -81,7 +81,7 @@ export default function InspectorLayout({ children, activeMenuId = 'inspection' 
   useEffect(() => {
     const userStr = localStorage.getItem('user')
     const token = localStorage.getItem('token')
-    
+
     if (!token) {
       navigate('/login')
       return
@@ -112,7 +112,7 @@ export default function InspectorLayout({ children, activeMenuId = 'inspection' 
           <h1 className={`text-xl font-bold text-gray-900 ${!sidebarOpen && 'hidden'}`}>VISOR</h1>
           <h1 className={`text-xl font-bold text-gray-900 ${sidebarOpen && 'hidden'}`}>V</h1>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-1">
           {menuItems.map((item) => {
             const isActive = activeMenuId === item.id || location.pathname === item.path
@@ -122,11 +122,10 @@ export default function InspectorLayout({ children, activeMenuId = 'inspection' 
                 onClick={() => {
                   if (item.path) navigate(item.path)
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  isActive
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive
                     ? 'bg-blue-50 text-blue-600 font-medium'
                     : 'text-gray-700 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <div className={`${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
                   <item.icon />
@@ -155,7 +154,7 @@ export default function InspectorLayout({ children, activeMenuId = 'inspection' 
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center gap-4 ml-6">
               <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative">
                 <Icons.Bell />

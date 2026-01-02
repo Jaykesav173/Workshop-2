@@ -8,11 +8,12 @@ Models:
 3. Equipment - Yi Jing (Equipment Information)
 4. Report - Abdalla (Intelligent Report Generation) & Jay (Report History & Review)
 """
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey, Text, BigInteger, TIMESTAMP, func, Date, Time
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+from .database import Base
 
-Base = declarative_base()
+# Base = declarative_base()
 
 # 1. User Model - Haifa (User Authentication)
 class User(Base):
@@ -50,17 +51,31 @@ class Equipment(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 # 3. Photo Model - Asillah (Photo Upload)
+# backend/app/models.py
+
 class Photo(Base):
     __tablename__ = "Photo"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    equipment_id = Column(Integer, nullable=True) 
+    uploaded_by = Column(BigInteger, nullable=True)
+
     
-    id = Column(Integer, primary_key=True, index=True)
-    equipment_id = Column(Integer, ForeignKey("Equipment.id"), nullable=True)  # Optional link to equipment
-    uploaded_by = Column(Integer, ForeignKey("User.id"), nullable=False)  # Who uploaded the photo
-    file_path = Column(String, nullable=False)
-    storage_url = Column(String)  # Supabase storage URL
-    file_name = Column(String)
-    file_size = Column(Integer)  # Size in bytes
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    file_path = Column(Text, nullable=False)
+    storage_url = Column(Text, nullable=False)
+    file_name = Column(String, nullable=False)
+    file_size = Column(BigInteger)
+
+
+    uploaded_at = Column(TIMESTAMP, nullable=False, server_default=func.current_timestamp())
+
+    ai_description = Column(Text)
+    ai_recommendation = Column(Text)
+    category = Column(String, nullable=True) # e.g., Structural, Coating
+    severity = Column(String, nullable=True) # e.g., Low, Medium, High, Critical
+
+    box_2d = Column(JSON, nullable=True) # Store the [y, x, y, x] list
+
 
 # 4. Report Model - Abdalla (Intelligent Report Generation) & Jay (Report History & Review)
 class Report(Base):
@@ -165,6 +180,28 @@ class ReportReview(Base):
     reviewed_by = Column(Integer, ForeignKey("User.id"), nullable=False)
     status = Column(String, nullable=False)  # Approved, Pending, Rejected
     reviewed_at = Column(DateTime, default=datetime.utcnow)
+
+    # 11. Inspection schedule - ASILLAH 
+class InspectionSchedule(Base):
+    __tablename__ = "inspection_schedules"
+
+    schedule_id = Column(Integer, primary_key=True, index=True)
+    # Manual ID entry from your latest request
+    equipment_id = Column(Integer, index=True) 
+    equipment_type = Column(String)  #
+    safety_category = Column(String) #
+    location = Column(String)        #
+    
+    engineer_id = Column(Integer, ForeignKey("users.id"))
+    inspector_id = Column(Integer, ForeignKey("users.id"))
+    
+    scheduled_date = Column(Date)
+    start_time = Column(Time)  #
+    end_time = Column(Time)    #
+    
+    status = Column(String, default="Pending")
+    priority = Column(String, default="Medium")
+    details = Column(Text, nullable=True) #
 
 class SectionFeedback(Base):
     __tablename__ = "section_feedback"

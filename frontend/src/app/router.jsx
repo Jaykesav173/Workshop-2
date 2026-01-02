@@ -69,6 +69,8 @@ function Router() {
         <Route path="/validation" element={<Validation />} />
         <Route path="/validation/:id" element={<ValidationDetail />} />
 
+        
+
         {/* Redirect any unknown routes to login */}
         <Route path="*" element={<Navigate to="/validation" replace />} />
       </Route>

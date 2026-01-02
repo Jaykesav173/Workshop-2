@@ -108,7 +108,7 @@ export default function MainLayout() {
   const inspectorMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Icons.Dashboard, path: '/inspector/dashboard' },
     { id: 'inspection', label: 'Inspection Workflow', icon: Icons.Eye, path: '/inspection' },
-    { id: 'photos', label: 'Photo Upload', icon: Icons.Camera, path: '/photo-upload' },
+    { id: 'photos', label: 'Inspection Schedule', icon: Icons.Camera, path: '/photo-upload' },
     { id: 'reports', label: 'Generate Report', icon: Icons.FileText, path: '/reports' },
     { id: 'defect-ai', label: 'Defect AI', icon: Icons.Bot, path: '/defect-ai' },
     { id: 'validation', label: 'Validation', icon: Icons.CheckCircle, path: '/validation' },
