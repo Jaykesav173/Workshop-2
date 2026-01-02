@@ -54,7 +54,7 @@ export function ChangePassword() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("http://localhost:8000/reset_password_first_login", {
+      const response = await fetch("http://localhost:8000/api/auth/reset_password_first_login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

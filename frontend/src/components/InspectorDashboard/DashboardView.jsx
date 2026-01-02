@@ -14,11 +14,11 @@ export default function DashboardView() {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const API_BASE = "http://localhost:8000";
+  const API_BASE = "http://localhost:8000/api";
 
   // ✅ Get user ID from local storage
   useEffect(() => {
-    const storedUser = localStorage.getItem("loggedInUser");
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("loggedInUser");
     if (storedUser) {
       const user = JSON.parse(storedUser);
       if (user?.id) {
@@ -35,20 +35,23 @@ export default function DashboardView() {
       try {
         setLoading(true);
 
+        const token = localStorage.getItem("token");
+        const headers = { Authorization: `Bearer ${token}` };
+
         // Summary
-        const resSummary = await fetch(`${API_BASE}/dashboard/user_summary/${userId}`);
+        const resSummary = await fetch(`${API_BASE}/dashboard/user_summary/${userId}`, { headers });
         const summary = await resSummary.json();
 
         // Status breakdown
-        const resStatus = await fetch(`${API_BASE}/dashboard/reports_by_status/${userId}`);
+        const resStatus = await fetch(`${API_BASE}/dashboard/reports_by_status/${userId}`, { headers });
         const status = await resStatus.json();
 
         // Trend
-        const resTrend = await fetch(`${API_BASE}/dashboard/reports_trend/${userId}`);
+        const resTrend = await fetch(`${API_BASE}/dashboard/reports_trend/${userId}`, { headers });
         const trend = await resTrend.json();
 
         // Recent activity
-        const resActivity = await fetch(`${API_BASE}/dashboard/recent_activity/${userId}`);
+        const resActivity = await fetch(`${API_BASE}/dashboard/recent_activity/${userId}`, { headers });
         const activity = await resActivity.json();
 
         console.log("Dashboard summary:", summary);

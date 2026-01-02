@@ -4,7 +4,7 @@
  * Matches Admin Dashboard design aesthetic
  */
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 // Simple SVG Icon Components (matching Admin Dashboard)
 const Icons = {
@@ -134,29 +134,196 @@ function InspectorDashboard() {
     }
   }, [navigate])
 
-  // Mock data for Inspector Dashboard
+  // State for Real Data
+  const [schedules, setSchedules] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [kpiStats, setKpiStats] = useState({
+    pending: 0,
+    completedToday: 0,
+    overdue: 0,
+    total: 0
+  })
+
+  // Fetch Schedules on Mount
+  useEffect(() => {
+    if (user?.id) {
+      fetchSchedules(user.id)
+    }
+  }, [user])
+
+  const fetchSchedules = async (userId) => {
+    try {
+      const res = await fetch(`http://localhost:8000/schedules/all`)
+      if (res.ok) {
+        const all = await res.json()
+        const mySchedules = all.filter(s => s.inspector_id == userId)
+
+        // Sort by date (newest first)
+        mySchedules.sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date))
+
+        setSchedules(mySchedules)
+        calculateKPIs(mySchedules)
+      }
+    } catch (e) {
+      console.error("Failed to fetch schedules", e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const calculateKPIs = (data) => {
+    const today = new Date().toISOString().split('T')[0]
+    const pending = data.filter(s => s.status === 'Pending').length
+    const completedToday = data.filter(s => s.status === 'Completed' && s.scheduled_date === today).length
+    const overdue = data.filter(s => s.status !== 'Completed' && s.scheduled_date < today).length
+
+    setKpiStats({
+      pending,
+      completedToday,
+      overdue,
+      total: data.length
+    })
+  }
+
+  // Derived KPI Data for UI
   const kpiData = [
-    { title: 'Pending Inspections', value: '8', trend: '+2', trendUp: true, icon: Icons.Eye, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
-    { title: 'Completed Today', value: '5', trend: '+1', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
-    { title: 'Photos Uploaded', value: '142', trend: '+23', trendUp: true, icon: Icons.Camera, bgColor: 'bg-purple-50', iconColor: 'text-purple-600' },
-    { title: 'Reports Generated', value: '12', trend: '+3', trendUp: true, icon: Icons.FileText, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
-    { title: 'Pending QA Review', value: '4', trend: '-1', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-yellow-50', iconColor: 'text-yellow-600' },
-    { title: 'Active Sites', value: '6', trend: '0', trendUp: true, icon: Icons.Building, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
+    { title: 'Pending Actions', value: kpiStats.pending.toString(), trend: 'Active', trendUp: true, icon: Icons.Eye, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
+    { title: 'Completed Today', value: kpiStats.completedToday.toString(), trend: 'Good job', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
+    { title: 'Overdue Items', value: kpiStats.overdue.toString(), trend: 'Action Needed', trendUp: false, icon: Icons.Clock, bgColor: 'bg-red-50', iconColor: 'text-red-600' },
   ]
 
-  const recentInspections = [
-    { site: 'Site A - Tank T-101', status: 'In Progress', priority: 'High', assigned: 'You', timestamp: '2 hours ago' },
-    { site: 'Site B - Vessel V-205', status: 'Pending', priority: 'Medium', assigned: 'You', timestamp: '5 hours ago' },
-    { site: 'Site C - Reactor R-301', status: 'Completed', priority: 'Low', assigned: 'You', timestamp: '1 day ago' },
-    { site: 'Site A - Pump P-102', status: 'In Progress', priority: 'High', assigned: 'You', timestamp: '2 days ago' },
-  ]
-
+  // Recent Activity (Mocked for now as we don't have an activity log endpoint yet)
   const recentActivity = [
-    { action: 'Uploaded 12 photos', module: 'Photo Upload', timestamp: '15 minutes ago' },
-    { action: 'Generated Report #342', module: 'Reports', timestamp: '1 hour ago' },
-    { action: 'Started inspection at Site A', module: 'Inspection', timestamp: '2 hours ago' },
-    { action: 'Validated inspection data', module: 'Validation', timestamp: '3 hours ago' },
+    { action: 'System check', module: 'System', timestamp: 'Just now' }
   ]
+
+  // Deep Linking & Modal State
+  const [searchParams] = useSearchParams()
+  const [selectedSchedule, setSelectedSchedule] = useState(null)
+
+  // Check URL for deep link
+  useEffect(() => {
+    const scheduleId = searchParams.get('scheduleId')
+    if (scheduleId && schedules.length > 0) {
+      const found = schedules.find(s => s.schedule_id == scheduleId)
+      if (found) {
+        setSelectedSchedule(found)
+      }
+    }
+  }, [searchParams, schedules])
+
+  const handleScheduleClick = (schedule) => {
+    setSelectedSchedule(schedule)
+  }
+
+  const handleConfirm = async (scheduleId) => {
+    if (!scheduleId) return
+
+    try {
+      // Optimistic Update
+      const updatedSchedules = schedules.map(s =>
+        s.schedule_id === scheduleId ? { ...s, status: 'Confirmed' } : s
+      )
+      setSchedules(updatedSchedules)
+      if (selectedSchedule && selectedSchedule.schedule_id === scheduleId) {
+        setSelectedSchedule({ ...selectedSchedule, status: 'Confirmed' })
+      }
+
+      // API Call
+      const res = await fetch(`http://localhost:8000/schedules/${scheduleId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Confirmed' })
+      })
+
+      if (!res.ok) {
+        // Revert on failure (or fetch again)
+        console.error("Failed to confirm schedule")
+        fetchSchedules(user.id)
+      }
+    } catch (e) {
+      console.error("Error confirming schedule:", e)
+      fetchSchedules(user.id)
+    }
+  }
+
+  // Modal Component
+  const ScheduleDetailsModal = ({ schedule, onClose }) => {
+    if (!schedule) return null
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white">
+            <h2 className="text-xl font-bold text-gray-900">Inspection Details</h2>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Header Info */}
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <Icons.Building className="w-8 h-8 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">EQ-{schedule.equipment_id}</h3>
+                <p className="text-gray-600">{schedule.location || 'Unknown Location'}</p>
+                <span className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-semibold ${schedule.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                  schedule.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-blue-100 text-blue-800'
+                  }`}>
+                  {schedule.status}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <p className="text-xs text-gray-500 uppercase font-semibold mb-2">Schedule Info</p>
+                <div className="space-y-3">
+                  <div><span className="text-gray-500 text-sm">Date:</span> <span className="font-medium text-gray-900 ml-2">{schedule.scheduled_date}</span></div>
+                  <div><span className="text-gray-500 text-sm">Time:</span> <span className="font-medium text-gray-900 ml-2">{schedule.start_time} - {schedule.end_time}</span></div>
+                  <div><span className="text-gray-500 text-sm">Priority:</span> <span className="font-medium text-gray-900 ml-2">{schedule.priority}</span></div>
+                </div>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <p className="text-xs text-gray-500 uppercase font-semibold mb-2">Technical Info</p>
+                <div className="space-y-3">
+                  <div><span className="text-gray-500 text-sm">Type:</span> <span className="font-medium text-gray-900 ml-2">{schedule.equipment_type || 'N/A'}</span></div>
+                  <div><span className="text-gray-500 text-sm">Safety:</span> <span className="font-medium text-gray-900 ml-2">{schedule.safety_category || 'N/A'}</span></div>
+                </div>
+              </div>
+            </div>
+
+            {schedule.details && (
+              <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100">
+                <p className="text-sm font-semibold text-yellow-800 mb-1">Inspector Notes / Instructions</p>
+                <p className="text-sm text-yellow-700">{schedule.details}</p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-4 pt-4">
+              {schedule.status === 'Pending' && (
+                <button onClick={() => handleConfirm(schedule.schedule_id)} className="flex-1 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-lg shadow-blue-200">
+                  Confirm Schedule
+                </button>
+              )}
+              {schedule.status === 'Confirmed' && (
+                <button onClick={() => navigate('/inspection')} className="flex-1 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-lg shadow-blue-200">
+                  Start Inspection
+                </button>
+              )}
+              <button onClick={() => navigate('/photo-upload')} className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-xl hover:bg-gray-50 transition-colors font-semibold">
+                Upload Photos
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -244,44 +411,53 @@ function InspectorDashboard() {
 
       {/* Tables Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Inspections */}
+        {/* Recent Inspections (Now Real Schedules) */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Inspections</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Your Inspection Schedule</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Site</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Equipment / Location</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {recentInspections.map((inspection, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => navigate('/inspection')}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{inspection.site}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${inspection.status === 'Completed' ? 'bg-green-100 text-green-800' :
-                          inspection.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                            'bg-yellow-100 text-yellow-800'
-                        }`}>
-                        {inspection.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${inspection.priority === 'High' ? 'bg-red-100 text-red-800' :
-                          inspection.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                        }`}>
-                        {inspection.priority}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{inspection.timestamp}</td>
-                  </tr>
-                ))}
+                {loading ? (
+                  <tr><td colSpan="4" className="text-center py-4">Loading your schedule...</td></tr>
+                ) : schedules.length === 0 ? (
+                  <tr><td colSpan="4" className="text-center py-4 text-gray-500">No schedules assigned.</td></tr>
+                ) : (
+                  schedules.map((schedule, index) => (
+                    <tr key={index} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => handleScheduleClick(schedule)}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        EQ-{schedule.equipment_id} <span className="text-gray-400">|</span> {schedule.location || 'Site'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${schedule.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                          schedule.status === 'Confirmed' ? 'bg-blue-100 text-blue-800' :
+                            schedule.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-gray-100 text-gray-800'
+                          }`}>
+                          {schedule.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${schedule.priority === 'High' ? 'bg-red-100 text-red-800' :
+                          schedule.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                          {schedule.priority || 'Medium'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{schedule.scheduled_date}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -324,6 +500,7 @@ function InspectorDashboard() {
           <Icons.Plus />
         </button>
       </div>
+      <ScheduleDetailsModal schedule={selectedSchedule} onClose={() => setSelectedSchedule(null)} />
     </>
   )
 }

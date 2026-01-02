@@ -4,7 +4,7 @@
  */
 import { Routes, Route, Navigate } from 'react-router-dom'
 
-// Layout import - keep our MainLayout
+// Layout import
 import MainLayout from '../components/MainLayout.jsx'
 
 // Module imports
@@ -19,12 +19,18 @@ import ReportsModule from '../modules/reports/Reports.jsx'
 import MonitoringModule from '../modules/monitoring/Monitoring.jsx'
 import EquipmentModule from '../modules/equipment/Equipment.jsx'
 import AnalyticsModule from '../modules/analytics/Analytics.jsx'
-import AdminDashboard from '../modules/admin/AdminDashboard.jsx'
-import InspectorDashboard from '../modules/inspector/InspectorDashboard.jsx'
 import Validation from "../modules/validation/Validation";
 import ValidationDetail from "../modules/validation/ValidationDetail";
 
-// New auth routes from dev-haifa
+// Dashboard Components (Refactored)
+import AdminDashboardView from '../components/AdminDashboard/AdminDashboardView.jsx'
+import { UsersTable } from '../components/AdminDashboard/UsersTable.jsx'
+import { SettingsView as AdminSettings } from '../components/AdminDashboard/SettingsView.jsx'
+
+import InspectorDashboardView from '../components/InspectorDashboard/DashboardView.jsx'
+import { SettingsView as InspectorSettings } from '../components/InspectorDashboard/SettingsView.jsx'
+
+// Auth recovery routes
 import ForgotPassword from "../modules/auth/ForgotPassword.jsx"
 import OTPVerification from "../modules/auth/OTPVerification.jsx"
 import ResetPassword from "../modules/auth/ResetPassword.jsx"
@@ -36,11 +42,10 @@ import SecurityQuestions from "../modules/auth/SecurityQuestions.jsx"
 function Router() {
   return (
     <Routes>
-      {/* <Route path="/" element={<Navigate to="/inspector/dashboard" replace />} /> */}
       <Route path="/" element={<Navigate to="/validation" replace />} />
       <Route path="/login" element={<AuthModule />} />
 
-      {/* Auth recovery routes from dev-haifa */}
+      {/* Auth recovery routes */}
       <Route path="/recover/forgot" element={<ForgotPassword />} />
       <Route path="/recover/otp" element={<OTPVerification />} />
       <Route path="/recover/reset" element={<ResetPassword />} />
@@ -51,11 +56,16 @@ function Router() {
       <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/complete-profile" element={<CompleteProfile />} />
 
-      {/* Authenticated Routes with MainLayout - keep our structure */}
+      {/* Authenticated Routes with MainLayout */}
       <Route element={<MainLayout />}>
-        {/* Dashboard Routes - keep our dashboards */}
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/inspector/dashboard" element={<InspectorDashboard />} />
+        {/* Admin Routes */}
+        <Route path="/admin/dashboard" element={<AdminDashboardView />} />
+        <Route path="/admin/users" element={<UsersTable />} />
+        <Route path="/admin/settings" element={<AdminSettings />} />
+
+        {/* Inspector Routes */}
+        <Route path="/inspector/dashboard" element={<InspectorDashboardView />} />
+        <Route path="/inspector/settings" element={<InspectorSettings />} />
 
         {/* Module Routes */}
         <Route path="/photo-upload" element={<PhotoUploadModule />} />
@@ -65,11 +75,13 @@ function Router() {
         <Route path="/inspection/:id" element={<InspectionDetails />} />
         <Route path="/defect-ai" element={<DefectAIModule />} />
         <Route path="/reports" element={<ReportsModule />} />
-        {/* Validation Module (Formerly Report Review) */}
+        <Route path="/monitoring" element={<MonitoringModule />} />
+        <Route path="/equipment" element={<EquipmentModule />} />
+        <Route path="/analytics" element={<AnalyticsModule />} />
+
+        {/* Validation Module */}
         <Route path="/validation" element={<Validation />} />
         <Route path="/validation/:id" element={<ValidationDetail />} />
-
-        
 
         {/* Redirect any unknown routes to login */}
         <Route path="*" element={<Navigate to="/validation" replace />} />

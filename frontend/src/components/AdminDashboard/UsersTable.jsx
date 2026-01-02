@@ -24,10 +24,19 @@ export function UsersTable() {
   /* ================= FETCH USERS ================= */
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`${API_BASE}/users`);
+      const token = localStorage.getItem("token");
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await fetch(`${API_BASE}/users`, { headers });
       const data = await res.json();
 
-      if (data.success) {
+      if (Array.isArray(data)) {
+        setUsers(
+          data.map((u) => ({
+            ...u,
+            status: u.Account_status ?? "UNKNOWN",
+          }))
+        );
+      } else if (data.success && Array.isArray(data.users)) {
         setUsers(
           data.users.map((u) => ({
             ...u,
@@ -58,9 +67,13 @@ export function UsersTable() {
     }
 
     try {
+      const token = localStorage.getItem("token");
       const res = await fetch(`${API_BASE}/users`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
         body: JSON.stringify({
           ...newUser,
           password: newUser.password || "",
@@ -94,8 +107,10 @@ export function UsersTable() {
 
   /* ================= TOGGLE STATUS ================= */
   const toggleStatus = async (id) => {
+    const token = localStorage.getItem("token");
     const res = await fetch(`${API_BASE}/users/${id}/status`, {
       method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
 
@@ -217,22 +232,20 @@ export function UsersTable() {
               <td className="px-4 py-2">{u.username}</td>
               <td className="px-4 py-2">{u.role}</td>
               <td
-                className={`px-4 py-2 font-semibold ${
-                  u.status === "ACTIVE"
-                    ? "text-green-600"
-                    : "text-red-600"
-                }`}
+                className={`px-4 py-2 font-semibold ${u.status === "ACTIVE"
+                  ? "text-green-600"
+                  : "text-red-600"
+                  }`}
               >
                 {u.status}
               </td>
               <td className="text-center">
                 <button
                   onClick={() => toggleStatus(u.id)}
-                  className={`px-3 py-1 rounded text-white ${
-                    u.status === "ACTIVE"
-                      ? "bg-red-500"
-                      : "bg-green-500"
-                  }`}
+                  className={`px-3 py-1 rounded text-white ${u.status === "ACTIVE"
+                    ? "bg-red-500"
+                    : "bg-green-500"
+                    }`}
                 >
                   {u.status === "ACTIVE" ? "Deactivate" : "Activate"}
                 </button>

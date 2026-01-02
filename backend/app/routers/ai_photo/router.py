@@ -1,16 +1,15 @@
 import uuid
 import json
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 from PIL import Image
 from fastapi import APIRouter, File, UploadFile, Form, Depends, HTTPException
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 # Internal Imports
 from app.ai_models.defect_detector import analyze_defect_image # Updated import
-from app.database.models import Photo  # Ensure this matches your models.py
-from app.database.database import get_db 
+# from app.database.models import Photo  # Not needed for REST
+# from app.database.database import get_db # Not needed for REST
 from app.database.connection import supabase # Ensure these match your config
 from app.config import settings
 
@@ -81,23 +80,26 @@ from app.dependencies import get_current_user
 class PhotoResponse(BaseModel):
     id: int
     file_path: str
-    storage_url: str
+    storage_url: Optional[str] = None
     file_name: str
-    ai_description: str
-    ai_recommendation: str
-    category: str = None
-    severity: str = None
-    uploaded_at: datetime = None
+    ai_description: Optional[str] = None
+    ai_recommendation: Optional[str] = None
+    category: Optional[str] = None
+    severity: Optional[str] = None
+    uploaded_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
 def debug_log(message):
-    with open("c:/Users/HP/Workshop2-asillah/backend/debug_ai_photo.log", "a") as f:
-        f.write(f"{datetime.now()}: {message}\n")
+    try:
+        with open("debug_ai_photo.log", "a") as f:
+            f.write(f"{datetime.now()}: {message}\n")
+    except Exception as e:
+        print(f"Failed to write to debug log: {e}")
 
 @router.get("/my_defects", response_model=List[PhotoResponse])
-def get_my_defects(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+def get_my_defects(current_user: dict = Depends(get_current_user)):
     """Get all defects uploaded/saved by the current user"""
     debug_log(f"current_user object: {current_user}")
     user_id = current_user.get("id")
@@ -109,9 +111,15 @@ def get_my_defects(db: Session = Depends(get_db), current_user: dict = Depends(g
         except:
             pass
             
-    photos = db.query(Photo).filter(Photo.uploaded_by == user_id).order_by(Photo.uploaded_at.desc()).all()
-    debug_log(f"Found {len(photos)} photos for user_id={user_id}")
-    return photos
+    try:
+        # Use Supabase Client (REST) instead of SQLAlchemy (Direct DB) to avoid DNS/Port issues
+        res = supabase.table("Photo").select("*").eq("uploaded_by", user_id).order("uploaded_at", desc=True).execute()
+        photos = res.data
+        debug_log(f"Found {len(photos)} photos for user_id={user_id}")
+        return photos
+    except Exception as e:
+        debug_log(f"Error fetching defects: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze")
 async def analyze_photos(files: List[UploadFile] = File(...)):
@@ -145,7 +153,6 @@ async def confirm_save(
     severity: str = Form(...),
     box_2d: str = Form(...),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user) # Add Auth Dependency
 ):
     # import json
@@ -166,29 +173,33 @@ async def confirm_save(
         except:
             pass
 
-    # We create the record. PostgreSQL/Supabase will automatically 
-    # generate the 'id' (Photo ID).
-    new_photo = Photo(
-        file_path=file_path,
-        file_name=file.filename,
-        file_size=file_size,
-        storage_url=public_url,
-        ai_description=ai_description,
-        ai_recommendation=ai_recommendation,
-        category=category,
-        severity=severity,
-        box_2d=box_2d,
-        # Set these to 0 or allow null if your model.py permits
-        equipment_id=None, 
-        uploaded_by=user_id # Link to user
-    )
+    # Record data via Supabase Client
+    new_photo_data = {
+        "file_path": file_path,
+        "file_name": file.filename,
+        "file_size": file_size,
+        "storage_url": public_url,
+        "ai_description": ai_description,
+        "ai_recommendation": ai_recommendation,
+        "category": category,
+        "severity": severity,
+        "box_2d": box_2d, # Expecting valid JSON string or list if client handles it
+        "equipment_id": None, 
+        "uploaded_by": user_id
+    }
     
-    db.add(new_photo)
-    db.commit()
-    db.refresh(new_photo)
-    
-    return {
-        "message": "Defect saved",
-        "photo_id": new_photo.id, # This is the unique ID identifying this detection
-        "storage_url": new_photo.storage_url
-    } 
+    try:
+        res = supabase.table("Photo").insert(new_photo_data).execute()
+        if not res.data:
+             raise HTTPException(status_code=500, detail="Failed to save photo record to Supabase")
+        
+        new_photo = res.data[0]
+        
+        return {
+            "message": "Defect saved",
+            "photo_id": new_photo['id'], 
+            "storage_url": new_photo['storage_url']
+        } 
+    except Exception as e:
+        debug_log(f"Error saving defect: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) 

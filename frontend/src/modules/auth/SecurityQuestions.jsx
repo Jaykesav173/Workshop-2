@@ -20,7 +20,7 @@ export default function SecurityQuestions() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/verify_security_questions`, {  // You need backend for this
+      const res = await fetch(`${API_BASE}/api/auth/verify_security_questions`, {  // You need backend for this
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, school_name: school, mother_name: motherName }),

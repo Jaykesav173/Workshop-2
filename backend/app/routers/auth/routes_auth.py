@@ -3,7 +3,11 @@ Authentication Routes - Haifa
 API endpoints for user authentication
 """
 from fastapi import APIRouter, HTTPException, Depends
-from app.database.schemas import LoginRequest, LoginResponse, UserCreate, UserResponse
+from app.database.schemas import (
+    LoginRequest, LoginResponse, UserCreate, UserResponse,
+    VerifySecurityQuestionsRequest, OTPVerifyRequest, EmailRequest,
+    ResetPasswordRequest, ResetPasswordForgotRequest, CompleteProfileRequest
+)
 from app.routers.auth.service_auth import AuthService
 from app.dependencies import get_current_user
 
@@ -20,6 +24,36 @@ async def login(credentials: LoginRequest):
 async def register(user_data: UserCreate):
     """User registration endpoint"""
     return await auth_service.register(user_data)
+
+@router.post("/verify_security_questions")
+async def verify_security_questions(data: VerifySecurityQuestionsRequest):
+    """Verify security questions and send OTP"""
+    return await auth_service.verify_security_questions(data)
+
+@router.post("/send_recovery_email")
+async def send_recovery_email(req: EmailRequest):
+    """Send separate OTP email (if needed)"""
+    return await auth_service.send_recovery_email(req)
+
+@router.post("/verify_otp")
+async def verify_otp(req: OTPVerifyRequest):
+    """Verify OTP code"""
+    return await auth_service.verify_otp(req)
+
+@router.post("/reset_password_forgot")
+async def reset_password_forgot(req: ResetPasswordForgotRequest):
+    """Reset password (forgot flow)"""
+    return await auth_service.reset_password_forgot(req)
+
+@router.post("/reset_password_first_login")
+async def reset_password_first_login(req: ResetPasswordRequest):
+    """Reset password (first login flow)"""
+    return await auth_service.reset_password_first_login(req)
+
+@router.post("/complete_profile")
+async def complete_profile(data: CompleteProfileRequest):
+    """Complete user profile details"""
+    return await auth_service.complete_profile(data)
 
 @router.get("/me")
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):

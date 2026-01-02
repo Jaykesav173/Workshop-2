@@ -20,16 +20,26 @@ class UserBase(BaseModel):
     name: str
     email: EmailStr
     username: str
-    role: str
+    role: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
     Account_status: str = "ACTIVE"
 
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    username: Optional[str] = None
+    phone_number: Optional[str] = None
+    ic_number: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    school_name: Optional[str] = None
+    mother_name: Optional[str] = None
+
 class UserResponse(UserBase):
     id: int
-    Account_status: str
-    created_at: datetime
+    Account_status: Optional[str] = "ACTIVE"
+    created_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -43,6 +53,35 @@ class LoginResponse(BaseModel):
     message: str
     access_token: Optional[str] = None
     user: Optional[dict] = None
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+class OTPVerifyRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+class ResetPasswordRequest(BaseModel):
+    username: str
+    current_password: str
+    new_password: str
+
+class ResetPasswordForgotRequest(BaseModel):
+    email: EmailStr
+    new_password: str
+
+class VerifySecurityQuestionsRequest(BaseModel):
+    email: EmailStr
+    school_name: str
+    mother_name: str
+
+class CompleteProfileRequest(BaseModel):
+    username: str
+    ic_number: str
+    date_of_birth: str
+    phone_number: str
+    school_name: str
+    mother_name: str
 
 # ============================================
 # 2. Equipment Schemas - Yi Jing (Equipment Information)
@@ -304,6 +343,7 @@ class ScheduleBase(BaseModel):
 
 class ScheduleCreate(ScheduleBase):
     engineer_id: int
+    inspector_email: Optional[EmailStr] = None
 
 class ScheduleResponse(ScheduleBase):
     schedule_id: int
@@ -397,6 +437,7 @@ class ReportReviewItem(BaseModel):
     created_at: Optional[datetime] = None
     inspector_name: Optional[str] = None
     status: str
+    created_by: Optional[int] = None
 
     class Config:
         from_attributes = True

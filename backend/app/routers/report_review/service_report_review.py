@@ -69,7 +69,8 @@ class ReportReviewService:
                         equipment_location=location,
                         inspector_name=inspector,
                         created_at=r.get("created_at"),
-                        status=r.get("status", "Draft")
+                        status=r.get("status", "Draft"),
+                        created_by=user_id
                     )
                     reports.append(item)
             return reports
@@ -237,8 +238,164 @@ class ReportReviewService:
             # 3. Update Report Status
             self.db.table("Report").update({"status": normalized_status}).eq("report_id", review_data.report_id).execute()
 
+            # 4. Send Email Notification to Inspector
+            if normalized_status in ["APPROVED", "NEEDS REVISION"]:
+                try:
+                    # Fetch Report Title and Creator ID
+                    report_res = self.db.table("Report").select("title, created_by").eq("report_id", review_data.report_id).single().execute()
+                    if report_res.data:
+                        report = report_res.data
+                        creator_id = report.get('created_by')
+                        report_title = report.get('title')
+
+                        # Fetch Creator Email
+                        user_res = self.db.table("User").select("email, username").eq("id", creator_id).single().execute()
+                        if user_res.data:
+                            creator_email = user_res.data.get('email')
+                            creator_name = user_res.data.get('username')
+                            
+                            from app.utils.email_utils import send_email
+                            
+                            subject = f"Report Reviewed: {report_title}"
+                            status_display = "APPROVED" if normalized_status == "APPROVED" else "REJECTED (Needs Revision)"
+                            action_text = "View Report"
+                            
+                            content = f"""
+                            <p>Hello {creator_name},</p>
+                            <p>Your report <strong>{report_title}</strong> has been reviewed.</p>
+                            <p><strong>Status:</strong> {status_display}</p>
+                            <p>Please login to the dashboard to view feedback and take necessary actions.</p>
+                            <a href="http://localhost:5173/reports" class="button">{action_text}</a>
+                            """
+                            
+                            send_email(creator_email, subject, content)
+                            print(f"📧 Sent Report Review email to {creator_email}")
+                except Exception as notify_e:
+                    print(f"⚠️ Failed to send report email: {notify_e}")
+
             return True
 
         except Exception as e:
             print(f"Error creating review: {e}")
-            raise e
+    async def get_recent_activities(self, user_id: Optional[int] = None) -> dict:
+        """Get recent activities (report generation, reviews)"""
+        try:
+            # For now, let's just return recent reports as activities
+            query = self.db.table("Report").select(
+                "report_id, title, status, created_at, created_by"
+            ).order("created_at", desc=True).limit(10)
+
+            if user_id:
+                query = query.eq("created_by", user_id)
+
+            res = query.execute()
+            
+            activities = []
+            if res.data:
+                for r in res.data:
+                    activities.append({
+                        "id": r["report_id"],
+                        "title": r["title"] or "Untitled Report",
+                        "status": r["status"],
+                        "created_at": r["created_at"],
+                        "type": "report_generation"
+                    })
+            
+            return {"activities": activities}
+        except Exception as e:
+            print(f"Error fetching activities: {e}")
+            return {"activities": []}
+
+    async def get_reports_summary(self, user_id: Optional[int] = None) -> dict:
+        """Get summary statistics for reports"""
+        try:
+            # Base query
+            query = self.db.table("Report").select("report_id, status, report_type, created_at, created_by")
+            
+            if user_id:
+                query = query.eq("created_by", user_id)
+                
+            res = query.execute()
+            
+            if not res.data:
+                return {
+                    "totalReports": 0,
+                    "byStatus": {},
+                    "byType": {},
+                    "byDate": {}
+                }
+            
+            reports = res.data
+            total = len(reports)
+            
+            by_status = {}
+            by_type = {}
+            by_date = {}
+            
+            for r in reports:
+                # Status count
+                status = r.get("status") or "Unknown"
+                by_status[status] = by_status.get(status, 0) + 1
+                
+                # Type count
+                rtype = r.get("report_type") or "API_510"
+                by_type[rtype] = by_type.get(rtype, 0) + 1
+                
+                # Date count
+                date_str = r.get("created_at", "")[:10] # YYYY-MM-DD
+                if date_str:
+                    by_date[date_str] = by_date.get(date_str, 0) + 1
+            
+            return {
+                "totalReports": total,
+                "byStatus": by_status,
+                "byType": by_type,
+                "byDate": by_date
+            }
+            
+        except Exception as e:
+            print(f"Error fetching summary: {e}")
+            return {"totalReports": 0}
+
+    async def get_pending_tasks(self, user_id: int, role: str) -> list:
+        """Get pending tasks for user"""
+        try:
+            tasks = []
+            
+            # 1. Draft Reports (For Inspectors)
+            if role in ["INSPECTOR", "ENGINEER"]:
+                drafts = self.db.table("Report").select("report_id, title, created_at")\
+                    .eq("created_by", user_id)\
+                    .eq("status", "Draft")\
+                    .execute()
+                
+                if drafts.data:
+                    for d in drafts.data:
+                        tasks.append({
+                            "id": f"draft_{d['report_id']}",
+                            "title": f"Complete Draft: {d['title']}",
+                            "type": "draft_report",
+                            "priority": "HIGH",
+                            "due_date": d['created_at']
+                        })
+
+            # 2. Pending Reviews (For Admins/Engineers)
+            if role in ["ADMIN", "ENGINEER"]:
+                pending = self.db.table("Report").select("report_id, title, created_at")\
+                    .eq("status", "Submitted")\
+                    .execute()
+                
+                if pending.data:
+                    for p in pending.data:
+                        tasks.append({
+                            "id": f"review_{p['report_id']}",
+                            "title": f"Review Report: {p['title']}",
+                            "type": "report_review",
+                            "priority": "URGENT",
+                            "due_date": p['created_at']
+                        })
+
+            return tasks
+        except Exception as e:
+            print(f"Error fetching pending tasks: {e}")
+            return []

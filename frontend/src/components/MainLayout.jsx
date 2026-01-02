@@ -103,6 +103,10 @@ export default function MainLayout() {
   const [user, setUser] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [notificationDropdownOpen, setNotificationDropdownOpen] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [selectedNotification, setSelectedNotification] = useState(null)
 
   // Inspector menu items
   const inspectorMenuItems = [
@@ -140,26 +144,184 @@ export default function MainLayout() {
   // Check authentication and load user
   useEffect(() => {
     const userStr = localStorage.getItem('user')
-    // const token = localStorage.getItem('token')
-
-    // if (!token) {
-    //   navigate('/login')
-    //   return
-    // }
 
     if (userStr) {
       try {
         const userData = JSON.parse(userStr)
         setUser(userData)
+        fetchNotifications(userData.id)
       } catch (e) {
         console.error('Error parsing user data:', e)
       }
     }
-  }, [navigate])
+  }, [navigate, location.pathname]) // Refresh on navigation changes
+
+  const fetchNotifications = async (userId) => {
+    try {
+      let newNotifs = []
+      const today = new Date().toISOString().split('T')[0]
+
+      // --- 1. SCHEDULES ---
+      // Table-less approach: Fetch all schedules and filter for Pending ones for this user
+      const response = await fetch(`http://localhost:8000/schedules/all`)
+      if (response.ok) {
+        const allSchedules = await response.json()
+
+        // Filter for this user (loose comparison for robustness)
+        const mySchedules = allSchedules.filter(s => s.inspector_id == userId)
+
+        // Pending
+        const pending = mySchedules.filter(s => s.status === 'Pending')
+        pending.forEach(s => {
+          newNotifs.push({
+            id: `sched_${s.schedule_id}`,
+            title: "New Schedule Assigned",
+            message: `Inspection for EQ-${s.equipment_id} at ${s.location || 'Site'} is pending confirmation.`,
+            created_at: s.scheduled_date,
+            action_link: `/photo-upload?scheduleId=${s.schedule_id}`
+          })
+        })
+
+        // Due Today
+        const dueToday = mySchedules.filter(s => s.status === 'Confirmed' && s.scheduled_date === today)
+        dueToday.forEach(s => {
+          newNotifs.push({
+            id: `due_${s.schedule_id}`,
+            title: "Inspection Due Today",
+            message: `Inspection for EQ-${s.equipment_id} is due today.`,
+            created_at: s.scheduled_date,
+            action_link: `/photo-upload?scheduleId=${s.schedule_id}`
+          })
+        })
+
+        // Overdue
+        const overdue = mySchedules.filter(s => s.status === 'Confirmed' && s.scheduled_date < today)
+        overdue.forEach(s => {
+          newNotifs.push({
+            id: `over_${s.schedule_id}`,
+            title: "Inspection Overdue",
+            message: `Inspection for EQ-${s.equipment_id} is overdue!`,
+            created_at: s.scheduled_date,
+            action_link: `/photo-upload?scheduleId=${s.schedule_id}`
+          })
+        })
+
+        // --- STATELESS REMINDER EMAIL TRIGGER (SCHEDULES) ---
+        const checkAndSendReminders = async (schedules, type) => {
+          for (const s of schedules) {
+            const key = `reminder_sent_${s.schedule_id}_${today}`
+            if (!localStorage.getItem(key)) {
+              try {
+                console.log(`Sending ${type} reminder for Schedule ${s.schedule_id}...`)
+                await fetch(`http://localhost:8000/schedules/send-reminder/${s.schedule_id}`, { method: 'POST' })
+                localStorage.setItem(key, 'true')
+              } catch (err) {
+                console.error("Failed to send reminder:", err)
+              }
+            }
+          }
+        }
+        if (dueToday.length > 0) checkAndSendReminders(dueToday, "Due Today")
+        if (overdue.length > 0) checkAndSendReminders(overdue, "Overdue")
+      }
+
+      // --- 2. REPORTS ---
+      // Fetch latest reports to check for status updates (Approved/Rejected)
+      const reportRes = await fetch(`http://localhost:8000/api/report-review/`)
+      if (reportRes.ok) {
+        const allReports = await reportRes.json()
+
+        const myReports = allReports.filter(r =>
+          (r.created_by === userId || r.inspector_name === user?.username || r.inspector_name === user?.name) &&
+          (r.status === 'APPROVED' || r.status === 'NEEDS REVISION' || r.status === 'Rejection')
+        )
+
+        myReports.forEach(r => {
+          let msg = r.status === 'APPROVED' ? "Report Approved" : "Report Needs Revision"
+          newNotifs.push({
+            id: `rep_${r.report_id}`,
+            title: msg,
+            message: `Report "${r.report_title}" status: ${r.status}`,
+            created_at: r.created_at,
+            action_link: `/validation/${r.report_id}`
+          })
+        })
+
+        // --- 3. ENGINEER/ADMIN: REPORT REVIEWS ---
+        // If user is ADMIN or ENGINEER (or equivalent reviewer role), check for "Submitted" reports
+        const userRole = user?.role?.toUpperCase() || ''
+        if (userRole === 'ADMIN' || userRole === 'ENGINEER') {
+          const pendingReview = allReports.filter(r => r.status === 'Submitted')
+
+          pendingReview.forEach(r => {
+            newNotifs.push({
+              id: `rev_${r.report_id}`, // Distinct ID prefix for reviews
+              title: "Report Submitted for Review",
+              message: `Report "${r.report_title}" by ${r.inspector_name} is waiting for review.`,
+              created_at: r.created_at || new Date().toISOString(),
+              action_link: `/validation/${r.report_id}`
+            })
+          })
+        }
+      }
+
+      // Filter out dismissed notifications
+      const activeNotifs = newNotifs.filter(n => !localStorage.getItem(`dismissed_notif_${n.id}`))
+
+      setNotifications(activeNotifs)
+      setUnreadCount(activeNotifs.length)
+
+      // Alert user if there are items, but only ONCE per session
+      const hasShownAlert = sessionStorage.getItem('hasShownPendingAlert')
+      if (activeNotifs.length > 0 && !hasShownAlert) {
+        alert(`📢 Notice: You have ${activeNotifs.length} items requiring attention.`)
+        sessionStorage.setItem('hasShownPendingAlert', 'true')
+      }
+
+    } catch (error) {
+      console.error("Error fetching notifications:", error)
+    }
+  }
+
+  const handleNotificationClick = (notification) => {
+    // Open Modal for ALL notification types (Schedules and Reports)
+    setSelectedNotification(notification)
+    setNotificationDropdownOpen(false)
+  }
+
+  const handleModalClose = () => {
+    if (selectedNotification) {
+      // ONLY dismiss STATUS REPORTS (rep_)
+      // Schedules (sched_, due_, over_) stay in the list until backend completion
+      if (selectedNotification.id.startsWith('rep_')) {
+        localStorage.setItem(`dismissed_notif_${selectedNotification.id}`, 'true')
+        setNotifications(prev => prev.filter(n => n.id !== selectedNotification.id))
+        setUnreadCount(prev => Math.max(0, prev - 1))
+      }
+    }
+    setSelectedNotification(null)
+  }
+
+  const handleModalAction = () => {
+    if (selectedNotification) {
+      // ONLY dismiss STATUS REPORTS (rep_) upon action
+      if (selectedNotification.id.startsWith('rep_')) {
+        localStorage.setItem(`dismissed_notif_${selectedNotification.id}`, 'true')
+        setNotifications(prev => prev.filter(n => n.id !== selectedNotification.id))
+        setUnreadCount(prev => Math.max(0, prev - 1))
+      }
+
+      if (selectedNotification.action_link) {
+        navigate(selectedNotification.action_link)
+      }
+    }
+    setSelectedNotification(null)
+  }
 
   // Close dropdown when navigating to a different page
   useEffect(() => {
     setProfileDropdownOpen(false)
+    setNotificationDropdownOpen(false)
   }, [location.pathname])
 
   // Close dropdown when clicking outside or pressing Escape
@@ -168,15 +330,19 @@ export default function MainLayout() {
       if (profileDropdownOpen && !event.target.closest('.profile-dropdown-container')) {
         setProfileDropdownOpen(false)
       }
-    }
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape' && profileDropdownOpen) {
-        setProfileDropdownOpen(false)
+      if (notificationDropdownOpen && !event.target.closest('.notification-dropdown-container')) {
+        setNotificationDropdownOpen(false)
       }
     }
 
-    if (profileDropdownOpen) {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setProfileDropdownOpen(false)
+        setNotificationDropdownOpen(false)
+      }
+    }
+
+    if (profileDropdownOpen || notificationDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside)
       document.addEventListener('keydown', handleEscape)
     }
@@ -185,12 +351,13 @@ export default function MainLayout() {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [profileDropdownOpen])
+  }, [profileDropdownOpen, notificationDropdownOpen])
 
   const handleLogout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     localStorage.removeItem('userRole')
+    sessionStorage.removeItem('hasShownPendingAlert')
     setUser(null)
     setProfileDropdownOpen(false)
     navigate('/login')
@@ -261,10 +428,52 @@ export default function MainLayout() {
             </div>
 
             <div className="flex items-center gap-4 ml-6">
-              <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative">
-                <Icons.Bell />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
+
+              {/* Notification Bell */}
+              <div className="relative notification-dropdown-container">
+                <button
+                  onClick={() => setNotificationDropdownOpen(!notificationDropdownOpen)}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative"
+                >
+                  <Icons.Bell />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                  )}
+                </button>
+
+                {/* Notification Dropdown */}
+                {notificationDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-20 max-h-96 overflow-y-auto">
+                    <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+                      </div>
+                      <span className="text-xs text-gray-500">{unreadCount} unread</span>
+                    </div>
+
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-gray-500">
+                        No new notifications
+                      </div>
+                    ) : (
+                      <div>
+                        {notifications.map((notif, index) => (
+                          <div
+                            key={index}
+                            onClick={() => handleNotificationClick(notif)}
+                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors"
+                          >
+                            <p className="text-sm font-medium text-gray-900 mb-1">{notif.title}</p>
+                            <p className="text-xs text-gray-600 line-clamp-2">{notif.message}</p>
+                            <p className="text-xs text-gray-400 mt-1">{new Date(notif.created_at).toLocaleString()}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                 <Icons.Settings />
               </button>
@@ -328,8 +537,45 @@ export default function MainLayout() {
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
-      </div>
-    </div>
+      </div >
+      {/* Notification Detail Modal */}
+      {
+        selectedNotification && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 transform transition-all scale-100">
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                {selectedNotification.title}
+              </h3>
+              <div className="mb-6">
+                <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap">
+                  {selectedNotification.message}
+                </p>
+                <p className="text-xs text-gray-400 mt-2">
+                  Received: {new Date(selectedNotification.created_at).toLocaleString()}
+                </p>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={handleModalClose}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium transition-colors"
+                >
+                  {selectedNotification.id.startsWith('rep_') ? 'Close (Dismiss)' : 'Close'}
+                </button>
+                {selectedNotification.action_link && (
+                  <button
+                    onClick={handleModalAction}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                  >
+                    view details
+                    <Icons.Search />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      }
+    </div >
   )
 }
-

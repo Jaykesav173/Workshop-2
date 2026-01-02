@@ -18,33 +18,42 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const resUsers = await fetch(`${API_BASE}/users`);
+        const token = localStorage.getItem("token");
+        const headers = { Authorization: `Bearer ${token}` };
+
+        const resUsers = await fetch(`${API_BASE}/users`, { headers });
         const dataUsers = await resUsers.json();
 
-        const resReports = await fetch(`${API_BASE}/reports/summary`);
+        const resReports = await fetch(`${API_BASE}/reports/summary`, { headers });
         const dataReports = await resReports.json();
 
-        const resRecentReports = await fetch(`${API_BASE}/activity/reports`);
+        const resRecentReports = await fetch(`${API_BASE}/activity/reports`, { headers });
         const dataRecentReports = await resRecentReports.json();
 
-        if (dataUsers.success && dataReports.success) {
-          const total = dataUsers.users.length;
-          const active = dataUsers.users.filter((u) => u.Account_status === "ACTIVE").length;
-          const inactive = dataUsers.users.filter((u) => u.Account_status === "INACTIVE").length;
+        // Parse Users
+        let usersList = [];
+        if (Array.isArray(dataUsers)) {
+          usersList = dataUsers;
+        } else if (dataUsers.users && Array.isArray(dataUsers.users)) {
+          usersList = dataUsers.users;
+        }
 
-          setStats({
-            totalUsers: total,
-            activeUsers: active,
-            inactiveUsers: inactive,
-            reportsGenerated: dataReports.totalReports,
-            reportsByStatus: dataReports.byStatus,
-            reportsByType: dataReports.byType,
-            reportsByDate: dataReports.byDate,
-          });
+        const total = usersList.length;
+        const active = usersList.filter((u) => u.Account_status === "ACTIVE").length;
+        const inactive = usersList.filter((u) => u.Account_status === "INACTIVE").length;
 
-          if (dataRecentReports.success) {
-            setRecentReports(dataRecentReports.activities);
-          }
+        setStats({
+          totalUsers: total,
+          activeUsers: active,
+          inactiveUsers: inactive,
+          reportsGenerated: dataReports.totalReports || 0,
+          reportsByStatus: dataReports.byStatus || {},
+          reportsByType: dataReports.byType || {},
+          reportsByDate: dataReports.byDate || {},
+        });
+
+        if (dataRecentReports.activities) {
+          setRecentReports(dataRecentReports.activities);
         }
       } catch (err) {
         console.error("Error fetching stats:", err);

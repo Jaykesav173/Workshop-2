@@ -11,6 +11,7 @@ from app.routers.inspection_workflow.router import router as inspection_workflow
 from app.routers.template_management.routes_template_management import router as template_management_router
 from app.routers.report_review.router import router as report_review_router
 from app.routers.InspectionSchedule.router import router as schedule_router
+from app.routers.user_roles.router import router as user_roles_router
 
 # ASILLAH's MODULE : AI PHOTO
 from app.routers.ai_photo.router import router as ai_photo_router
@@ -42,6 +43,10 @@ app.include_router(template_management_router, prefix="/api")
 app.include_router(report_review_router, prefix="/api")
 app.include_router(ai_photo_router)
 app.include_router(schedule_router)
+app.include_router(user_roles_router, prefix="/api")
+
+from app.routers.notifications.router import router as notifications_router
+app.include_router(notifications_router, prefix="/api")
 
 @app.get("/")
 def root():
@@ -59,3 +64,4 @@ import os
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+app.mount("/static/assets", StaticFiles(directory="app/assets"), name="assets")

@@ -11,26 +11,35 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is not set in .env file")
+    print("⚠️  WARNING: DATABASE_URL not set. SQLAlchemy/PostgreSQL features will be unavailable.")
+    engine = None
+    SessionLocal = None
+else:
+    # Create SQLAlchemy engine
+    try:
+        engine = create_engine(
+            DATABASE_URL,
+            echo=True,
+        )
+        # Session factory
+        SessionLocal = sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=engine
+        )
+    except Exception as e:
+        print(f"❌ Error creating SQLAlchemy engine: {e}")
+        engine = None
+        SessionLocal = None
 
-# Create SQLAlchemy engine
-engine = create_engine(
-    DATABASE_URL,
-    echo=True,  # Optional: logs all SQL statements for debugging
-)
-
-# Session factory
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
-
-# Base class for ORM models
+# Base class for ORM models (still needed for models.py)
 Base = declarative_base()
 
 # Dependency for FastAPI routes
 def get_db():
+    if SessionLocal is None:
+        raise ValueError("Database not configured (missing DATABASE_URL)")
+    
     db = SessionLocal()
     try:
         yield db

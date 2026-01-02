@@ -29,7 +29,7 @@ export function SettingsView() {
   // ---------------- LOAD PROFILE ----------------
   useEffect(() => {
 
-    const storedUser = localStorage.getItem("loggedInUser");
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("loggedInUser");
     if (!storedUser) return;
 
     const parsed = JSON.parse(storedUser);

@@ -4,9 +4,20 @@ import base64
 from openai import OpenAI
 from app.config import settings # Using absolute import for reliability
 
-client = OpenAI(api_key=settings.OPENAI_API_KEY)
+if settings.OPENAI_API_KEY:
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+else:
+    client = None
 
 async def analyze_defect_image(image_bytes: bytes):
+    if not client:
+        return {
+            "description": "AI analysis unavailable (Missing OPENAI_API_KEY)",
+            "recommendation": "Check backend configuration.",
+            "category": "None",
+            "severity": "Low",
+            "box_2d": []
+        }
     # 1. Encode the bytes passed from the router
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 

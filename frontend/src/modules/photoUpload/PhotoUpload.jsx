@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   Plus, X, Edit2, Trash2, CheckCircle, Clock, Play,
@@ -18,6 +19,8 @@ const PhotoUpload = () => {
 
   const [statusFilter, setStatusFilter] = useState('All');
   const [priorityFilter, setPriorityFilter] = useState('All');
+
+  const [searchParams] = useSearchParams(); // Add search params hook
 
   const user = JSON.parse(localStorage.getItem('user')) || { role: 'ENGINEER', id: 0 };
 
@@ -80,6 +83,18 @@ const PhotoUpload = () => {
     setFilteredSchedules(result);
   }, [schedules, statusFilter, priorityFilter]);
 
+  // --- DEEP LINKING LOGIC ---
+  useEffect(() => {
+    const scheduleId = searchParams.get('scheduleId');
+    if (scheduleId && schedules.length > 0) {
+      const found = schedules.find(s => s.schedule_id == scheduleId);
+      if (found) {
+        setSelectedTask(found);
+        setIsDetailOpen(true);
+      }
+    }
+  }, [searchParams, schedules]);
+
   // --- TIME VALIDATION LOGIC ---
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -93,7 +108,15 @@ const PhotoUpload = () => {
     }
 
     try {
-      await axios.post('http://localhost:8000/schedules/', { ...formData, engineer_id: user.id });
+      // Find inspector email
+      const inspector = inspectorsList.find(i => i.id == formData.inspector_id);
+      const inspector_email = inspector ? inspector.email : null;
+
+      await axios.post('http://localhost:8000/schedules/', {
+        ...formData,
+        engineer_id: user.id,
+        inspector_email: inspector_email
+      });
       setIsModalOpen(false);
       alert("✅ Schedule confirmed successfully!");
       // Refresh the list after success
