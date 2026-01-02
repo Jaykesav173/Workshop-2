@@ -10,6 +10,10 @@ from app.routers.photo_upload.router import router as photo_upload_router
 from app.routers.inspection_workflow.router import router as inspection_workflow_router
 from app.routers.template_management.routes_template_management import router as template_management_router
 from app.routers.report_review.router import router as report_review_router
+from app.routers.InspectionSchedule.router import router as schedule_router
+
+# ASILLAH's MODULE : AI PHOTO
+from app.routers.ai_photo.router import router as ai_photo_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,6 +40,8 @@ app.include_router(photo_upload_router, prefix="/api")
 app.include_router(inspection_workflow_router, prefix="/api")
 app.include_router(template_management_router, prefix="/api")
 app.include_router(report_review_router, prefix="/api")
+app.include_router(ai_photo_router)
+app.include_router(schedule_router)
 
 @app.get("/")
 def root():

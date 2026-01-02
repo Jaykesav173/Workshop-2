@@ -65,11 +65,11 @@ function Login() {
   const handleLogin = async ({ username, password, requested_role }) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // Try using our authService first
       const response = await authService.login(username, password);
-      
+
       if (response.success || response.access_token) {
         // Store token and user info
         localStorage.setItem('token', response.access_token);
@@ -102,67 +102,88 @@ function Login() {
       }
     } catch (error) {
       console.error('Login failed:', error);
-      
-      // Try alternative API endpoint from dev-haifa if our authService fails
+
+      // If it's a credential issue (401) or inactive account (403), show error immediately. 
+      // Do NOT run fallback, as that generates a confusing "Not Found" (404) if the fallback URL is wrong.
+      if (error.response) {
+        const status = error.response.status;
+        const errorDetail = error.response.data?.detail || error.response.data?.message;
+
+        if (status === 401) {
+          setError(errorDetail || 'Invalid username or password.');
+          setLoading(false);
+          return;
+        } else if (status === 403) {
+          setError(errorDetail || 'Account is inactive. Please contact administrator.');
+          setLoading(false);
+          return;
+        } else if (status === 500 && errorDetail && errorDetail.includes("hash")) {
+          // Catch specific hash issues
+          setError("System Error: Password data corrupted. Please contact admin to reset password.");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Try alternative API endpoint only for network/server errors
       try {
-        const res = await fetch(`${API_BASE}/login`, {
+        console.log("Attempting fallback login...");
+        const res = await fetch(`${API_BASE}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password, requested_role }),
+          body: JSON.stringify({ username, password }), // Request role is not used by backend schema
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-          setError(data.detail || "Login failed");
+          setError(data.detail || `Login failed (${res.status})`);
           setLoading(false);
           return;
         }
 
+        // ... Success handling for fallback ...
         localStorage.setItem("loggedInUser", JSON.stringify(data.user));
         localStorage.setItem("token", data.access_token || data.token || "");
 
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+          localStorage.setItem('userRole', data.user.role || 'USER');
+        }
+
         setCurrentUserType(requested_role);
         setCurrentUsername(username);
-        setCurrentEmail(data.user.email);
+        setCurrentEmail(data.user?.email || "");
 
-        if (data.user.isFirstLogin) {
+        if (data.user?.isFirstLogin) {
           setShowPasswordChangeAlert(true);
           setLoading(false);
           return;
         }
 
-        // Redirect to our dashboard routes
-        const role = data.user.role?.toUpperCase();
+        // Redirect
+        const role = data.user?.role?.toUpperCase();
         if (role === "ADMIN") {
           navigate("/admin/dashboard");
+        } else if (role === "INSPECTOR" || role === "ENGINEER") {
+          navigate("/inspector/dashboard");
         } else {
           navigate("/inspector/dashboard");
         }
       } catch (fallbackError) {
-        // Handle error from our authService
+        // Final catch-all
         if (error.response) {
-          const errorDetail = error.response.data?.detail || error.response.data?.message;
-          if (error.response.status === 401) {
-            setError(errorDetail || 'Invalid username or password. Please check your credentials.');
-          } else if (error.response.status === 403) {
-            setError(errorDetail || 'Account is inactive. Please contact administrator.');
-          } else {
-            setError(errorDetail || `Login failed (${error.response.status}). Please try again.`);
-          }
-        } else if (error.request) {
-          if (error.code === 'ECONNABORTED') {
-            setError('Request timeout - server is not responding. Please check if backend is running.');
-          } else {
-            setError('Cannot connect to server. Please check if the backend is running.');
-          }
+          setError(error.response.data?.detail || `Login failed (${error.response.status})`);
+        } else if (String(error).includes("Network Error")) {
+          setError("Cannot connect to server. Is the backend running?");
         } else {
-          setError(error.message || 'An error occurred. Please try again.');
+          setError(error.message || 'An unexpected error occurred.');
         }
       }
     } finally {
-      setLoading(false);
+      if (!loading) setLoading(false); // Double check
     }
+
   };
 
   // Navigate to ChangePassword page on first login

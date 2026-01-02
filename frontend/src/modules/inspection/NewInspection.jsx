@@ -175,14 +175,23 @@ function NewInspection() {
                   value={formData.equipment_id}
                   onChange={(e) => setFormData({ ...formData, equipment_id: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={loading || equipmentList.length === 0}
                 >
-                  <option value="">Select Vessel</option>
+                  <option value="">
+                    {equipmentList.length === 0 ? 'Loading vessels or no vessels found...' : 'Select Vessel'}
+                  </option>
                   {equipmentList.map(eq => (
                     <option key={eq.id} value={eq.id}>
-                      {eq.equipment_tag_no || eq.name || 'N/A'} - {eq.equipment_description || eq.type || ''}
+                       {/* Display Tag No + Description, or Name, fallback to ID */}
+                      {eq.equipment_tag_no ? `${eq.equipment_tag_no} - ${eq.equipment_description || ''}` : (eq.name || `Equipment #${eq.id}`)}
                     </option>
                   ))}
                 </select>
+                {equipmentList.length === 0 && (
+                   <div className="text-xs text-red-500 mt-1">
+                     No equipment found. Please ensure equipment is added to the system.
+                   </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
