@@ -28,14 +28,7 @@ function Dashboard() {
   }
 
   const menuItems = [
-    { path: '/monitoring', label: 'Monitoring', icon: '📊' },
-    { path: '/equipment', label: 'Equipment', icon: '🔧' },
-    { path: '/inspection', label: 'Inspection', icon: '🔍' },
-    { path: '/photo-upload', label: 'Photo Upload', icon: '📸' },
-    { path: '/defect-ai', label: 'Defect AI', icon: '🤖' },
-    { path: '/reports', label: 'Reports', icon: '📄' },
-    { path: '/validation', label: 'Validation', icon: '✅' },
-    { path: '/analytics', label: 'Analytics', icon: '📈' },
+    { path: '/monitoring', label: 'Dashboard', icon: '📊' },
     { path: '/analysis', label: 'Analysis', icon: '🔬' },
   ]
 

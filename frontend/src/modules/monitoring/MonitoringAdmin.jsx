@@ -47,7 +47,7 @@ function ReportHistory() {
   })
   years.unshift({ value: 'all', label: 'All Years' })
 
-  // Fetch report history data from Supabase - REMOVED DEMO DATA
+  // Fetch report history data from Supabase
   const fetchReports = useCallback(async () => {
     try {
       setError(null)
@@ -55,7 +55,7 @@ function ReportHistory() {
       
       console.log('🔄 Fetching reports and equipment from Supabase...')
       
-      // First try with all necessary fields
+      // Fetch all reports
       const { data: reportsData, error: reportsError } = await supabase
         .from('Report')
         .select(`
@@ -77,7 +77,7 @@ function ReportHistory() {
           inspection_frequency
         `)
         .order('created_at', { ascending: false })
-        .limit(200) // Increased limit
+        .limit(200)
       
       if (reportsError) {
         console.error('Reports fetch error:', reportsError)
@@ -86,6 +86,8 @@ function ReportHistory() {
       
       // If we got data, enrich with equipment data
       if (reportsData && reportsData.length > 0) {
+        console.log('🔍 Raw reports data from Supabase:', reportsData)
+        
         const equipmentIds = [...new Set(reportsData.map(r => r.equipment_id).filter(id => id))]
         
         let equipmentData = []
@@ -106,28 +108,54 @@ function ReportHistory() {
           })
         })
         
-        // Filter and map reports with proper status handling
+        // Filter and map reports with proper status handling - UPDATED FOR 3 STATUSES
         const enrichedReports = reportsData
           .filter(report => {
-            // Only include reports with status "approved" or "rejected" (case-insensitive)
-            const status = report.status?.toLowerCase().trim();
-            return status === 'approved' || status === 'rejected';
+            // Include all three statuses: COMPLETED, APPROVED, NEEDS REVISION
+            const status = report.status?.toUpperCase().trim();
+            return status === 'COMPLETED' || status === 'APPROVED' || status === 'NEEDS REVISION';
           })
-          .map(report => ({
-            ...report,
-            // Normalize status for display
-            status: report.status?.toLowerCase().trim() === 'approved' ? 'APPROVED' : 'REJECTED',
-            equipment_description: equipmentMap.get(report.equipment_id)?.description || 'No description available',
-            // Ensure all fields have proper defaults
-            defect_types_summary: report.defect_types_summary || {},
-            pdf_url: report.pdf_url || null,
-            summary: report.summary || '',
-            inspection_frequency: report.inspection_frequency || 'N/A',
-            labeled_defects: report.labeled_defects || [],
-            labeled_photos: report.labeled_photos || []
-          }))
+          .map(report => {
+            const rawStatus = report.status?.toUpperCase().trim();
+            let normalizedStatus;
+            
+            // Map database status to display status
+            switch(rawStatus) {
+              case 'COMPLETED':
+                normalizedStatus = 'COMPLETED';
+                break;
+              case 'APPROVED':
+                normalizedStatus = 'APPROVED';
+                break;
+              case 'NEEDS REVISION':
+                normalizedStatus = 'NEEDS REVISION';
+                break;
+              default:
+                normalizedStatus = rawStatus || 'UNKNOWN';
+            }
+            
+            return {
+              ...report,
+              status: normalizedStatus,
+              equipment_description: equipmentMap.get(report.equipment_id)?.description || 'No description available',
+              // Ensure all fields have proper defaults
+              defect_types_summary: report.defect_types_summary || {},
+              pdf_url: report.pdf_url || null,
+              summary: report.summary || '',
+              inspection_frequency: report.inspection_frequency || 'N/A',
+              labeled_defects: report.labeled_defects || [],
+              labeled_photos: report.labeled_photos || []
+            };
+          })
         
         console.log('✅ Reports fetched:', enrichedReports.length)
+        console.log('📊 Status breakdown:', 
+          enrichedReports.reduce((acc, report) => {
+            acc[report.status] = (acc[report.status] || 0) + 1;
+            return acc;
+          }, {})
+        )
+        
         setReports(enrichedReports)
         
         // Extract unique equipment for filter dropdown
@@ -151,7 +179,6 @@ function ReportHistory() {
       setError(err.message || 'Failed to load report history.')
       setLoading(false)
       
-      // REMOVED DEMO DATA - set empty arrays instead
       setReports([])
       setEquipment([])
     }
@@ -228,7 +255,7 @@ function ReportHistory() {
   const [defectStats, setDefectStats] = useState({
     totalDefects: 0,
     inspectionsWithDefects: 0,
-    defectRate: 0 // NEW: Percentage of inspections with defects
+    defectRate: 0
   })
 
   useEffect(() => {
@@ -346,29 +373,43 @@ function ReportHistory() {
     }
     
     fetchDefectData()
-  }, [filteredReports]) // Now depends on filteredReports instead of reports
+  }, [filteredReports])
 
-  // Calculate analytics - UPDATED to count UNIQUE inspections
+  // Calculate analytics - UPDATED for 3 statuses and compliance calculation
   const analytics = useMemo(() => {
     if (filteredReports.length === 0) {
       return {
         totalReports: 0,
         totalInspections: 0,
         totalDefects: defectStats.totalDefects,
-        defectRate: defectStats.defectRate, // UPDATED
+        defectRate: defectStats.defectRate,
         defectTypeFrequency: defectTypes,
         inspectionsByEquipment: {},
         reportsByMonth: {},
-        statusBreakdown: { APPROVED: 0, REJECTED: 0 }, // CHANGED from COMPLETED to APPROVED
+        statusBreakdown: { 
+          COMPLETED: 0, 
+          APPROVED: 0, 
+          'NEEDS REVISION': 0 
+        },
         complianceRate: 0,
+        complianceDetails: {
+          completedAndApproved: 0,
+          needsRevision: 0,
+          totalForCompliance: 0
+        },
         upcomingInspections: 0
       }
     }
 
     const equipmentFreq = {}
     const monthFreq = {}
-    const statusFreq = { APPROVED: 0, REJECTED: 0 } // CHANGED from COMPLETED to APPROVED
-    let compliantReports = 0
+    const statusFreq = { 
+      COMPLETED: 0, 
+      APPROVED: 0, 
+      'NEEDS REVISION': 0 
+    }
+    let completedAndApprovedReports = 0  // Count of COMPLETED + APPROVED
+    let needsRevisionReports = 0         // Count of NEEDS REVISION
     let upcomingCount = 0
     const today = new Date()
     const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)
@@ -380,11 +421,15 @@ function ReportHistory() {
     const inspectionsToReports = new Map()
 
     filteredReports.forEach(report => {
-      // Status breakdown - reports are already filtered to only have APPROVED or REJECTED
+      // Status breakdown - now includes all 3 statuses
       statusFreq[report.status] = (statusFreq[report.status] || 0) + 1
 
-      // Compliance - using real api_510_compliant field
-      if (report.api_510_compliant) compliantReports++
+      // Count reports by status for compliance rate
+      if (report.status === 'COMPLETED' || report.status === 'APPROVED') {
+        completedAndApprovedReports++
+      } else if (report.status === 'NEEDS REVISION') {
+        needsRevisionReports++
+      }
 
       // Equipment frequency - count by inspection_id to avoid duplicate counting
       const equipmentKey = `${report.equipment_description || `Equipment ${report.equipment_id}`}`
@@ -438,23 +483,36 @@ function ReportHistory() {
     const reportsWithoutInspection = filteredReports.filter(r => !r.inspection_id).length
     const totalInspections = totalUniqueInspections + reportsWithoutInspection
 
+    // Calculate compliance rate based on COMPLETED and NEEDS REVISION
+    let complianceRate = 0
+    const totalReportsForCompliance = completedAndApprovedReports + needsRevisionReports
+    
+    if (totalReportsForCompliance > 0) {
+      // Compliance Rate = (COMPLETED + APPROVED) / (COMPLETED + APPROVED + NEEDS REVISION) * 100
+      complianceRate = (completedAndApprovedReports / totalReportsForCompliance) * 100
+    }
+
     return {
       totalReports: filteredReports.length,
       totalInspections: totalInspections,
       totalDefects: defectStats.totalDefects,
-      defectRate: defectStats.defectRate, // UPDATED: Now percentage
+      defectRate: defectStats.defectRate,
       defectTypeFrequency: finalDefectTypeFreq,
       inspectionsByEquipment: equipmentFreq,
       reportsByMonth: monthFreq,
       statusBreakdown: statusFreq,
-      complianceRate: filteredReports.length > 0 ? ((compliantReports / filteredReports.length) * 100).toFixed(1) : '0.0',
+      complianceRate: complianceRate.toFixed(1),
+      complianceDetails: {
+        completedAndApproved: completedAndApprovedReports,
+        needsRevision: needsRevisionReports,
+        totalForCompliance: totalReportsForCompliance
+      },
       upcomingInspections: upcomingCount
     }
   }, [filteredReports, defectTypes, defectStats])
 
-  // Get top 3 most common defect types - NOW BASED ON FILTERED DATA
+  // Get top 3 most common defect types
   const topDefectTypes = useMemo(() => {
-    // Use filtered defect data from database
     const defectData = defectTypes
     
     const sortedDefects = Object.entries(defectData)
@@ -464,12 +522,11 @@ function ReportHistory() {
     return sortedDefects
   }, [defectTypes])
 
-  // Prepare data for reports trend over time - ONLY real data
+  // Prepare data for reports trend over time
   const reportsTrendData = useMemo(() => {
     const sortedMonths = Object.keys(analytics.reportsByMonth).sort()
-    const last6Months = sortedMonths.slice(-6) // Get last 6 months
+    const last6Months = sortedMonths.slice(-6)
     
-    // If no data, return empty array
     if (last6Months.length === 0) {
       return []
     }
@@ -506,19 +563,24 @@ function ReportHistory() {
     }
   }
 
-  // Get status badge color
+  // Get status badge color - UPDATED FOR 3 STATUSES
   const getStatusColor = (status) => {
     const colors = {
-      'APPROVED': 'bg-green-100 text-green-800', // CHANGED from COMPLETED to APPROVED
-      'REJECTED': 'bg-red-100 text-red-800'
+      'COMPLETED': 'bg-blue-100 text-blue-800',
+      'APPROVED': 'bg-green-100 text-green-800',
+      'NEEDS REVISION': 'bg-orange-100 text-orange-800'
     }
     return colors[status] || 'bg-gray-100 text-gray-800'
   }
 
-  // Get status display text
-  const getStatusDisplay = (status) => {
-    // Status is already normalized to APPROVED or REJECTED
-    return status
+  // Get status icon - UPDATED FOR 3 STATUSES
+  const getStatusIcon = (status) => {
+    const icons = {
+      'COMPLETED': '✅',
+      'APPROVED': '✅',
+      'NEEDS REVISION': '⚠️'
+    }
+    return icons[status] || '❓'
   }
 
   // Download report as PDF
@@ -592,9 +654,9 @@ function ReportHistory() {
         </button>
       </div>
 
-      {/* Summary Analytics Cards - REAL DATA ONLY */}
+      {/* Summary Analytics Cards - UPDATED WITH HOVER EXPLANATIONS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Updated to show Total Inspections instead of Total Reports */}
+        {/* Total Inspections Card */}
         <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
             <div>
@@ -605,6 +667,7 @@ function ReportHistory() {
           </div>
         </div>
 
+        {/* Total Defects Card */}
         <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-purple-500">
           <div className="flex items-center justify-between">
             <div>
@@ -615,11 +678,42 @@ function ReportHistory() {
           </div>
         </div>
 
-        {/* UPDATED: Changed from "Avg Defects/Inspection" to "Defect Rate" as percentage */}
-        <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-red-500">
+        {/* Defect Rate Card with hover explanation */}
+        <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-red-500 relative group">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-medium text-gray-600 mb-1">Defect Rate</h3>
+              <div className="flex items-center gap-1 mb-1">
+                <h3 className="text-sm font-medium text-gray-600">Defect Rate</h3>
+                <div className="relative">
+                  <div className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  {/* Hover Tooltip */}
+                  <div className="absolute left-1/2 transform -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-64">
+                    <div className="bg-gray-900 text-white text-xs rounded py-2 px-3 shadow-lg z-50">
+                      <div className="font-semibold mb-1">Defect Rate Explained</div>
+                      <p>Percentage of inspections that found defects.</p>
+                      <div className="mt-1 pt-1 border-t border-gray-700">
+                        <div className="flex justify-between">
+                          <span>Inspections with defects:</span>
+                          <span className="font-medium">{defectStats.inspectionsWithDefects}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Total inspections:</span>
+                          <span className="font-medium">{analytics.totalInspections}</span>
+                        </div>
+                        <div className="mt-1 text-gray-300 text-xs">
+                          Formula: (Inspections with defects ÷ Total inspections) × 100%
+                        </div>
+                      </div>
+                    </div>
+                    {/* Tooltip arrow */}
+                    <div className="absolute left-1/2 transform -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+              </div>
               <p className="text-3xl font-bold text-red-600">{analytics.defectRate.toFixed(1)}%</p>
               <p className="text-xs text-gray-500 mt-1">
                 {defectStats.inspectionsWithDefects} of {analytics.totalInspections} inspections
@@ -629,18 +723,67 @@ function ReportHistory() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-green-500">
+        {/* Compliance Rate Card with hover explanation */}
+        <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-green-500 relative group">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-medium text-gray-600 mb-1">Compliance Rate</h3>
+              <div className="flex items-center gap-1 mb-1">
+                <h3 className="text-sm font-medium text-gray-600">Compliance Rate</h3>
+                <div className="relative">
+                  <div className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  {/* Hover Tooltip */}
+                  <div className="absolute left-1/2 transform -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-64">
+                    <div className="bg-gray-900 text-white text-xs rounded py-2 px-3 shadow-lg z-50">
+                      <div className="font-semibold mb-1">Compliance Rate Explained</div>
+                      <p>Percentage of reports that are compliant (COMPLETED or APPROVED) vs needing revision.</p>
+                      <div className="mt-1 pt-1 border-t border-gray-700">
+                        <div className="flex justify-between">
+                          <span className="text-green-300">COMPLETED/APPROVED:</span>
+                          <span className="font-medium text-green-300">
+                            {analytics.complianceDetails?.completedAndApproved || 0}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-orange-300">NEEDS REVISION:</span>
+                          <span className="font-medium text-orange-300">
+                            {analytics.complianceDetails?.needsRevision || 0}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-gray-300 text-xs">
+                          Formula: (COMPLETED + APPROVED) ÷ (COMPLETED + APPROVED + NEEDS REVISION) × 100%
+                        </div>
+                      </div>
+                    </div>
+                    {/* Tooltip arrow */}
+                    <div className="absolute left-1/2 transform -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+              </div>
               <p className="text-3xl font-bold text-green-600">{analytics.complianceRate}%</p>
+              <div className="text-xs text-gray-500 mt-1">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center">
+                    <span className="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                    <span>{analytics.complianceDetails?.completedAndApproved || 0} compliant</span>
+                  </span>
+                  <span>•</span>
+                  <span className="inline-flex items-center">
+                    <span className="w-2 h-2 bg-orange-500 rounded-full mr-1"></span>
+                    <span>{analytics.complianceDetails?.needsRevision || 0} need revision</span>
+                  </span>
+                </div>
+              </div>
             </div>
             <div className="text-4xl opacity-100">✅</div>
           </div>
         </div>
       </div>
 
-      {/* Add a small info card showing total reports vs inspections */}
+      {/* Data Summary Card */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -664,7 +807,7 @@ function ReportHistory() {
         </div>
       </div>
 
-      {/* Search and Filters */}
+      {/* Search and Filters - UPDATED STATUS OPTIONS */}
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-xl font-semibold mb-4">Search & Filter Reports</h2>
         
@@ -776,8 +919,9 @@ function ReportHistory() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Status</option>
-              <option value="APPROVED">✅ APPROVED</option> {/* CHANGED from COMPLETED to APPROVED */}
-              <option value="REJECTED">❌ REJECTED</option>
+              <option value="COMPLETED">✅ COMPLETED</option>
+              <option value="APPROVED">✅ APPROVED</option>
+              <option value="NEEDS REVISION">⚠️ NEEDS REVISION</option>
             </select>
           </div>
         </div>
@@ -798,15 +942,13 @@ function ReportHistory() {
 
       {/* Analytics Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Most Common Defect Types - REAL DATA ONLY */}
+        {/* Most Common Defect Types */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4">Most Common Defect Types</h2>
           {topDefectTypes.length > 0 ? (
             <div className="space-y-3">
               {topDefectTypes.map(([defectType, count], index) => {
-                // Calculate the max count for percentage calculation
                 const maxCount = Math.max(...topDefectTypes.map(([, c]) => c));
-                // Ensure minimum 5% width so very small bars are still visible
                 const percentage = maxCount > 0 ? Math.max(5, (count / maxCount) * 100) : 5;
                 
                 return (
@@ -843,28 +985,28 @@ function ReportHistory() {
           )}
         </div>
 
-        {/* Status Distribution - REAL DATA ONLY */}
+        {/* Status Distribution - UPDATED FOR 3 STATUSES */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4">Report Status Distribution</h2>
           <div className="space-y-3">
-            {['APPROVED', 'REJECTED'].map(status => ( // CHANGED from ['COMPLETED', 'REJECTED']
+            {['COMPLETED', 'APPROVED', 'NEEDS REVISION'].map(status => (
               <div key={status} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    status === 'APPROVED' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' // CHANGED from COMPLETED to APPROVED
-                  }`}>
-                    {status === 'APPROVED' ? '✅' : '❌'} {/* CHANGED from COMPLETED to APPROVED */}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(status)}`}>
+                    {getStatusIcon(status)}
                   </span>
                   
                   <span className="text-sm font-medium text-gray-700">
-                    {status === 'APPROVED' ? 'Approved' : 'Rejected'} {/* CHANGED from Completed to Approved */}
+                    {status.replace('_', ' ')}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-48 bg-gray-200 rounded-full h-2">
                     <div
                       className={`h-2 rounded-full ${
-                        status === 'APPROVED' ? 'bg-green-500' : 'bg-red-500' // CHANGED from COMPLETED to APPROVED
+                        status === 'COMPLETED' ? 'bg-blue-500' : 
+                        status === 'APPROVED' ? 'bg-green-500' : 
+                        'bg-orange-500'
                       }`}
                       style={{
                         width: `${(analytics.statusBreakdown[status] / Math.max(1, analytics.totalReports)) * 100}%`
@@ -881,51 +1023,40 @@ function ReportHistory() {
         </div>
       </div>
 
-      {/* Reports Trend Over Time - REAL DATA ONLY */}
+      {/* Reports Trend Over Time */}
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-xl font-semibold mb-4">📈 Reports Trend Over Time</h2>
         {reportsTrendData.length > 0 ? (
           <div className="space-y-6">
-            {/* Bar chart visualization with FIXED HEIGHT and NO LABEL OVERLAP */}
             <div className="flex items-end h-48 gap-4 pt-6 border-b pb-4">
               {reportsTrendData.map((monthData, index) => {
-                // Find the maximum value for scaling
                 const maxReports = Math.max(...reportsTrendData.map(m => m.reports))
-                
-                // Calculate height percentage - 0% if no reports, scaled based on max
                 let heightPercentage = 0
                 if (maxReports > 0) {
-                  // Fixed: No minimum height - each bar gets its proportional height
                   heightPercentage = (monthData.reports / maxReports) * 100
                 }
-                
-                // Fixed: Ensure at least 5% height for visibility even for 0 values
                 const finalHeight = Math.max(5, heightPercentage)
                 
                 return (
                   <div key={monthData.originalMonth || monthData.month} className="flex-1 flex flex-col items-center h-full">
-                    {/* Value label - positioned ABOVE the bar */}
                     <div className="mb-1">
                       <div className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded">
                         {monthData.reports}
                       </div>
                     </div>
                     
-                    {/* Bar container */}
                     <div className="relative h-full w-3/4 flex flex-col justify-end">
                       <div 
                         className="w-full bg-gradient-to-t from-blue-500 to-blue-600 rounded-t-lg transition-all duration-300 hover:from-blue-600 hover:to-blue-700"
                         style={{ height: `${finalHeight}%` }}
                         title={`${monthData.reports} reports`}
                       >
-                        {/* Hover text inside bar */}
                         <div className="text-xs text-white text-center opacity-0 hover:opacity-100 pt-1">
                           {monthData.reports}
                         </div>
                       </div>
                     </div>
                     
-                    {/* Month label - positioned BELOW the bar with more space */}
                     <div className="mt-3 h-8 flex items-center">
                       <div className="text-xs text-gray-600 text-center leading-tight">
                         {monthData.month.split(' ')[0]}<br />
@@ -937,7 +1068,6 @@ function ReportHistory() {
               })}
             </div>
             
-            {/* Data table */}
             <div className="pt-4">
               <h3 className="text-sm font-medium text-gray-700 mb-3">Monthly Report Count</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -961,31 +1091,25 @@ function ReportHistory() {
         )}
       </div>
 
-      {/* Equipment Inspection Frequency - REAL DATA ONLY */}
+      {/* Equipment Inspection Frequency */}
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-xl font-semibold mb-4">Inspection Frequency by Equipment</h2>
         {Object.keys(analytics.inspectionsByEquipment).length > 0 ? (
           <div>
-            {/* Equipment grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {Object.entries(analytics.inspectionsByEquipment)
                 .sort((a, b) => b[1] - a[1])
                 .map(([equipmentName, count], index) => {
-                  // Find the equipment ID from the original reports
                   let equipmentId = 'N/A';
                   let displayName = equipmentName;
                   
-                  // Look for a report with this equipment name
                   const matchingReport = reports.find(report => {
-                    // Check if the report's equipment_description matches
                     if (report.equipment_description === equipmentName) {
                       return true;
                     }
-                    // Check if "Equipment X" matches
                     if (`Equipment ${report.equipment_id}` === equipmentName) {
                       return true;
                     }
-                    // Check if equipment_description contains the equipmentName
                     if (report.equipment_description && 
                         report.equipment_description.includes(equipmentName)) {
                       return true;
@@ -995,11 +1119,9 @@ function ReportHistory() {
                   
                   if (matchingReport) {
                     equipmentId = matchingReport.equipment_id;
-                    // Use the equipment description as display name
                     displayName = matchingReport.equipment_description || `Equipment ${equipmentId}`;
                   } else {
-                    // If no match found, try to extract ID from the name
-                    const idMatch = equipmentName.match(/(\d+)$/); // Look for numbers at the end
+                    const idMatch = equipmentName.match(/(\d+)$/);
                     if (idMatch) {
                       equipmentId = idMatch[1];
                       displayName = equipmentName.replace(/\s*\d+$/, '').trim() || `Equipment ${equipmentId}`;
@@ -1032,7 +1154,6 @@ function ReportHistory() {
                 })}
             </div>
             
-            {/* Summary */}
             <div className="mt-6 pt-4 border-t border-gray-200">
               <div className="flex items-center justify-between text-sm text-gray-600">
                 <div>
@@ -1053,7 +1174,7 @@ function ReportHistory() {
         )}
       </div>
 
-      {/* Reports Archive Table - REAL DATA ONLY */}
+      {/* Reports Archive Table */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex justify-between items-center">
@@ -1121,7 +1242,7 @@ function ReportHistory() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(report.status)}`}>
-                        {getStatusDisplay(report.status)}
+                        {getStatusIcon(report.status)} {report.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
