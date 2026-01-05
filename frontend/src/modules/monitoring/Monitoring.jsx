@@ -1,11 +1,9 @@
-/**
- * Monitoring Module - Report History & Analytics
- * Component for viewing report history and analytics
- */
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { supabase } from '../../utils/supabaseClient.js'
+import axios from 'axios'
+import { API_BASE } from '../../services/api.js'
+import { RefreshCw, BarChart, AlertTriangle, TrendingUp, CheckCircle, FileText, Calendar } from 'lucide-react'
 
-function Monitoring() {
+function ReportHistory() {
   const [reports, setReports] = useState([])
   const [equipment, setEquipment] = useState([])
   const [loading, setLoading] = useState(true)
@@ -22,82 +20,84 @@ function Monitoring() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
-  // Fetch report history data from Supabase
+  // Fetch report history data from backend API
   const fetchReports = useCallback(async () => {
     try {
       setError(null)
       setLoading(true)
       
-      console.log('🔄 Fetching reports and equipment from Supabase...')
+      console.log('Fetching reports from backend API...')
       
-      // Fetch reports with equipment details using JOIN
-      const { data: reportsData, error: reportsError } = await supabase
-        .from('Report')
-        .select(`
-          report_id,
-          inspection_id,
-          title,
-          equipment_id,
-          created_by,
-          created_at,
-          inspection_date,
-          next_inspection_due,
-          status,
-          report_type,
-          summary,
-          api_510_compliant,
-          inspection_frequency,
-          labeled_defects,
-          defect_types_summary,
-          labeled_photos,
-          pdf_url
-        `)
-        .order('created_at', { ascending: false })
+      const token = localStorage.getItem('token')
+      if (!token) {
+        throw new Error('Authentication required')
+      }
       
-      if (reportsError) throw reportsError
-      
-      // Fetch equipment details separately - only id and equipment_description
-      const { data: equipmentData, error: equipmentError } = await supabase
-        .from('equipment')  // Changed from User_rows to equipment
-        .select('id, equipment_description')
-      
-      if (equipmentError) console.warn('Could not fetch equipment:', equipmentError)
-      
-      // Create equipment lookup map for quick access
-      const equipmentMap = new Map()
-      ;(equipmentData || []).forEach(eq => {
-        equipmentMap.set(eq.id, {
-          description: eq.equipment_description || ''
-        })
-      })
-      
-      // Enrich reports with equipment info
-      const enrichedReports = (reportsData || []).map(report => {
-        const equipInfo = equipmentMap.get(report.equipment_id)
-        return {
-          ...report,
-          equipment_description: equipInfo?.description || 'No description available'
+      // Fetch reports from backend API
+      const response = await axios.get(`${API_BASE}/reports/history/archive`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       })
       
-      console.log('✅ Reports fetched:', enrichedReports.length)
+      const reportsData = response.data || []
       
-      setReports(enrichedReports)
+      console.log('Reports fetched:', reportsData.length)
       
-      // Extract unique equipment for filter dropdown
-      const uniqueEquip = Array.from(equipmentMap.entries())
-        .map(([id, info]) => ({ 
-          id, 
+      // Sort by created_at descending
+      const sortedReports = [...reportsData].sort((a, b) => {
+        const dateA = new Date(a.created_at || 0)
+        const dateB = new Date(b.created_at || 0)
+        return dateB - dateA
+      })
+      
+      setReports(sortedReports)
+      
+      // Extract unique equipment IDs for filter dropdown
+      const uniqueEquipIds = [...new Set(sortedReports.map(r => r.equipment_id).filter(id => id !== null && id !== undefined))]
+      
+      // Fetch equipment details for unique IDs
+      try {
+        const equipmentPromises = uniqueEquipIds.map(async (equipId) => {
+          try {
+            const equipResponse = await axios.get(`${API_BASE}/equipment/${equipId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            })
+            return {
+              id: equipId,
+              name: `Equipment ${equipId}`,
+              description: equipResponse.data?.equipment_description || 'No description available'
+            }
+          } catch (err) {
+            console.warn(`Could not fetch equipment ${equipId}:`, err)
+            return {
+              id: equipId,
+              name: `Equipment ${equipId}`,
+              description: 'No description available'
+            }
+          }
+        })
+        
+        const equipmentData = await Promise.all(equipmentPromises)
+        setEquipment(equipmentData.sort((a, b) => a.id - b.id))
+      } catch (equipErr) {
+        console.warn('Could not fetch equipment details:', equipErr)
+        // Set basic equipment list without descriptions
+        setEquipment(uniqueEquipIds.map(id => ({
+          id,
           name: `Equipment ${id}`,
-          description: info.description || ''
-        }))
-        .sort((a, b) => a.id - b.id)
+          description: 'No description available'
+        })))
+      }
       
-      setEquipment(uniqueEquip)
       setLoading(false)
     } catch (err) {
-      console.error('❌ Error fetching reports:', err)
-      setError(err.message || 'Failed to load report history')
+      console.error('Error fetching reports:', err)
+      setError(err.response?.data?.detail || err.message || 'Failed to load report history')
       setLoading(false)
     }
   }, [])
@@ -106,48 +106,38 @@ function Monitoring() {
     fetchReports()
   }, [fetchReports])
 
-  // Fetch defect types from Inspection table
+  // Fetch defect types from reports (already included in report data)
   const [defectTypes, setDefectTypes] = useState({})
   
   useEffect(() => {
-    const fetchDefectTypes = async () => {
-      if (reports.length === 0) return
-      
-      try {
-        // Get all unique inspection_ids from reports
-        const inspectionIds = [...new Set(reports.map(report => report.inspection_id).filter(id => id))]
-        
-        if (inspectionIds.length === 0) return
-        
-        console.log('🔄 Fetching defect types for inspections:', inspectionIds)
-        
-        // Fetch defect types from Inspection table
-        const { data: inspectionsData, error } = await supabase
-          .from('Inspection')
-          .select('inspection_id, defect_type')
-          .in('inspection_id', inspectionIds)
-        
-        if (error) {
-          console.warn('Could not fetch inspection defect types:', error)
-          return
-        }
-        
-        // Count defect type frequencies
-        const defectTypeCounts = {}
-        inspectionsData.forEach(inspection => {
-          if (inspection.defect_type) {
-            defectTypeCounts[inspection.defect_type] = (defectTypeCounts[inspection.defect_type] || 0) + 1
-          }
-        })
-        
-        console.log('✅ Defect types fetched:', defectTypeCounts)
-        setDefectTypes(defectTypeCounts)
-      } catch (err) {
-        console.warn('Error fetching defect types:', err)
-      }
+    if (reports.length === 0) {
+      setDefectTypes({})
+      return
     }
     
-    fetchDefectTypes()
+    // Extract defect types from reports
+    const defectTypeCounts = {}
+    reports.forEach(report => {
+      // Check if report has defect_types_summary (JSON field)
+      if (report.defect_types_summary) {
+        try {
+          const summary = typeof report.defect_types_summary === 'string' 
+            ? JSON.parse(report.defect_types_summary) 
+            : report.defect_types_summary
+          
+          if (typeof summary === 'object' && summary !== null) {
+            Object.keys(summary).forEach(defectType => {
+              defectTypeCounts[defectType] = (defectTypeCounts[defectType] || 0) + (summary[defectType] || 0)
+            })
+          }
+        } catch (err) {
+          console.warn('Error parsing defect_types_summary:', err)
+        }
+      }
+    })
+    
+    console.log('Defect types extracted:', defectTypeCounts)
+    setDefectTypes(defectTypeCounts)
   }, [reports])
 
   // Filter and search reports
@@ -380,7 +370,7 @@ const topDefectTypes = useMemo(() => {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading report history...</p>
         </div>
       </div>
@@ -392,22 +382,22 @@ const topDefectTypes = useMemo(() => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">📋 Report History & Analytics</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Report History & Analytics</h1>
           <p className="text-gray-600 mt-1">Search and analyze past inspection reports</p>
         </div>
         <button
           onClick={fetchReports}
           disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
         >
-          <span className={loading ? 'animate-spin' : ''}>↻</span>
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl">
           <p className="font-semibold">Error</p>
           <p className="text-sm">{error}</p>
         </div>
@@ -415,58 +405,60 @@ const topDefectTypes = useMemo(() => {
 
       {/* Summary Analytics Cards */}
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-  <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-red-500">
     <div className="flex items-center justify-between">
       <div>
         <h3 className="text-sm font-medium text-gray-600 mb-1">Total Inspections</h3>
-        <p className="text-3xl font-bold text-blue-600">{analytics.totalInspections}</p>
+        <p className="text-3xl font-bold text-red-600">{analytics.totalInspections}</p>
       </div>
-      <div className="text-4xl opacity-100">📊</div>
+      <div className="p-3 bg-red-50 rounded-xl">
+        <BarChart className="w-6 h-6 text-red-600" />
+      </div>
     </div>
   </div>
 
-  <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-purple-500">
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-red-500">
     <div className="flex items-center justify-between">
       <div>
         <h3 className="text-sm font-medium text-gray-600 mb-1">Total Defects</h3>
-        {/* Use dummy data - total of all defect types from dummy data */}
-        <p className="text-3xl font-bold text-purple-600">130</p>
-        {/* Original code (commented out): */}
-        {/* <p className="text-3xl font-bold text-purple-600">{analytics.totalDefects}</p> */}
+        <p className="text-3xl font-bold text-red-600">130</p>
       </div>
-      <div className="text-4xl opacity-100">⚠️</div>
+      <div className="p-3 bg-red-50 rounded-xl">
+        <AlertTriangle className="w-6 h-6 text-red-600" />
+      </div>
     </div>
   </div>
 
-  <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-red-500">
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-red-500">
     <div className="flex items-center justify-between">
       <div>
         <h3 className="text-sm font-medium text-gray-600 mb-1">Avg Defects/Inspection</h3>
-        {/* Calculate based on dummy data and actual inspection count */}
         <p className="text-3xl font-bold text-red-600">
           {analytics.totalInspections > 0 ? (130 / analytics.totalInspections).toFixed(2) : '0.00'}
         </p>
-        {/* Original code (commented out): */}
-        {/* <p className="text-3xl font-bold text-red-600">{analytics.averageDefectsPerInspection}</p> */}
       </div>
-      <div className="text-4xl opacity-100">📈</div>
+      <div className="p-3 bg-red-50 rounded-xl">
+        <TrendingUp className="w-6 h-6 text-red-600" />
+      </div>
     </div>
   </div>
 
-  <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-green-500">
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-green-500">
     <div className="flex items-center justify-between">
       <div>
         <h3 className="text-sm font-medium text-gray-600 mb-1">Compliance Rate</h3>
         <p className="text-3xl font-bold text-green-600">{analytics.complianceRate}%</p>
       </div>
-      <div className="text-4xl opacity-100">✅</div>
+      <div className="p-3 bg-green-50 rounded-xl">
+        <CheckCircle className="w-6 h-6 text-green-600" />
+      </div>
     </div>
   </div>
 </div>
 
       {/* Search and Filters */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4">Search & Filter Reports</h2>
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <h2 className="text-xl font-semibold mb-4 text-gray-900">Search & Filter Reports</h2>
         
         {/* Search Bar */}
         <div className="mb-4">
@@ -478,7 +470,7 @@ const topDefectTypes = useMemo(() => {
               setSearchTerm(e.target.value)
               setCurrentPage(1)
             }}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
           />
         </div>
 
@@ -493,7 +485,7 @@ const topDefectTypes = useMemo(() => {
                 setFilterStartDate(e.target.value)
                 setCurrentPage(1)
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
             />
           </div>
 
@@ -506,7 +498,7 @@ const topDefectTypes = useMemo(() => {
                 setFilterEndDate(e.target.value)
                 setCurrentPage(1)
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
             />
           </div>
 
@@ -518,7 +510,7 @@ const topDefectTypes = useMemo(() => {
                 setFilterEquipmentId(e.target.value)
                 setCurrentPage(1)
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
             >
               <option value="all">All Equipment</option>
               {equipment.map(eq => (
@@ -537,11 +529,11 @@ const topDefectTypes = useMemo(() => {
                 setFilterStatus(e.target.value)
                 setCurrentPage(1)
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
             >
               <option value="all">All Status</option>
-              <option value="COMPLETED">✅ COMPLETED</option>
-              <option value="REJECTED">❌ REJECTED</option>
+              <option value="COMPLETED">COMPLETED</option>
+              <option value="REJECTED">REJECTED</option>
             </select>
           </div>
         </div>
@@ -557,7 +549,7 @@ const topDefectTypes = useMemo(() => {
               setFilterStatus('all')
               setCurrentPage(1)
             }}
-            className="mt-4 px-4 py-2 text-sm bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+            className="mt-4 px-4 py-2 text-sm bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 transition-colors"
           >
             Clear All Filters
           </button>
@@ -567,8 +559,8 @@ const topDefectTypes = useMemo(() => {
       {/* Analytics Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Most Common Defect Types */}
-<div className="bg-white p-6 rounded-lg shadow-md">
-  <h2 className="text-xl font-semibold mb-4">Most Common Defect Types</h2>
+<div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+  <h2 className="text-xl font-semibold mb-4 text-gray-900">Most Common Defect Types</h2>
   {topDefectTypes.length > 0 ? (
     <div className="space-y-3">
       {topDefectTypes.map(([defectType, count], index) => {
@@ -580,7 +572,7 @@ const topDefectTypes = useMemo(() => {
         return (
           <div key={defectType} className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold">
+              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-600 text-xs font-bold">
                 {index + 1}
               </div>
               <span className="text-sm font-medium text-gray-700">{defectType || 'Unknown'}</span>
@@ -607,16 +599,16 @@ const topDefectTypes = useMemo(() => {
 </div>
 
         {/* Status Distribution */}
-<div className="bg-white p-6 rounded-lg shadow-md">
-  <h2 className="text-xl font-semibold mb-4">Report Status Distribution</h2>
+<div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+  <h2 className="text-xl font-semibold mb-4 text-gray-900">Report Status Distribution</h2>
   <div className="space-y-3">
     {['COMPLETED', 'REJECTED'].map(status => (
       <div key={status} className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`text-xs px-2 py-0.5 rounded-full ${
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
             status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
           }`}>
-            {status === 'COMPLETED' ? '✅' : '❌'}
+            {status}
           </span>
           
           {/* Changed to lowercase with first letter capitalized */}
@@ -646,30 +638,43 @@ const topDefectTypes = useMemo(() => {
       </div>
 
       {/* Reports Trend Over Time */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4">📈 Reports Trend Over Time</h2>
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <h2 className="text-xl font-semibold mb-4 text-gray-900">Reports Trend Over Time</h2>
         {reportsTrendData.length > 0 ? (
           <div className="space-y-6">
             {/* Bar chart visualization */}
             <div className="flex items-end h-48 gap-4 pt-6">
-              {reportsTrendData.map((monthData, index) => {
+              {(() => {
                 const maxReports = Math.max(...reportsTrendData.map(m => m.reports))
-                const height = maxReports > 0 ? (monthData.reports / maxReports) * 80 : 0
-                return (
-                  <div key={monthData.month} className="flex-1 flex flex-col items-center">
-                    <div className="text-xs text-gray-600 mb-2">{monthData.month}</div>
-                    <div 
-                      className="w-3/4 bg-gradient-to-t from-blue-500 to-blue-600 rounded-t-lg transition-all duration-300 hover:from-blue-600 hover:to-blue-700"
-                      style={{ height: `${height}%` }}
-                      title={`${monthData.reports} reports`}
-                    >
-                      <div className="text-xs text-white text-center opacity-0 hover:opacity-100 pt-1">
-                        {monthData.reports}
+                const maxBarHeight = 160 // Maximum height in pixels (h-48 = 192px, leaving some margin)
+                const minBarHeight = 8 // Minimum height for visibility
+                
+                return reportsTrendData.map((monthData, index) => {
+                  // Calculate height in pixels based on proportion
+                  let height = 0
+                  if (maxReports > 0) {
+                    const proportion = monthData.reports / maxReports
+                    height = Math.max(minBarHeight, proportion * maxBarHeight)
+                  } else if (monthData.reports > 0) {
+                    height = minBarHeight // Show at least minimum height if there are reports
+                  }
+                  
+                  return (
+                    <div key={monthData.month} className="flex-1 flex flex-col items-center">
+                      <div className="text-xs text-gray-600 mb-2">{monthData.month}</div>
+                      <div 
+                        className="w-3/4 bg-gradient-to-t from-red-500 to-red-600 rounded-t-xl transition-all duration-300 hover:from-red-600 hover:to-red-700 flex items-end justify-center"
+                        style={{ height: `${height}px`, minHeight: `${minBarHeight}px` }}
+                        title={`${monthData.reports} reports`}
+                      >
+                        <div className="text-xs text-white text-center opacity-0 hover:opacity-100 pt-1 w-full">
+                          {monthData.reports}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })
+              })()}
             </div>
             
             {/* Data table */}
@@ -677,10 +682,10 @@ const topDefectTypes = useMemo(() => {
               <h3 className="text-sm font-medium text-gray-700 mb-3">Monthly Report Count</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 {reportsTrendData.map((monthData) => (
-                  <div key={monthData.month} className="bg-blue-50 p-3 rounded-lg">
+                  <div key={monthData.month} className="bg-red-50 p-3 rounded-xl">
                     <div className="text-sm font-medium text-gray-900">{monthData.month}</div>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-xl font-bold text-blue-600">{monthData.reports}</span>
+                      <span className="text-xl font-bold text-red-600">{monthData.reports}</span>
                       <span className="text-xs text-gray-600">reports</span>
                     </div>
                   </div>
@@ -690,15 +695,15 @@ const topDefectTypes = useMemo(() => {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-40">
-            <div className="text-4xl mb-2">📅</div>
+            <Calendar className="w-12 h-12 text-gray-400 mb-2" />
             <p className="text-gray-500 text-sm">No trend data available</p>
           </div>
         )}
       </div>
 
       {/* Equipment Inspection Frequency */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4">Inspection Frequency by Equipment</h2>
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <h2 className="text-xl font-semibold mb-4 text-gray-900">Inspection Frequency by Equipment</h2>
         {Object.keys(analytics.inspectionsByEquipment).length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.entries(analytics.inspectionsByEquipment)
@@ -715,7 +720,7 @@ const topDefectTypes = useMemo(() => {
                   : equipmentName;
                 
                 return (
-                  <div key={equipmentName} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div key={equipmentName} className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                     <h3 className="font-semibold text-gray-900 text-sm mb-1 flex items-center">
                       <span className="truncate">{description || `Equipment ${equipmentId}`}</span>
                       <span className="text-xs text-gray-500 font-normal ml-2 shrink-0">
@@ -723,7 +728,7 @@ const topDefectTypes = useMemo(() => {
                       </span>
                     </h3>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-blue-600">{count}</span>
+                      <span className="text-2xl font-bold text-red-600">{count}</span>
                       <span className="text-xs text-gray-600">inspections</span>
                     </div>
                   </div>
@@ -736,10 +741,11 @@ const topDefectTypes = useMemo(() => {
       </div>
 
       {/* Reports Archive Table */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold">
-            📋 Report Archive ({filteredReports.length} results)
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-gray-600" />
+            Report Archive ({filteredReports.length} results)
           </h2>
         </div>
         
@@ -826,7 +832,7 @@ const topDefectTypes = useMemo(() => {
               <button
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="px-3 py-1 border border-gray-300 rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
               >
                 Previous
               </button>
@@ -845,9 +851,9 @@ const topDefectTypes = useMemo(() => {
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`px-3 py-1 text-sm rounded-lg ${
-                      currentPage === pageNum
-                        ? 'bg-blue-600 text-white'
+                    className={`px-3 py-1 text-sm rounded-xl transition-colors ${
+                        currentPage === pageNum
+                        ? 'bg-red-600 text-white'
                         : 'border border-gray-300 hover:bg-gray-50'
                     }`}
                   >
@@ -858,7 +864,7 @@ const topDefectTypes = useMemo(() => {
               <button
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
-                className="px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="px-3 py-1 border border-gray-300 rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
               >
                 Next
               </button>
@@ -870,4 +876,4 @@ const topDefectTypes = useMemo(() => {
   )
 }
 
-export default Monitoring
+export default ReportHistory

@@ -203,7 +203,7 @@ function NavItem({ icon: Icon, label, onClick, active }) {
         flex items-center gap-2 p-2 rounded-lg cursor-pointer
         transition
         ${active
-          ? "bg-blue-100 text-blue-700"
+          ? "bg-red-100 text-red-700"
           : "hover:bg-gray-100 text-gray-700"}
       `}
     >

@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
+import IPetroLogo from './IPetroLogo'
 
 // Icon Components
 const Icons = {
@@ -108,31 +109,34 @@ export default function MainLayout() {
   const inspectorMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Icons.Dashboard, path: '/inspector/dashboard' },
     { id: 'inspection', label: 'Inspection Workflow', icon: Icons.Eye, path: '/inspection' },
-    { id: 'photos', label: 'Photo Upload', icon: Icons.Camera, path: '/photo-upload' },
-    { id: 'reports', label: 'Generate Report', icon: Icons.FileText, path: '/reports' },
     { id: 'defect-ai', label: 'Defect AI', icon: Icons.Bot, path: '/defect-ai' },
-    { id: 'validation', label: 'Validation', icon: Icons.CheckCircle, path: '/validation' },
     { id: 'equipment', label: 'Equipment', icon: Icons.Building, path: '/equipment' },
+    { id: 'monitoring', label: 'Report History & Review', icon: Icons.Activity, path: '/monitoring' },
   ]
 
   // Admin menu items
   const adminMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Icons.Dashboard, path: '/admin/dashboard' },
     { id: 'users', label: 'User Management', icon: Icons.Users, path: '/admin/users' },
-    { id: 'templates', label: 'Inspection Templates', icon: Icons.FileText, path: '/admin/templates' },
     { id: 'sites', label: 'Sites / Assets', icon: Icons.Building, path: '/equipment' },
     { id: 'inspections', label: 'Inspections Overview', icon: Icons.Eye, path: '/inspection' },
-    { id: 'qa', label: 'QA Reports', icon: Icons.FileCheck, path: '/validation' },
-    { id: 'analytics', label: 'Analytics & Reports', icon: Icons.BarChart, path: '/analytics' },
-    { id: 'audit', label: 'Audit Logs', icon: Icons.Activity, path: '/admin/audit' },
+    { id: 'monitoring', label: 'Report History & Review', icon: Icons.Activity, path: '/monitoring' },
     { id: 'settings', label: 'System Settings', icon: Icons.Settings, path: '/admin/settings' },
+  ]
+
+  // Engineer menu items
+  const engineerMenuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: Icons.Dashboard, path: '/engineer/dashboard' },
+    { id: 'review', label: 'Review Inspection', icon: Icons.FileCheck, path: '/review-inspection' },
   ]
 
   // Get menu items based on user role
   const getMenuItems = () => {
     if (!user) return inspectorMenuItems
     const role = user.role?.toUpperCase()
-    return role === 'ADMIN' ? adminMenuItems : inspectorMenuItems
+    if (role === 'ADMIN') return adminMenuItems
+    if (role === 'ENGINEER') return engineerMenuItems
+    return inspectorMenuItems
   }
 
   const menuItems = getMenuItems()
@@ -213,9 +217,19 @@ export default function MainLayout() {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col`}>
-        <div className="p-6 border-b border-gray-200">
-          <h1 className={`text-xl font-bold text-gray-900 ${!sidebarOpen && 'hidden'}`}>VISOR</h1>
-          <h1 className={`text-xl font-bold text-gray-900 ${sidebarOpen && 'hidden'}`}>V</h1>
+        <div className={`p-6 border-b border-gray-200 flex items-center justify-center ${!sidebarOpen ? 'flex-col' : ''}`}>
+          {sidebarOpen ? (
+            <div className="flex flex-col items-center w-full">
+              <IPetroLogo size={80} className="mb-2" />
+              <h1 className="text-xs font-semibold text-gray-600 mt-1">VISOR System</h1>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center">
+              <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center mb-1">
+                <span className="text-white text-xs font-bold">i</span>
+              </div>
+            </div>
+          )}
         </div>
         
         <nav className="flex-1 p-4 space-y-1">
@@ -229,11 +243,11 @@ export default function MainLayout() {
                 }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                   isActive
-                    ? 'bg-blue-50 text-blue-600 font-medium'
+                    ? 'bg-red-50 text-red-600 font-medium'
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                <div className={`${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
+                <div className={`${isActive ? 'text-red-600' : 'text-gray-500'}`}>
                   <item.icon />
                 </div>
                 {sidebarOpen && <span className="text-sm">{item.label}</span>}
@@ -256,7 +270,7 @@ export default function MainLayout() {
                 <input
                   type="text"
                   placeholder={user?.role?.toUpperCase() === 'ADMIN' ? 'Search users, inspections, sites...' : 'Search inspections, equipment, sites...'}
-                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -275,7 +289,7 @@ export default function MainLayout() {
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                   className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-2 py-1.5 transition-colors"
                 >
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                  <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
                     {user?.username?.charAt(0).toUpperCase() || 'U'}
                   </div>
                   {user && (
@@ -326,11 +340,10 @@ export default function MainLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto">
           <Outlet />
         </main>
       </div>
     </div>
   )
 }
-

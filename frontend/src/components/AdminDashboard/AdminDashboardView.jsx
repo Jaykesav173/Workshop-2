@@ -63,7 +63,7 @@ export default function AdminDashboard() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="bg-blue-50 p-6 rounded-xl shadow-lg text-center">
+        <div className="bg-red-50 p-6 rounded-xl shadow-lg text-center">
           <p className="text-sm text-gray-500">Total Users</p>
           <p className="text-3xl font-bold text-black">{stats.totalUsers}</p>
         </div>

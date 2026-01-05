@@ -4,7 +4,7 @@ Business logic for inspection workflow operations
 """
 from fastapi import HTTPException
 from app.database.connection import get_db
-from app.database.schemas import InspectionCreate, InspectionResponse
+from app.database.schemas import InspectionCreate, InspectionResponse, InspectionUpdate
 from datetime import datetime
 
 class InspectionWorkflowService:
@@ -135,56 +135,55 @@ class InspectionWorkflowService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error updating inspection: {str(e)}")
     
-    async def update_inspection(self, inspection_id: int, inspection: InspectionCreate, current_user: dict) -> InspectionResponse:
+    async def update_inspection(self, inspection_id: int, inspection_update: InspectionUpdate) -> InspectionResponse:
         """Update inspection details"""
         try:
-            # Prepare update data from inspection object
+            # Convert datetime objects to ISO format strings for database
+            def format_date(date_value):
+                if date_value is None:
+                    return None
+                if isinstance(date_value, str):
+                    return date_value  # Already a string, use as-is
+                if isinstance(date_value, datetime):
+                    return date_value.isoformat()
+                return None
+            
+            # Build update data from the request, excluding None values
             update_data = {}
             
-            if inspection.inspection_date:
-                if isinstance(inspection.inspection_date, datetime):
-                    update_data["inspection_date"] = inspection.inspection_date.isoformat()
-                else:
-                    update_data["inspection_date"] = inspection.inspection_date
+            if inspection_update.inspection_date is not None:
+                update_data["inspection_date"] = format_date(inspection_update.inspection_date)
+            if inspection_update.equipment_tag_no is not None:
+                update_data["equipment_tag_no"] = inspection_update.equipment_tag_no
+            if inspection_update.defect_type is not None:
+                update_data["defect_type"] = inspection_update.defect_type
+            if inspection_update.remarks is not None:
+                update_data["remarks"] = inspection_update.remarks
+            if inspection_update.inspection_type is not None:
+                update_data["inspection_type"] = inspection_update.inspection_type
+            if inspection_update.status is not None:
+                update_data["status"] = inspection_update.status
+            if inspection_update.priority is not None:
+                update_data["priority"] = inspection_update.priority
+            if inspection_update.scheduled_date is not None:
+                update_data["scheduled_date"] = format_date(inspection_update.scheduled_date)
+            if inspection_update.due_date is not None:
+                update_data["due_date"] = format_date(inspection_update.due_date)
+            if inspection_update.next_inspection_date is not None:
+                update_data["next_inspection_date"] = format_date(inspection_update.next_inspection_date)
+            if inspection_update.remarks_general is not None:
+                update_data["remarks_general"] = inspection_update.remarks_general
+            if inspection_update.findings_summary is not None:
+                update_data["findings_summary"] = inspection_update.findings_summary
+            if inspection_update.plant_unit_area is not None:
+                update_data["plant_unit_area"] = inspection_update.plant_unit_area
             
-            if inspection.equipment_tag_no is not None:
-                update_data["equipment_tag_no"] = inspection.equipment_tag_no
-            if inspection.defect_type is not None:
-                update_data["defect_type"] = inspection.defect_type
-            if inspection.remarks is not None:
-                update_data["remarks"] = inspection.remarks
-            if inspection.inspection_type is not None:
-                update_data["inspection_type"] = inspection.inspection_type
-            if inspection.status is not None:
-                update_data["status"] = inspection.status
-            if inspection.priority is not None:
-                update_data["priority"] = inspection.priority
+            # Only update if there's data to update
+            if not update_data:
+                # Return existing inspection if no updates
+                return await self.get_inspection(inspection_id)
             
-            if inspection.scheduled_date:
-                if isinstance(inspection.scheduled_date, datetime):
-                    update_data["scheduled_date"] = inspection.scheduled_date.isoformat()
-                else:
-                    update_data["scheduled_date"] = inspection.scheduled_date
-            
-            if inspection.due_date:
-                if isinstance(inspection.due_date, datetime):
-                    update_data["due_date"] = inspection.due_date.isoformat()
-                else:
-                    update_data["due_date"] = inspection.due_date
-            
-            if inspection.next_inspection_date:
-                if isinstance(inspection.next_inspection_date, datetime):
-                    update_data["next_inspection_date"] = inspection.next_inspection_date.isoformat()
-                else:
-                    update_data["next_inspection_date"] = inspection.next_inspection_date
-            
-            if inspection.remarks_general is not None:
-                update_data["remarks_general"] = inspection.remarks_general
-            if inspection.findings_summary is not None:
-                update_data["findings_summary"] = inspection.findings_summary
-            if inspection.plant_unit_area is not None:
-                update_data["plant_unit_area"] = inspection.plant_unit_area
-            
+            # Update the inspection
             res = self.db.table("Inspection").update(update_data).eq("inspection_id", inspection_id).execute()
             
             if not res.data:
@@ -194,6 +193,9 @@ class InspectionWorkflowService:
         except HTTPException:
             raise
         except Exception as e:
+            import traceback
+            print(f"Error updating inspection: {str(e)}")
+            print(traceback.format_exc())
             raise HTTPException(status_code=500, detail=f"Error updating inspection: {str(e)}")
     
     async def delete_inspection(self, inspection_id: int) -> dict:
@@ -209,4 +211,3 @@ class InspectionWorkflowService:
             raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error deleting inspection: {str(e)}")
-

@@ -93,15 +93,15 @@
 }
 
 .visor-form-input {
-  @apply w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  @apply w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent;
 }
 
 .visor-form-select {
-  @apply w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  @apply w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent;
 }
 
 .visor-form-textarea {
-  @apply w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical;
+  @apply w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-vertical;
 }
 
 /* ============================================
@@ -113,7 +113,7 @@
 }
 
 .visor-btn-primary {
-  @apply bg-blue-600 text-white hover:bg-blue-700;
+  @apply bg-red-600 text-white hover:bg-red-700;
 }
 
 .visor-btn-secondary {
@@ -125,7 +125,7 @@
 }
 
 .visor-btn-fab {
-  @apply w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all hover:scale-110 flex items-center justify-center;
+  @apply w-14 h-14 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 transition-all hover:scale-110 flex items-center justify-center;
 }
 
 /* ============================================
@@ -193,7 +193,7 @@
 }
 
 .visor-sidebar-item-active {
-  @apply bg-blue-50 text-blue-600 font-medium;
+  @apply bg-red-50 text-red-600 font-medium;
 }
 
 .visor-sidebar-item-inactive {
@@ -233,7 +233,7 @@
 }
 
 .visor-search-input {
-  @apply block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  @apply block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent;
 }
 
 /* ============================================

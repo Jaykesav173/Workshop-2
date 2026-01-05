@@ -5,6 +5,8 @@
  */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
+import { API_BASE } from '../../services/api'
 
 // Simple SVG Icon Components (matching Admin Dashboard)
 const Icons = {
@@ -106,6 +108,10 @@ const Icons = {
 function InspectorDashboard() {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [kpiData, setKpiData] = useState([])
+  const [recentInspections, setRecentInspections] = useState([])
+  const [recentActivity, setRecentActivity] = useState([])
 
   useEffect(() => {
     const userStr = localStorage.getItem('user')
@@ -124,8 +130,10 @@ function InspectorDashboard() {
         if (userData.role?.toUpperCase() !== 'INSPECTOR') {
           if (userData.role?.toUpperCase() === 'ADMIN') {
             navigate('/admin/dashboard')
+          } else if (userData.role?.toUpperCase() === 'ENGINEER') {
+            navigate('/engineer/dashboard')
           } else {
-            navigate('/reports')
+            navigate('/inspector/dashboard')
           }
         }
       } catch (e) {
@@ -134,29 +142,181 @@ function InspectorDashboard() {
     }
   }, [navigate])
 
-  // Mock data for Inspector Dashboard
-  const kpiData = [
-    { title: 'Pending Inspections', value: '8', trend: '+2', trendUp: true, icon: Icons.Eye, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
-    { title: 'Completed Today', value: '5', trend: '+1', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
-    { title: 'Photos Uploaded', value: '142', trend: '+23', trendUp: true, icon: Icons.Camera, bgColor: 'bg-purple-50', iconColor: 'text-purple-600' },
-    { title: 'Reports Generated', value: '12', trend: '+3', trendUp: true, icon: Icons.FileText, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
-    { title: 'Pending QA Review', value: '4', trend: '-1', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-yellow-50', iconColor: 'text-yellow-600' },
-    { title: 'Active Sites', value: '6', trend: '0', trendUp: true, icon: Icons.Building, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
-  ]
+  // Helper function to get time ago
+  const getTimeAgo = (date) => {
+    const now = new Date()
+    const diffMs = now - date
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
 
-  const recentInspections = [
-    { site: 'Site A - Tank T-101', status: 'In Progress', priority: 'High', assigned: 'You', timestamp: '2 hours ago' },
-    { site: 'Site B - Vessel V-205', status: 'Pending', priority: 'Medium', assigned: 'You', timestamp: '5 hours ago' },
-    { site: 'Site C - Reactor R-301', status: 'Completed', priority: 'Low', assigned: 'You', timestamp: '1 day ago' },
-    { site: 'Site A - Pump P-102', status: 'In Progress', priority: 'High', assigned: 'You', timestamp: '2 days ago' },
-  ]
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
+    return date.toLocaleDateString()
+  }
 
-  const recentActivity = [
-    { action: 'Uploaded 12 photos', module: 'Photo Upload', timestamp: '15 minutes ago' },
-    { action: 'Generated Report #342', module: 'Reports', timestamp: '1 hour ago' },
-    { action: 'Started inspection at Site A', module: 'Inspection', timestamp: '2 hours ago' },
-    { action: 'Validated inspection data', module: 'Validation', timestamp: '3 hours ago' },
-  ]
+  // Fetch dashboard data
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true)
+        const token = localStorage.getItem('token')
+        const headers = { Authorization: `Bearer ${token}` }
+
+        // Get current user ID to filter by inspector
+        let currentUserId = user?.id || null
+        if (!currentUserId) {
+          const userStr = localStorage.getItem('user')
+          if (userStr) {
+            try {
+              const userData = JSON.parse(userStr)
+              currentUserId = userData.id
+            } catch (e) {
+              console.error('Error parsing user data:', e)
+            }
+          }
+        }
+
+        // Fetch inspections
+        const inspectionsRes = await axios.get(`${API_BASE}/inspections/`, { headers })
+        const inspections = inspectionsRes.data || []
+
+        // Fetch reports - try to get all reports
+        let reports = []
+        try {
+          // Try new endpoint first
+          const allReportsRes = await axios.get(`${API_BASE}/reports/all`, { headers })
+          reports = allReportsRes.data || []
+        } catch (e) {
+          // Fallback to history endpoint
+          try {
+            const reportsRes = await axios.get(`${API_BASE}/reports/history/archive`, { headers })
+            reports = reportsRes.data?.reports || reportsRes.data || []
+          } catch (e2) {
+            console.log('Could not fetch reports:', e2)
+          }
+        }
+
+        // Fetch equipment
+        let equipment = []
+        try {
+          const equipmentRes = await axios.get(`${API_BASE}/equipment/`, { headers })
+          equipment = equipmentRes.data || []
+        } catch (e) {
+          console.log('Could not fetch equipment:', e)
+        }
+
+        // Filter reports by current inspector (created_by)
+        const inspectorReports = currentUserId 
+          ? reports.filter(r => r.created_by === currentUserId || r.created_by === parseInt(currentUserId))
+          : reports
+
+        // Calculate KPIs for this inspector
+        // Submitted Reports: Reports with status SUBMITTED or QA_REVIEW created by this inspector
+        const submittedReports = inspectorReports.filter(r => {
+          const status = (r.status || '').toUpperCase()
+          return status === 'SUBMITTED' || status === 'QA_REVIEW'
+        }).length
+
+        // Approved Inspections: Count unique inspections that have approved reports or are approved
+        // Get all approved report inspection IDs
+        const approvedReportInspectionIds = new Set(
+          inspectorReports
+            .filter(r => {
+              const status = (r.status || '').toUpperCase()
+              return status === 'APPROVED' && r.inspection_id
+            })
+            .map(r => r.inspection_id)
+        )
+        
+        // Count inspections that are approved or have approved reports
+        const approvedInspections = inspections.filter(i => {
+          const inspectionId = i.inspection_id || i.id
+          const status = (i.status || '').toUpperCase()
+          return status === 'APPROVED' || approvedReportInspectionIds.has(inspectionId)
+        }).length
+
+        const totalReports = inspectorReports.length
+        const totalEquipment = equipment.length
+
+        // Get today's date
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const completedToday = inspections.filter(i => {
+          if (!i.inspection_date) return false
+          const inspectionDate = new Date(i.inspection_date)
+          inspectionDate.setHours(0, 0, 0, 0)
+          return inspectionDate.getTime() === today.getTime() && i.status === 'Completed'
+        }).length
+
+        // Set KPI data
+        setKpiData([
+          { title: 'Submitted Reports', value: submittedReports.toString(), trend: '', trendUp: true, icon: Icons.Eye, bgColor: 'bg-yellow-50', iconColor: 'text-yellow-600' },
+          { title: 'Completed Today', value: completedToday.toString(), trend: '', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
+          { title: 'Total Inspections', value: inspections.length.toString(), trend: '', trendUp: true, icon: Icons.Eye, bgColor: 'bg-slate-100', iconColor: 'text-slate-700' },
+          { title: 'Reports Generated', value: totalReports.toString(), trend: '', trendUp: true, icon: Icons.FileText, bgColor: 'bg-red-50', iconColor: 'text-red-600' },
+          { title: 'Approved Inspections', value: approvedInspections.toString(), trend: '', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
+          { title: 'Total Equipment', value: totalEquipment.toString(), trend: '', trendUp: true, icon: Icons.Building, bgColor: 'bg-slate-100', iconColor: 'text-slate-700' },
+        ])
+
+        // Get recent inspections (last 5)
+        const sortedInspections = [...inspections]
+          .sort((a, b) => {
+            const dateA = a.created_at ? new Date(a.created_at) : new Date(0)
+            const dateB = b.created_at ? new Date(b.created_at) : new Date(0)
+            return dateB - dateA
+          })
+          .slice(0, 5)
+
+        const recentInspectionsData = sortedInspections.map(inspection => {
+          const equipmentName = equipment.find(eq => eq.id === inspection.equipment_id)?.tag || 'Unknown Equipment'
+          const timeAgo = inspection.created_at ? getTimeAgo(new Date(inspection.created_at)) : 'Unknown'
+          return {
+            id: inspection.inspection_id,
+            site: equipmentName,
+            status: inspection.status || 'Pending',
+            priority: inspection.priority || 'Medium',
+            assigned: 'You',
+            timestamp: timeAgo
+          }
+        })
+        setRecentInspections(recentInspectionsData)
+
+        // Recent activity from reports
+        const sortedReports = [...reports]
+          .sort((a, b) => {
+            const dateA = a.created_at ? new Date(a.created_at) : new Date(0)
+            const dateB = b.created_at ? new Date(b.created_at) : new Date(0)
+            return dateB - dateA
+          })
+          .slice(0, 4)
+
+        const activityData = sortedReports.map(report => ({
+          action: `Generated Report ${report.report_id?.substring(0, 8) || 'N/A'}`,
+          module: 'Reports',
+          timestamp: report.created_at ? getTimeAgo(new Date(report.created_at)) : 'Unknown'
+        }))
+        setRecentActivity(activityData)
+
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error)
+        // Set default empty data
+        setKpiData([
+          { title: 'Submitted Reports', value: '0', trend: '', trendUp: true, icon: Icons.Eye, bgColor: 'bg-yellow-50', iconColor: 'text-yellow-600' },
+          { title: 'Completed Today', value: '0', trend: '', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
+          { title: 'Total Inspections', value: '0', trend: '', trendUp: true, icon: Icons.Eye, bgColor: 'bg-slate-100', iconColor: 'text-slate-700' },
+          { title: 'Reports Generated', value: '0', trend: '', trendUp: true, icon: Icons.FileText, bgColor: 'bg-red-50', iconColor: 'text-red-600' },
+          { title: 'Approved Inspections', value: '0', trend: '', trendUp: true, icon: Icons.CheckCircle, bgColor: 'bg-green-50', iconColor: 'text-green-600' },
+        ])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDashboardData()
+  }, [])
 
   return (
     <>
@@ -201,8 +361,8 @@ function InspectorDashboard() {
               className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 text-left group"
             >
               <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-blue-50 group-hover:bg-blue-100 transition-colors">
-                  <Icons.Eye className="w-6 h-6 text-blue-600" />
+                <div className="p-3 rounded-xl bg-red-50 group-hover:bg-red-100 transition-colors">
+                  <Icons.Eye className="w-6 h-6 text-red-600" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-1">Start Inspection</h3>
@@ -212,31 +372,31 @@ function InspectorDashboard() {
             </button>
 
             <button
-              onClick={() => navigate('/photo-upload')}
+              onClick={() => navigate('/equipment')}
               className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 text-left group"
             >
               <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-purple-50 group-hover:bg-purple-100 transition-colors">
-                  <Icons.Camera className="w-6 h-6 text-purple-600" />
+                <div className="p-3 rounded-xl bg-slate-100 group-hover:bg-slate-200 transition-colors">
+                  <Icons.Building className="w-6 h-6 text-slate-700" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Upload Photos</h3>
-                  <p className="text-sm text-gray-600">Add inspection photos</p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">View Equipment</h3>
+                  <p className="text-sm text-gray-600">Manage equipment records</p>
                 </div>
               </div>
             </button>
 
             <button
-              onClick={() => navigate('/reports')}
+              onClick={() => navigate('/monitoring')}
               className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 text-left group"
             >
               <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-green-50 group-hover:bg-green-100 transition-colors">
-                  <Icons.FileText className="w-6 h-6 text-green-600" />
+                <div className="p-3 rounded-xl bg-red-50 group-hover:bg-red-100 transition-colors">
+                  <Icons.FileText className="w-6 h-6 text-red-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Generate Report</h3>
-                  <p className="text-sm text-gray-600">Create inspection report</p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Report History</h3>
+                  <p className="text-sm text-gray-600">View and review reports</p>
                 </div>
               </div>
             </button>
@@ -260,13 +420,22 @@ function InspectorDashboard() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {recentInspections.map((inspection, index) => (
-                      <tr key={index} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => navigate('/inspection')}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{inspection.site}</td>
+                    {loading ? (
+                      <tr>
+                        <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">Loading...</td>
+                      </tr>
+                    ) : recentInspections.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">No recent inspections</td>
+                      </tr>
+                    ) : (
+                      recentInspections.map((inspection) => (
+                        <tr key={inspection.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => navigate(`/inspection/${inspection.id}`)}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{inspection.site}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                             inspection.status === 'Completed' ? 'bg-green-100 text-green-800' :
-                            inspection.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+                            inspection.status === 'In Progress' ? 'bg-red-100 text-red-800' :
                             'bg-yellow-100 text-yellow-800'
                           }`}>
                             {inspection.status}
@@ -281,9 +450,10 @@ function InspectorDashboard() {
                             {inspection.priority}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{inspection.timestamp}</td>
-                      </tr>
-                    ))}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{inspection.timestamp}</td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -296,10 +466,15 @@ function InspectorDashboard() {
               </div>
               <div className="p-6">
                 <div className="space-y-4">
-                  {recentActivity.map((activity, index) => (
+                  {loading ? (
+                    <p className="text-sm text-gray-500 text-center">Loading...</p>
+                  ) : recentActivity.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center">No recent activity</p>
+                  ) : (
+                    recentActivity.map((activity, index) => (
                     <div key={index} className="flex items-start gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-                      <div className="p-2 rounded-lg bg-blue-50">
-                        <Icons.Clock className="w-4 h-4 text-blue-600" />
+                      <div className="p-2 rounded-lg bg-red-50">
+                        <Icons.Clock className="w-4 h-4 text-red-600" />
                       </div>
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-900">{activity.action}</p>
@@ -310,7 +485,8 @@ function InspectorDashboard() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -320,7 +496,7 @@ function InspectorDashboard() {
       <div className="fixed bottom-6 right-6 flex flex-col gap-3">
         <button
           onClick={() => navigate('/inspection')}
-          className="w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all hover:scale-110 flex items-center justify-center"
+          className="w-14 h-14 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 transition-all hover:scale-110 flex items-center justify-center"
           title="Start New Inspection"
         >
           <Icons.Plus />

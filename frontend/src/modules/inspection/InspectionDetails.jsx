@@ -3,7 +3,6 @@
  * 4-tab layout: Overview, Observations, Photos, Report
  */
 import { useState, useEffect, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import axios from 'axios'
 import { API_BASE } from '../../services/api'
@@ -11,7 +10,6 @@ import { photoService } from '../../services/photoService'
 import { reportService } from '../../services/reportService'
 import observationService from '../../services/observationService'
 import templateService from '../../services/templateService'
-import TemplateManagement from './TemplateManagement'
 
 const Icons = {
   Plus: () => (
@@ -75,23 +73,144 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     </svg>
   ),
+  FileText: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
 }
 
-// Finding templates (keys removed - only used for text, numbering is automatic)
-const findingTemplates = [
-  { id: '1', label: 'External - Coating condition', text: 'Generally, equipment was found fully painted with no significant paint breakdown.' },
-  { id: '2', label: 'External - No leakage', text: 'No leakage traces observed on shell, heads, flanges or piping attachments.' },
-  { id: '3', label: 'Internal - Surfaces clean', text: 'Internal surfaces observed generally clean with minor light rust staining.' },
-  { id: '4', label: 'Internal - Localised corrosion', text: 'Localised general corrosion noted around lower skirt support region.' },
-]
+// Templates will be fetched from backend
 
-// Recommendation templates (keys removed - only used for text, numbering is automatic)
-const recommendationTemplates = [
-  { id: '1', label: 'Touch-up coating', text: 'Touch up paint coating at affected areas.' },
-  { id: '2', label: 'Monitor corrosion', text: 'Continue to monitor localised corrosion areas during next turnaround.' },
-  { id: '3', label: 'Repair insulation', text: 'Repair damaged insulation cladding to prevent moisture ingress.' },
-  { id: '4', label: 'Hydrotest / Fitness check', text: 'Perform hydrostatic test / fitness-for-service evaluation.' },
-]
+// QA Feedback Display Component by Inspection ID (shows all comments from all reports)
+function QAFeedbackDisplayByInspection({ inspectionId }) {
+  const [comments, setComments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const fetchComments = async () => {
+      if (!inspectionId) {
+        setLoading(false)
+        return
+      }
+      
+      try {
+        setLoading(true)
+        setError(null)
+        console.log('🔍 Fetching QA comments for inspectionId:', inspectionId)
+        const commentsData = await reportService.getQACommentsByInspection(inspectionId)
+        console.log('✅ QA comments received:', commentsData)
+        setComments(commentsData || [])
+      } catch (err) {
+        console.error('❌ Error fetching QA comments:', err)
+        console.error('Error details:', err.response?.data)
+        setError(err.response?.data?.detail || err.message || 'Failed to load comments')
+        setComments([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchComments()
+  }, [inspectionId])
+
+  if (loading) {
+    return <p className="text-sm text-gray-600">Loading feedback...</p>
+  }
+
+  if (error) {
+    return (
+      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+        <p className="text-sm text-red-600">Error loading comments: {error}</p>
+      </div>
+    )
+  }
+
+  if (comments.length === 0) {
+    return <p className="text-sm text-gray-600">No QA feedback yet.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      {comments.map((comment) => (
+        <div key={comment.id} className="p-4 bg-white rounded-lg border border-gray-200">
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-sm font-semibold text-red-600">{comment.section}</span>
+            <span className="text-xs text-gray-500">
+              {comment.created_at ? new Date(comment.created_at).toLocaleDateString() : ''}
+            </span>
+          </div>
+          <p className="text-sm text-gray-700">{comment.comment}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// QA Feedback Display Component
+function QAFeedbackDisplay({ reportId }) {
+  const [comments, setComments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const fetchComments = async () => {
+      if (!reportId) {
+        setLoading(false)
+        return
+      }
+      
+      try {
+        setLoading(true)
+        setError(null)
+        console.log('🔍 Fetching QA comments for reportId:', reportId)
+        const commentsData = await reportService.getQAComments(reportId)
+        console.log('✅ QA comments received:', commentsData)
+        setComments(commentsData || [])
+      } catch (err) {
+        console.error('❌ Error fetching QA comments:', err)
+        console.error('Error details:', err.response?.data)
+        setError(err.response?.data?.detail || err.message || 'Failed to load comments')
+        setComments([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchComments()
+  }, [reportId])
+
+  if (loading) {
+    return <p className="text-sm text-gray-600">Loading feedback...</p>
+  }
+
+  if (error) {
+    return (
+      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+        <p className="text-sm text-red-600">Error loading comments: {error}</p>
+      </div>
+    )
+  }
+
+  if (comments.length === 0) {
+    return <p className="text-sm text-gray-600">No QA feedback yet.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      {comments.map((comment) => (
+        <div key={comment.id} className="p-4 bg-white rounded-lg border border-gray-200">
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-sm font-semibold text-red-600">{comment.section}</span>
+            <span className="text-xs text-gray-500">
+              {comment.created_at ? new Date(comment.created_at).toLocaleDateString() : ''}
+            </span>
+          </div>
+          <p className="text-sm text-gray-700">{comment.comment}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function InspectionDetails() {
   const { id } = useParams()
@@ -101,22 +220,23 @@ function InspectionDetails() {
   const [inspection, setInspection] = useState(null)
   const [equipment, setEquipment] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [userRole, setUserRole] = useState(null)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [showTemplateManagement, setShowTemplateManagement] = useState(false) // false, 'findings', or 'recommendations'
-  const [findingTemplates, setFindingTemplates] = useState([])
-  const [recommendationTemplates, setRecommendationTemplates] = useState([])
-  const [templatesLoading, setTemplatesLoading] = useState(false)
-
-  // Debug: Watch showTemplateManagement state changes
-  useEffect(() => {
-    console.log('🔄 showTemplateManagement state changed to:', showTemplateManagement, 'type:', typeof showTemplateManagement, 'truthy?', !!showTemplateManagement)
-    console.log('🔄 Component should re-render now with showTemplateManagement =', showTemplateManagement)
-  }, [showTemplateManagement])
   
-  // Debug: Log every render
+  // Get user role on mount
   useEffect(() => {
-    console.log('🔄 InspectionDetails component rendered, showTemplateManagement =', showTemplateManagement)
-  })
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr)
+        setUserRole(userData.role?.toUpperCase() || 'INSPECTOR')
+      } catch (e) {
+        setUserRole('INSPECTOR')
+      }
+    } else {
+      setUserRole('INSPECTOR')
+    }
+  }, [])
   const [editFormData, setEditFormData] = useState({
     inspection_type: '',
     priority: '',
@@ -156,6 +276,15 @@ function InspectionDetails() {
   const [photoNumbers, setPhotoNumbers] = useState({}) // Map of photo_id -> photo_number (e.g., "1.1", "1.2")
   const [annotatingPhoto, setAnnotatingPhoto] = useState(null) // Photo being annotated
   const [annotatedImages, setAnnotatedImages] = useState({}) // Map of photo_id -> annotated image URL/blob
+
+  // Template state
+  const [findingTemplates, setFindingTemplates] = useState([])
+  const [recommendationTemplates, setRecommendationTemplates] = useState([])
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [templateModalType, setTemplateModalType] = useState(null) // 'finding' or 'recommendation'
+  const [templateModalData, setTemplateModalData] = useState({ label: '', text: '' })
+  const [editingTemplateId, setEditingTemplateId] = useState(null)
+  const [templateIndex, setTemplateIndex] = useState(null) // Index of finding/recommendation being edited
 
   // Helper function to get canonical photo key (always string for consistency)
   const getPhotoKey = (photo) => {
@@ -231,43 +360,33 @@ function InspectionDetails() {
   const [report, setReport] = useState(null)
   const [generatingReport, setGeneratingReport] = useState(false)
 
-  // Fetch templates on mount and when modal closes
-  const fetchTemplates = async () => {
-    try {
-      setTemplatesLoading(true)
-      const token = localStorage.getItem('token')
-      if (!token) {
-        console.warn('⚠️ No token found, skipping template fetch')
-        return
-      }
-      
-      // Fetch only ACTIVE templates for dropdowns
-      const [findings, recommendations] = await Promise.all([
-        templateService.getFindingTemplates(token, true), // true = only active
-        templateService.getRecommendationTemplates(token, true) // true = only active
-      ])
-      
-      setFindingTemplates(findings || [])
-      setRecommendationTemplates(recommendations || [])
-      
-      console.log('✅ Templates fetched - Findings:', findings?.length || 0, 'Recommendations:', recommendations?.length || 0)
-      console.log('📋 Finding templates:', findings)
-      console.log('📋 Recommendation templates:', recommendations)
-    } catch (error) {
-      console.error('❌ Error fetching templates:', error)
-      console.error('❌ Error details:', error.response?.data || error.message)
-      // Don't show alert - just log error
-      setFindingTemplates([])
-      setRecommendationTemplates([])
-    } finally {
-      setTemplatesLoading(false)
-    }
+  // Check if editing is allowed (only when report is DRAFT or doesn't exist)
+  const isEditAllowed = () => {
+    if (!report) return true // No report yet, editing allowed
+    const status = report.status
+    // Only allow editing when status is DRAFT or REJECTED (can revise after rejection)
+    return status === 'DRAFT' || status === 'REJECTED'
+  }
+
+  // Check if report is submitted (read-only mode)
+  const isReadOnly = () => {
+    if (!report) return false
+    const status = report.status
+    // Read-only when SUBMITTED, QA_REVIEW, or APPROVED
+    return status === 'SUBMITTED' || status === 'QA_REVIEW' || status === 'APPROVED'
   }
 
   useEffect(() => {
     fetchInspection()
-    fetchTemplates() // Fetch templates on mount
   }, [id])
+
+  // Refresh inspection when report status changes to sync inspection status
+  useEffect(() => {
+    if (report?.status && (report.status === 'APPROVED' || report.status === 'REJECTED')) {
+      // Refresh inspection to get updated status
+      fetchInspection()
+    }
+  }, [report?.status])
 
   useEffect(() => {
     // Fetch equipment by tag_no if available, or try to fetch by equipment_id for backward compatibility
@@ -285,6 +404,8 @@ function InspectionDetails() {
       console.log(`🔄 useEffect triggered: inspection_id=${inspection.inspection_id}`)
       fetchInspectionPhotos(inspection.inspection_id)
       fetchObservations()
+      // Fetch report if it exists
+      fetchReportByInspectionId(inspection.inspection_id)
     }
   }, [inspection?.inspection_id]) // Only depend on inspection_id, not entire inspection object
 
@@ -354,7 +475,9 @@ function InspectionDetails() {
       alert('Inspection details updated successfully!')
     } catch (err) {
       console.error('Error updating inspection:', err)
-      alert('Failed to update inspection details. Please try again.')
+      console.error('Error response:', err.response?.data)
+      const errorMessage = err.response?.data?.detail || err.message || 'Failed to update inspection details. Please try again.'
+      alert(errorMessage)
     }
   }
 
@@ -387,6 +510,23 @@ function InspectionDetails() {
       }
     } catch (err) {
       console.error('Error fetching equipment by tag:', err)
+    }
+  }
+
+  const fetchReportByInspectionId = async (inspectionId) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`${API_BASE}/reports/inspection/${inspectionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      console.log('📋 Report fetched for inspection:', response.data)
+      setReport(response.data)
+    } catch (err) {
+      // Report might not exist yet, which is fine
+      if (err.response?.status !== 404) {
+        console.error('Error fetching report:', err)
+      }
+      setReport(null)
     }
   }
 
@@ -696,6 +836,10 @@ function InspectionDetails() {
   }
 
   const handleAddRecommendation = () => {
+    if (isReadOnly()) {
+      alert('Cannot add recommendations. Report is submitted and in read-only mode.')
+      return
+    }
     const observationNum = getObservationNumber()
     const newKey = getNextRecommendationNumber(observationForm.recommendations, observationNum)
     setObservationForm({
@@ -704,29 +848,198 @@ function InspectionDetails() {
     })
   }
 
+  // Fetch templates from backend
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const [findings, recommendations] = await Promise.all([
+          templateService.getFindingTemplates(true),
+          templateService.getRecommendationTemplates(true)
+        ])
+        setFindingTemplates(findings)
+        setRecommendationTemplates(recommendations)
+      } catch (error) {
+        console.error('Error fetching templates:', error)
+        // Fallback to empty arrays if fetch fails
+        setFindingTemplates([])
+        setRecommendationTemplates([])
+      }
+    }
+    fetchTemplates()
+  }, [])
+
   const handleApplyFindingTemplate = (index, templateId) => {
-    // Convert templateId to number for comparison (backend returns integer IDs)
-    const template = findingTemplates.find(t => String(t.id) === String(templateId))
+    if (isReadOnly()) return
+    
+    if (templateId === 'custom') {
+      // Open custom template modal
+      setTemplateModalType('finding')
+      setTemplateIndex(index)
+      setTemplateModalData({ label: '', text: observationForm.findings[index]?.text || '' })
+      setEditingTemplateId(null)
+      setShowTemplateModal(true)
+      return
+    }
+    
+    const template = findingTemplates.find(t => t.id === parseInt(templateId) || t.id === templateId)
     if (!template) return
     const updated = [...observationForm.findings]
-    // Update the text and store template_id so we can show the selected label
-    updated[index] = { ...updated[index], text: template.text, template_id: template.id }
+    // Only update the text, keep the existing auto-generated key
+    updated[index] = { ...updated[index], text: template.text }
     setObservationForm({ ...observationForm, findings: updated })
   }
 
   const handleApplyRecommendationTemplate = (index, templateId) => {
-    // Convert templateId to number for comparison (backend returns integer IDs)
-    const template = recommendationTemplates.find(t => String(t.id) === String(templateId))
+    if (isReadOnly()) return
+    
+    if (templateId === 'custom') {
+      // Open custom template modal
+      setTemplateModalType('recommendation')
+      setTemplateIndex(index)
+      setTemplateModalData({ label: '', text: observationForm.recommendations[index]?.text || '' })
+      setEditingTemplateId(null)
+      setShowTemplateModal(true)
+      return
+    }
+    
+    const template = recommendationTemplates.find(t => t.id === parseInt(templateId) || t.id === templateId)
     if (!template) return
     const updated = [...observationForm.recommendations]
-    // Update the text and store template_id so we can show the selected label
-    updated[index] = { ...updated[index], text: template.text, template_id: template.id }
+    // Only update the text, keep the existing auto-generated key
+    updated[index] = { ...updated[index], text: template.text }
     setObservationForm({ ...observationForm, recommendations: updated })
+  }
+
+  const handleSaveTemplate = async () => {
+    if (!templateModalData.label.trim() || !templateModalData.text.trim()) {
+      alert('Please provide both label and text for the template')
+      return
+    }
+
+    try {
+      if (editingTemplateId) {
+        // Update existing template
+        if (templateModalType === 'finding') {
+          await templateService.updateFindingTemplate(editingTemplateId, {
+            label: templateModalData.label,
+            text: templateModalData.text
+          })
+        } else {
+          await templateService.updateRecommendationTemplate(editingTemplateId, {
+            label: templateModalData.label,
+            text: templateModalData.text
+          })
+        }
+      } else {
+        // Create new template
+        if (templateModalType === 'finding') {
+          await templateService.createFindingTemplate({
+            label: templateModalData.label,
+            text: templateModalData.text
+          })
+        } else {
+          await templateService.createRecommendationTemplate({
+            label: templateModalData.label,
+            text: templateModalData.text
+          })
+        }
+      }
+
+      // Refresh templates
+      const [findings, recommendations] = await Promise.all([
+        templateService.getFindingTemplates(true),
+        templateService.getRecommendationTemplates(true)
+      ])
+      setFindingTemplates(findings)
+      setRecommendationTemplates(recommendations)
+
+      // Apply template to current finding/recommendation
+      if (templateIndex !== null) {
+        if (templateModalType === 'finding') {
+          const updated = [...observationForm.findings]
+          updated[templateIndex] = { ...updated[templateIndex], text: templateModalData.text }
+          setObservationForm({ ...observationForm, findings: updated })
+        } else {
+          const updated = [...observationForm.recommendations]
+          updated[templateIndex] = { ...updated[templateIndex], text: templateModalData.text }
+          setObservationForm({ ...observationForm, recommendations: updated })
+        }
+      }
+
+      // Close modal
+      setShowTemplateModal(false)
+      setTemplateModalData({ label: '', text: '' })
+      setEditingTemplateId(null)
+      setTemplateIndex(null)
+    } catch (error) {
+      console.error('Error saving template:', error)
+      alert('Failed to save template: ' + (error.response?.data?.detail || error.message))
+    }
+  }
+
+  const handleEditTemplate = (template) => {
+    setEditingTemplateId(template.id)
+    setTemplateModalData({ label: template.label, text: template.text })
+  }
+
+  const handleDeleteTemplate = async (templateId) => {
+    if (!confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      if (templateModalType === 'finding') {
+        await templateService.deleteFindingTemplate(templateId)
+      } else {
+        await templateService.deleteRecommendationTemplate(templateId)
+      }
+
+      // Refresh templates
+      const [findings, recommendations] = await Promise.all([
+        templateService.getFindingTemplates(true),
+        templateService.getRecommendationTemplates(true)
+      ])
+      setFindingTemplates(findings)
+      setRecommendationTemplates(recommendations)
+
+      // Clear form if editing the deleted template
+      if (editingTemplateId === templateId) {
+        setTemplateModalData({ label: '', text: '' })
+        setEditingTemplateId(null)
+      }
+    } catch (error) {
+      console.error('Error deleting template:', error)
+      alert('Failed to delete template: ' + (error.response?.data?.detail || error.message))
+    }
+  }
+
+  const handleUseTemplate = (template) => {
+    // Apply template to current finding/recommendation
+    if (templateIndex !== null) {
+      if (templateModalType === 'finding') {
+        const updated = [...observationForm.findings]
+        updated[templateIndex] = { ...updated[templateIndex], text: template.text }
+        setObservationForm({ ...observationForm, findings: updated })
+      } else {
+        const updated = [...observationForm.recommendations]
+        updated[templateIndex] = { ...updated[templateIndex], text: template.text }
+        setObservationForm({ ...observationForm, recommendations: updated })
+      }
+    }
+    // Close modal
+    setShowTemplateModal(false)
+    setTemplateModalData({ label: '', text: '' })
+    setEditingTemplateId(null)
+    setTemplateIndex(null)
   }
 
   const [editingObservationId, setEditingObservationId] = useState(null)
 
   const handleEditObservation = (obs) => {
+    if (isReadOnly()) {
+      alert('Cannot edit observations. Report is submitted and in read-only mode.')
+      return
+    }
     // Find observation index to get its number
     const obsIndex = observations.findIndex(o => o.id === obs.id || o.observation_id === obs.observation_id)
     const observationNum = obsIndex !== -1 ? obsIndex + 1 : observations.length + 1
@@ -884,6 +1197,13 @@ function InspectionDetails() {
   }
 
   const handlePhotoUpload = async (event) => {
+    // Prevent upload if read-only
+    if (isReadOnly()) {
+      alert('Cannot upload photos. Report is submitted and in read-only mode.')
+      event.target.value = '' // Clear file input
+      return
+    }
+
     const files = Array.from(event.target.files)
     if (files.length === 0) return
 
@@ -1046,6 +1366,11 @@ function InspectionDetails() {
   const handleDeletePhoto = async (photoId, e) => {
     e.stopPropagation() // Prevent selection when clicking delete
     
+    if (isReadOnly()) {
+      alert('Cannot delete photos. Report is submitted and in read-only mode.')
+      return
+    }
+    
     if (!window.confirm('Are you sure you want to delete this photo?')) {
       return
     }
@@ -1105,6 +1430,11 @@ function InspectionDetails() {
   }
 
   const handleGenerateReport = async () => {
+    // Check if report is approved and locked
+    if (report?.status === 'APPROVED') {
+      alert('Cannot regenerate report. Report has been approved and is locked.')
+      return
+    }
 
     
 
@@ -1205,20 +1535,16 @@ function InspectionDetails() {
             console.log(`   Data URL starts with: ${photoUrl.substring(0, 30)}...`)
             console.log(`   Is valid data URL: ${photoUrl.startsWith('data:image/')}`)
           } else {
-            // Use original photo - prioritize file_path (backend can access directly)
-            // Try multiple possible field names for file_path
+            // Use original photo - get storage_url or file_path
+            // Try multiple possible field names for storage_url
+            photoUrl = photo.storage_url || photo.url || photo.image_url || photo.photo_url
             photoFilePath = photo.file_path || photo.path || photo.filepath
             
-            // For storage_url, try multiple field names
-            photoUrl = photo.storage_url || photo.url || photo.image_url || photo.photo_url
-            
-            // CRITICAL: If we have file_path, prefer it over storage_url for backend access
-            // The backend can read file_path directly without HTTP requests
-            if (!photoFilePath && !photoUrl && (photo.id || photo.photo_id)) {
-              // Last resort: construct API URL (backend will need to handle this)
+            // If no storage_url found, construct URL from photo ID
+            if (!photoUrl && (photo.id || photo.photo_id)) {
               const photoId = photo.id || photo.photo_id || photoKey
               photoUrl = photoService.getPhotoFileUrl(photoId)
-              console.log(`   ⚠️ No file_path or storage_url found, constructed API URL from ID: ${photoUrl}`)
+              console.log(`   Constructed photo URL from ID: ${photoUrl}`)
             }
             
             console.log(`ℹ️ Using ORIGINAL image for photo key: ${photoKey} (${photoNum})`)
@@ -1236,35 +1562,13 @@ function InspectionDetails() {
             return // Skip this photo
           }
           
-          // Backend PhotoItem schema requires storage_url to be a string (not null)
-          // If we have file_path but no storage_url, use empty string for storage_url
-          // The backend will prioritize file_path over storage_url for non-annotated photos
-          const finalStorageUrl = photoUrl || '' // Must be string, not null
-          const finalFilePath = photoFilePath || null // Optional, can be null
-          
-          // Validate required fields before pushing
-          if (!findingKey) {
-            console.warn(`⚠️ Photo ${photoKey} has no finding_key, using empty string`)
-          }
-          
-          const photoItem = {
-            finding_key: findingKey || '', // Required string
-            finding_text: matchingFinding?.text || '', // Required string
-            recommendation_text: matchingRecommendation?.text || 'Nil', // Required string
-            storage_url: finalStorageUrl, // Required string (data URL, regular URL, or empty string)
-            file_path: finalFilePath, // Optional file path (preferred for backend access)
-          }
-          
-          // Validate all required fields are strings
-          if (typeof photoItem.finding_key !== 'string' || 
-              typeof photoItem.finding_text !== 'string' || 
-              typeof photoItem.recommendation_text !== 'string' || 
-              typeof photoItem.storage_url !== 'string') {
-            console.error(`❌ Invalid photo item format:`, photoItem)
-            return // Skip invalid photo
-          }
-          
-          reportPhotos.push(photoItem)
+          reportPhotos.push({
+            finding_key: findingKey,
+            finding_text: matchingFinding?.text || '',
+            recommendation_text: matchingRecommendation?.text || 'Nil',
+            storage_url: photoUrl, // Data URL if annotated, regular URL if original, or null
+            file_path: photoFilePath, // Original file path if no annotated version
+          })
         })
         
         // Debug: Log summary for this group after processing
@@ -1336,44 +1640,25 @@ function InspectionDetails() {
       // Generate proper report number
       const generatedReportNo = generateReportNumber(plantValue, equipmentTagNo, reportDate, inspectionType)
       
-      // Validate findings and recommendations format (ensure all fields are strings)
-      const validatedFindings = allFindings.map(f => ({
-        key: String(f.key || ''),
-        text: String(f.text || '')
-      }))
-      const validatedRecommendations = allRecommendations.map(r => ({
-        key: String(r.key || ''),
-        text: String(r.text || '')
-      }))
-      
-      // Validate photos format (ensure all required fields are strings)
-      const validatedPhotos = reportPhotos.map(p => ({
-        finding_key: String(p.finding_key || ''),
-        finding_text: String(p.finding_text || ''),
-        recommendation_text: String(p.recommendation_text || ''),
-        storage_url: String(p.storage_url || ''), // Must be string, not null
-        file_path: p.file_path ? String(p.file_path) : null // Optional
-      }))
-      
       const reportData = {
         inspection_id: inspectionId, // CRITICAL: Include inspection_id as integer
         equipment_id: equipment?.id || inspection.equipment_id,
         header: {
-          equipment_tag: String(equipmentTagNo || ''),
-          equipment_description: String(equipment?.equipment_description || ''),
-          plant: String(plantValue || ''), // Must come from inspection.plant_unit_area
-          dosh_no: String(equipment?.dosh_registration_no || ''),
-          report_no: String(generatedReportNo || ''), // Properly formatted report number
-          report_date: String(reportDate || ''),
-          inspector_name: String(localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).username : 'Inspector'),
-          reviewed_by: String(''),
-          client_approver: String(''),
-          inspection_type: String(mapInspectionTypeToCode(inspectionType) || 'VI'), // Include mapped inspection type
+          equipment_tag: equipmentTagNo,
+          equipment_description: equipment?.equipment_description || '',
+          plant: plantValue, // Must come from inspection.plant_unit_area
+          dosh_no: equipment?.dosh_registration_no || '',
+          report_no: generatedReportNo, // Properly formatted report number
+          report_date: reportDate,
+          inspector_name: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).username : 'Inspector',
+          reviewed_by: '',
+          client_approver: '',
+          inspection_type: mapInspectionTypeToCode(inspectionType), // Include mapped inspection type
         },
-        findings: validatedFindings, // Validated format
-        recommendations: validatedRecommendations, // Validated format
-        photos: validatedPhotos, // Validated format
-        ndt_text: String(''),
+        findings: allFindings, // Already in { key, text } format
+        recommendations: allRecommendations, // Already in { key, text } format
+        photos: reportPhotos,
+        ndt_text: '',
       }
 
       // Debug logging: Log what we're sending
@@ -1385,19 +1670,39 @@ function InspectionDetails() {
         recommendations_count: reportData.recommendations.length,
         photos_count: reportData.photos.length,
       })
-      console.log('📋 Sample photo:', reportData.photos[0])
-      console.log('📋 Sample finding:', reportData.findings[0])
-      console.log('📋 Sample recommendation:', reportData.recommendations[0])
+      console.log('📋 Full report payload:', JSON.stringify(reportData, null, 2))
 
       const response = await reportService.generateReport(reportData)
       console.log('📋 Report generation response:', response)
       console.log('📋 Report ID (report_id):', response.report_id)
+      
+      if (!response || (!response.report_id && !response.id)) {
+        throw new Error('Report generation succeeded but no report ID was returned')
+      }
+      
       setReport(response)
       alert('Report generated successfully!')
     } catch (err) {
       console.error('❌ Error generating report:', err)
+      console.error('❌ Error response:', err.response)
       console.error('❌ Error details:', err.response?.data)
-      alert(`Failed to generate report: ${err.response?.data?.detail || err.message || 'Unknown error'}`)
+      console.error('❌ Error message:', err.message)
+      
+      // Extract detailed error message
+      let errorMessage = 'Failed to generate report. Please try again.'
+      if (err.response?.data) {
+        if (typeof err.response.data === 'string') {
+          errorMessage = err.response.data
+        } else if (err.response.data.detail) {
+          errorMessage = err.response.data.detail
+        } else if (err.response.data.message) {
+          errorMessage = err.response.data.message
+        }
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      alert(`Failed to generate report: ${errorMessage}`)
     } finally {
       setGeneratingReport(false)
     }
@@ -1421,7 +1726,7 @@ function InspectionDetails() {
       <div className="mb-8">
         <button
           onClick={() => navigate('/inspection')}
-          className="text-blue-600 hover:text-blue-700 mb-4"
+          className="text-red-600 hover:text-red-700 mb-4"
         >
           ← Back to Inspections
         </button>
@@ -1440,13 +1745,14 @@ function InspectionDetails() {
               { id: 'observations', label: 'Observations' },
               { id: 'photos', label: 'Photos' },
               { id: 'report', label: 'Report' },
+              { id: 'status', label: 'Status' },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600'
+                    ? 'border-red-600 text-red-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
@@ -1493,16 +1799,28 @@ function InspectionDetails() {
                 </div>
               )}
               
-              {/* Edit Inspection Details Button - Bottom Left */}
-              <div className="flex justify-start mt-6">
-                <button
-                  onClick={() => setShowEditModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                >
-                  <Icons.Pencil />
-                  <span>Edit Inspection Details</span>
-                </button>
-              </div>
+              {/* Edit Inspection Details Button - Hidden when read-only */}
+              {userRole !== 'ADMIN' && isEditAllowed() && (
+                <div className="flex justify-start mt-6">
+                  <button
+                    onClick={() => setShowEditModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm"
+                  >
+                    <Icons.Pencil />
+                    <span>Edit Inspection Details</span>
+                  </button>
+                </div>
+              )}
+              {userRole !== 'ADMIN' && isReadOnly() && (
+                <div className="mt-6 px-4 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
+                  Report Submitted - View Only Mode (Cannot edit until QA review is complete)
+                </div>
+              )}
+              {userRole !== 'ADMIN' && report?.status === 'APPROVED' && (
+                <div className="mt-6 px-4 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
+                  Report Approved - Locked for editing
+                </div>
+              )}
             </div>
           )}
 
@@ -1511,30 +1829,42 @@ function InspectionDetails() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-gray-900">Observations</h2>
-                <button
-                  onClick={() => {
-                    setEditingObservationId(null)
-                    setShowObservationForm(!showObservationForm)
-                    if (!showObservationForm) {
-                      // Reset form when opening for new observation
-                      setObservationForm({
-                        component: '',
-                        location: '',
-                        observation_type: '',
-                        severity: '',
-                        status: 'OPEN',
-                        priority: 'MEDIUM',
-                        action_required: '',
-                        findings: [],
-                        recommendations: [],
-                      })
-                    }
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
-                >
-                  <Icons.Plus />
-                  {showObservationForm ? 'Cancel' : 'Add Observation'}
-                </button>
+                {/* Hide Add Observation button for admins and when read-only */}
+                {userRole !== 'ADMIN' && isEditAllowed() && (
+                  <button
+                    onClick={() => {
+                      if (isReadOnly()) {
+                        alert('Cannot add observations. Report is submitted and in read-only mode.')
+                        return
+                      }
+                      setEditingObservationId(null)
+                      setShowObservationForm(!showObservationForm)
+                      if (!showObservationForm) {
+                        // Reset form when opening for new observation
+                        setObservationForm({
+                          component: '',
+                          location: '',
+                          observation_type: '',
+                          severity: '',
+                          status: 'OPEN',
+                          priority: 'MEDIUM',
+                          action_required: '',
+                          findings: [],
+                          recommendations: [],
+                        })
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
+                  >
+                    <Icons.Plus />
+                    {showObservationForm ? 'Cancel' : 'Add Observation'}
+                  </button>
+                )}
+                {userRole !== 'ADMIN' && isReadOnly() && (
+                  <div className="px-4 py-2 bg-blue-100 text-blue-800 rounded-xl text-sm font-medium">
+                    Read-only mode - Cannot add observations
+                  </div>
+                )}
               </div>
 
               {/* Observation Form */}
@@ -1550,7 +1880,8 @@ function InspectionDetails() {
                         type="text"
                         value={observationForm.component}
                         onChange={(e) => setObservationForm({ ...observationForm, component: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isReadOnly()}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Component name"
                       />
                     </div>
@@ -1560,7 +1891,8 @@ function InspectionDetails() {
                         type="text"
                         value={observationForm.location}
                         onChange={(e) => setObservationForm({ ...observationForm, location: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isReadOnly()}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Location"
                       />
                     </div>
@@ -1569,7 +1901,8 @@ function InspectionDetails() {
                       <select
                         value={observationForm.observation_type}
                         onChange={(e) => setObservationForm({ ...observationForm, observation_type: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isReadOnly()}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="">Select type</option>
                         <option value="VISUAL">Visual</option>
@@ -1582,7 +1915,8 @@ function InspectionDetails() {
                       <select
                         value={observationForm.severity}
                         onChange={(e) => setObservationForm({ ...observationForm, severity: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isReadOnly()}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="">Select severity</option>
                         <option value="LOW">Low</option>
@@ -1596,7 +1930,8 @@ function InspectionDetails() {
                       <select
                         value={observationForm.priority}
                         onChange={(e) => setObservationForm({ ...observationForm, priority: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isReadOnly()}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="LOW">Low</option>
                         <option value="MEDIUM">Medium</option>
@@ -1609,7 +1944,8 @@ function InspectionDetails() {
                       <select
                         value={observationForm.action_required}
                         onChange={(e) => setObservationForm({ ...observationForm, action_required: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isReadOnly()}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="">Select action</option>
                         <option value="REPAIR">Repair</option>
@@ -1626,7 +1962,7 @@ function InspectionDetails() {
                       <h4 className="font-semibold text-gray-900">Findings</h4>
                       <button
                         onClick={handleAddFinding}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                        className="text-red-600 hover:text-red-700 text-sm font-medium"
                       >
                         + Add Finding
                       </button>
@@ -1638,57 +1974,33 @@ function InspectionDetails() {
                             {finding.key}
                           </div>
                           <select
-                            value={finding.template_id || ''}
+                            defaultValue=""
                             onChange={(e) => {
-                              const value = e.target.value
-                              console.log('🔍 Finding template select changed to:', value)
-                              if (value === '__edit_templates__') {
-                                console.log('✅ About to open template management for findings')
-                                e.preventDefault()
-                                e.stopPropagation()
-                                // Force state change by first setting to false, then to 'findings'
-                                // This ensures React re-renders even if state was already 'findings'
-                                console.log('📝 Step 1: Setting to false to force state change')
-                                setShowTemplateManagement(false)
-                                setTimeout(() => {
-                                  console.log('📝 Step 2: Setting to "findings"')
-                                  setShowTemplateManagement('findings')
-                                }, 10)
-                              } else if (value) {
-                                handleApplyFindingTemplate(idx, value)
-                              } else {
-                                // Clear template selection
-                                const updated = [...observationForm.findings]
-                                updated[idx].template_id = null
-                                setObservationForm({ ...observationForm, findings: updated })
-                              }
+                              if (isReadOnly()) return
+                              handleApplyFindingTemplate(idx, e.target.value)
+                              e.target.selectedIndex = 0
                             }}
-                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                            disabled={isReadOnly()}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                           >
                             <option value="">Select template...</option>
-                            {(() => {
-                              console.log('🔍 Rendering finding templates dropdown - count:', findingTemplates.length, 'templates:', findingTemplates)
-                              if (findingTemplates.length === 0) {
-                                return <option value="" disabled>No templates available</option>
-                              }
-                              return findingTemplates.map(t => (
-                                <option key={t.id} value={t.id}>{t.label}</option>
-                              ))
-                            })()}
-                            <option value="__edit_templates__" style={{ fontStyle: 'italic', color: '#666' }}>
-                              ⚙️ Edit Templates...
-                            </option>
+                            {findingTemplates.map(t => (
+                              <option key={t.id} value={t.id}>{t.label}</option>
+                            ))}
+                            <option value="custom">➕ Custom...</option>
                           </select>
                         </div>
                         <textarea
                           value={finding.text}
                           onChange={(e) => {
+                            if (isReadOnly()) return
                             const updated = [...observationForm.findings]
                             updated[idx].text = e.target.value
                             setObservationForm({ ...observationForm, findings: updated })
                           }}
+                          disabled={isReadOnly()}
+                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                           rows="2"
-                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                           placeholder="Finding text..."
                         />
                       </div>
@@ -1700,8 +2012,15 @@ function InspectionDetails() {
                     <div className="flex justify-between items-center mb-2">
                       <h4 className="font-semibold text-gray-900">Recommendations</h4>
                       <button
-                        onClick={handleAddRecommendation}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                        onClick={() => {
+                          if (isReadOnly()) {
+                            alert('Cannot add recommendations. Report is submitted and in read-only mode.')
+                            return
+                          }
+                          handleAddRecommendation()
+                        }}
+                        disabled={isReadOnly()}
+                        className="text-red-600 hover:text-red-700 text-sm font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
                       >
                         + Add Recommendation
                       </button>
@@ -1713,56 +2032,33 @@ function InspectionDetails() {
                             {rec.key}
                           </div>
                           <select
-                            value={rec.template_id || ''}
+                            defaultValue=""
                             onChange={(e) => {
-                              const value = e.target.value
-                              console.log('🔍 Recommendation template select changed to:', value)
-                              if (value === '__edit_templates__') {
-                                console.log('✅ About to open template management for recommendations')
-                                e.preventDefault()
-                                e.stopPropagation()
-                                // Force state change by first setting to false, then to 'recommendations'
-                                console.log('📝 Step 1: Setting to false to force state change')
-                                setShowTemplateManagement(false)
-                                setTimeout(() => {
-                                  console.log('📝 Step 2: Setting to "recommendations"')
-                                  setShowTemplateManagement('recommendations')
-                                }, 10)
-                              } else if (value) {
-                                handleApplyRecommendationTemplate(idx, value)
-                              } else {
-                                // Clear template selection
-                                const updated = [...observationForm.recommendations]
-                                updated[idx].template_id = null
-                                setObservationForm({ ...observationForm, recommendations: updated })
-                              }
+                              if (isReadOnly()) return
+                              handleApplyRecommendationTemplate(idx, e.target.value)
+                              e.target.selectedIndex = 0
                             }}
-                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                            disabled={isReadOnly()}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                           >
                             <option value="">Select template...</option>
-                            {(() => {
-                              console.log('🔍 Rendering recommendation templates dropdown - count:', recommendationTemplates.length, 'templates:', recommendationTemplates)
-                              if (recommendationTemplates.length === 0) {
-                                return <option value="" disabled>No templates available</option>
-                              }
-                              return recommendationTemplates.map(t => (
-                                <option key={t.id} value={t.id}>{t.label}</option>
-                              ))
-                            })()}
-                            <option value="__edit_templates__" style={{ fontStyle: 'italic', color: '#666' }}>
-                              ⚙️ Edit Templates...
-                            </option>
+                            {recommendationTemplates.map(t => (
+                              <option key={t.id} value={t.id}>{t.label}</option>
+                            ))}
+                            <option value="custom">➕ Custom...</option>
                           </select>
                         </div>
                         <textarea
                           value={rec.text}
                           onChange={(e) => {
+                            if (isReadOnly()) return
                             const updated = [...observationForm.recommendations]
                             updated[idx].text = e.target.value
                             setObservationForm({ ...observationForm, recommendations: updated })
                           }}
+                          disabled={isReadOnly()}
                           rows="2"
-                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                           placeholder="Recommendation text..."
                         />
                       </div>
@@ -1778,7 +2074,7 @@ function InspectionDetails() {
                     </button>
                     <button
                       onClick={handleCreateObservation}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+                      className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700"
                     >
                       {editingObservationId ? 'Update Observation' : 'Create Observation'}
                     </button>
@@ -1795,39 +2091,52 @@ function InspectionDetails() {
                     <div key={obs.id} className="bg-gray-50 rounded-xl p-6 border border-gray-200">
                       <div className="flex justify-between items-start mb-4">
                         <div>
-                          <p className="text-xs font-semibold text-blue-600 mb-1">Observation {index + 1}</p>
+                          <p className="text-xs font-semibold text-red-600 mb-1">Observation {index + 1}</p>
                           <h4 className="font-semibold text-gray-900">{obs.component} - {obs.location}</h4>
                           <p className="text-sm text-gray-600">Type: {obs.observation_type} | Severity: {obs.severity} | Priority: {obs.priority}</p>
                         </div>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => handleEditObservation(obs)}
-                            className="p-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
-                            title="Edit observation"
-                          >
-                            <Icons.Pencil />
-                          </button>
-                          <button
-                            onClick={async () => {
-                              if (window.confirm('Are you sure you want to delete this observation?')) {
-                                try {
-                                  const token = localStorage.getItem('token')
-                                  const observationId = obs.observation_id || obs.id
-                                  await observationService.deleteObservation(observationId, token)
-                                  // Refresh observations from API
-                                  await fetchObservations()
-                                } catch (err) {
-                                  console.error('Error deleting observation:', err)
-                                  alert('Failed to delete observation. Please try again.')
+                        {/* Hide edit/delete buttons for admins and when read-only */}
+                        {userRole !== 'ADMIN' && isEditAllowed() && (
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => {
+                                if (isReadOnly()) {
+                                  alert('Cannot edit observations. Report is submitted and in read-only mode.')
+                                  return
                                 }
-                              }
-                            }}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete observation"
-                          >
-                            <Icons.Trash />
-                          </button>
-                        </div>
+                                handleEditObservation(obs)
+                              }}
+                              className="p-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                              title="Edit observation"
+                            >
+                              <Icons.Pencil />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (isReadOnly()) {
+                                  alert('Cannot delete observations. Report is submitted and in read-only mode.')
+                                  return
+                                }
+                                if (window.confirm('Are you sure you want to delete this observation?')) {
+                                  try {
+                                    const token = localStorage.getItem('token')
+                                    const observationId = obs.observation_id || obs.id
+                                    await observationService.deleteObservation(observationId, token)
+                                    // Refresh observations from API
+                                    await fetchObservations()
+                                  } catch (err) {
+                                    console.error('Error deleting observation:', err)
+                                    alert('Failed to delete observation. Please try again.')
+                                  }
+                                }
+                              }}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete observation"
+                            >
+                              <Icons.Trash />
+                            </button>
+                          </div>
+                        )}
                       </div>
                       {obs.findings.length > 0 && (
                         <div className="mb-3">
@@ -1857,55 +2166,64 @@ function InspectionDetails() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-gray-900">Photos</h2>
-                <div className="flex gap-2">
-                  <select
-                    value={photoGroupNumber}
-                    onChange={(e) => handlePhotoGroupChange(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="">Select Photo Group</option>
-                    {/* Show groups that have photos OR groups based on observations (whichever is larger) */}
-                    {Array.from({ 
-                      length: Math.max(
-                        Object.keys(photoGroups).length > 0 ? Math.max(...Object.keys(photoGroups).map(g => parseInt(g))) : 0,
-                        observations.length || 1
-                      )
-                    }, (_, i) => i + 1).map(num => {
-                      const hasPhotos = photoGroups[num] && photoGroups[num].length > 0
-                      return (
-                        <option key={num} value={num}>
-                          Group {num} {hasPhotos ? `(${photoGroups[num].length} photos)` : ''}
-                        </option>
-                      )
-                    })}
-                  </select>
-                  <label className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors cursor-pointer flex items-center gap-2">
-                    <Icons.Upload />
-                    Upload Photos
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handlePhotoUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
+                {/* Hide upload controls for admins and when read-only */}
+                {userRole !== 'ADMIN' && isEditAllowed() && (
+                  <div className="flex gap-2">
+                    <select
+                      value={photoGroupNumber}
+                      onChange={(e) => handlePhotoGroupChange(e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                    >
+                      <option value="">Select Photo Group</option>
+                      {/* Show groups that have photos OR groups based on observations (whichever is larger) */}
+                      {Array.from({ 
+                        length: Math.max(
+                          Object.keys(photoGroups).length > 0 ? Math.max(...Object.keys(photoGroups).map(g => parseInt(g))) : 0,
+                          observations.length || 1
+                        )
+                      }, (_, i) => i + 1).map(num => {
+                        const hasPhotos = photoGroups[num] && photoGroups[num].length > 0
+                        return (
+                          <option key={num} value={num}>
+                            Group {num} {hasPhotos ? `(${photoGroups[num].length} photos)` : ''}
+                          </option>
+                        )
+                      })}
+                    </select>
+                    <label className="px-4 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors cursor-pointer flex items-center gap-2">
+                      <Icons.Upload />
+                      Upload Photos
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handlePhotoUpload}
+                        className="hidden"
+                        disabled={isReadOnly()}
+                      />
+                    </label>
+                  </div>
+                )}
+                {userRole !== 'ADMIN' && isReadOnly() && (
+                  <div className="px-4 py-2 bg-blue-100 text-blue-800 rounded-xl text-sm font-medium">
+                    Read-only mode - Cannot upload photos
+                  </div>
+                )}
               </div>
 
               {/* Photo Group Information Box */}
               {photoGroupNumber && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
                   <div className="flex-shrink-0 mt-0.5">
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                    <h4 className="text-sm font-semibold text-red-900 mb-1">
                       Photo Group {photoGroupNumber}
                     </h4>
-                    <p className="text-sm text-blue-800">
+                    <p className="text-sm text-red-800">
                       These photos will be numbered as {photoGroupNumber}.1, {photoGroupNumber}.2, {photoGroupNumber}.3, etc.
                     </p>
                   </div>
@@ -1918,12 +2236,19 @@ function InspectionDetails() {
                   currentGroupPhotos.some(p => p.id === id)
                 )
                 return selectedFromCurrentGroup.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex justify-between items-center">
-                    <span className="text-blue-800">{selectedFromCurrentGroup.length} photo(s) from Group {photoGroupNumber} selected</span>
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex justify-between items-center">
+                    <span className="text-red-800">{selectedFromCurrentGroup.length} photo(s) from Group {photoGroupNumber} selected</span>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setShowLinkModal(true)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        onClick={() => {
+                          if (isReadOnly()) {
+                            alert('Cannot link photos. Report is submitted and in read-only mode.')
+                            return
+                          }
+                          setShowLinkModal(true)
+                        }}
+                        disabled={isReadOnly()}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                       >
                         Link to Observation
                       </button>
@@ -1972,7 +2297,7 @@ function InspectionDetails() {
                                   onClick={() => handleLinkPhotosToObservation(obsIndex)}
                                   className={`w-full text-left px-4 py-2 border rounded-lg transition-colors ${
                                     countsMatch
-                                      ? 'border-blue-500 bg-blue-50 hover:bg-blue-100'
+                                      ? 'border-red-500 bg-red-50 hover:bg-red-100'
                                       : 'border-red-500 bg-red-50 hover:bg-red-100'
                                   }`}
                                 >
@@ -2072,7 +2397,7 @@ function InspectionDetails() {
                         key={photo.id}
                         className={`relative border-2 rounded-xl overflow-hidden cursor-pointer transition-all group ${
                           selectedPhotos.includes(photo.id)
-                            ? 'border-blue-600 ring-2 ring-blue-200'
+                            ? 'border-red-600 ring-2 ring-red-200'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                         onClick={() => {
@@ -2112,7 +2437,7 @@ function InspectionDetails() {
                         
                         {/* Selection Checkmark */}
                         {selectedPhotos.includes(photo.id) && !isLinked && (
-                          <div className="absolute top-2 right-2 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center z-10">
+                          <div className="absolute top-2 right-2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center z-10">
                             <span className="text-white text-xs">✓</span>
                           </div>
                         )}
@@ -2126,23 +2451,32 @@ function InspectionDetails() {
                           >
                             <Icons.Eye className="w-5 h-5 text-gray-800" />
                           </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setAnnotatingPhoto(photo)
-                            }}
-                            className="p-2 bg-white rounded-full shadow-lg hover:bg-blue-50 transition-colors"
-                            title="Annotate photo"
-                          >
-                            <Icons.Pen className="w-5 h-5 text-blue-600" />
-                          </button>
-                          <button
-                            onClick={(e) => handleDeletePhoto(photo.id, e)}
-                            className="p-2 bg-white rounded-full shadow-lg hover:bg-red-50 transition-colors"
-                            title="Delete photo"
-                          >
-                            <Icons.Trash className="w-5 h-5 text-red-600" />
-                          </button>
+                          {/* Hide annotate and delete buttons for admins and when read-only */}
+                          {userRole !== 'ADMIN' && isEditAllowed() && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (isReadOnly()) {
+                                    alert('Cannot annotate photos. Report is submitted and in read-only mode.')
+                                    return
+                                  }
+                                  setAnnotatingPhoto(photo)
+                                }}
+                                className="p-2 bg-white rounded-full shadow-lg hover:bg-red-50 transition-colors"
+                                title="Annotate photo"
+                              >
+                                <Icons.Pen className="w-5 h-5 text-red-600" />
+                              </button>
+                              <button
+                                onClick={(e) => handleDeletePhoto(photo.id, e)}
+                                className="p-2 bg-white rounded-full shadow-lg hover:bg-red-50 transition-colors"
+                                title="Delete photo"
+                              >
+                                <Icons.Trash className="w-5 h-5 text-red-600" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     )
@@ -2258,7 +2592,7 @@ function InspectionDetails() {
                       {localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).username : 'Inspector'}
                     </p>
                   </div>
-                  <div className="flex gap-4">
+                  <div className="flex gap-4 flex-wrap">
                     <button
                       onClick={async () => {
                         try {
@@ -2281,18 +2615,48 @@ function InspectionDetails() {
                           alert(`Failed to download PDF: ${err.message || 'Unknown error'}`)
                         }
                       }}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                      className="px-6 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
                     >
                       <Icons.Download />
                       Download Report
                     </button>
-                    <button
-                      onClick={handleGenerateReport}
-                      disabled={generatingReport}
-                      className="px-6 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:bg-gray-400"
-                    >
-                      {generatingReport ? 'Regenerating...' : 'Regenerate Report'}
-                    </button>
+                    {report.status === 'DRAFT' || report.status === 'REJECTED' ? (
+                      <button
+                        onClick={handleGenerateReport}
+                        disabled={generatingReport}
+                        className="px-6 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                      >
+                        {generatingReport ? 'Regenerating...' : 'Regenerate Report'}
+                      </button>
+                    ) : null}
+                    {report.status === 'DRAFT' ? (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const reportId = report.report_id || report.id
+                            if (!reportId) {
+                              alert('Report ID not found')
+                              return
+                            }
+                            if (!confirm('Are you sure you want to submit this report for QA review? You will not be able to edit it until it is reviewed.')) {
+                              return
+                            }
+                            const updatedReport = await reportService.submitReport(reportId)
+                            setReport(updatedReport)
+                            alert('Report submitted successfully for QA review!')
+                            // Refresh inspection to get updated status
+                            fetchInspection()
+                          } catch (err) {
+                            console.error('❌ Error submitting report:', err)
+                            alert(`Failed to submit report: ${err.response?.data?.detail || err.message || 'Unknown error'}`)
+                          }
+                        }}
+                        className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                      >
+                        <Icons.FileText />
+                        Submit Report
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ) : (
@@ -2301,7 +2665,7 @@ function InspectionDetails() {
                   <button
                     onClick={handleGenerateReport}
                     disabled={generatingReport}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+                    className="px-6 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors disabled:bg-gray-400"
                   >
                     {generatingReport ? 'Generating...' : 'Generate Report'}
                   </button>
@@ -2313,6 +2677,112 @@ function InspectionDetails() {
                   <strong>Note:</strong> Regenerating the report will replace the previous version with updated data from observations and photos.
                 </p>
               </div>
+
+              {/* QA Feedback Section */}
+              {report && (report.status === 'QA_REVIEW' || report.status === 'REJECTED' || report.status === 'APPROVED') && (
+                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">QA Feedback</h3>
+                  <QAFeedbackDisplay reportId={report.report_id || report.id} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Status Tab */}
+          {activeTab === 'status' && (
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold text-gray-900">Inspection Status & QA Review</h2>
+              
+              {/* Current Status */}
+              <div className="bg-white rounded-xl p-6 border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Status</h3>
+                <div className="flex items-center gap-4">
+                  {report ? (
+                    // If report exists, show report status (prioritize report status)
+                    <span className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                      report.status === 'APPROVED' || report.status === 'Approved'
+                        ? 'bg-green-100 text-green-800'
+                        : report.status === 'REJECTED' || report.status === 'Rejected'
+                        ? 'bg-red-100 text-red-800'
+                        : report.status === 'SUBMITTED' || report.status === 'Submitted'
+                        ? 'bg-blue-100 text-blue-800'
+                        : report.status === 'QA_REVIEW' || report.status === 'QA Review'
+                        ? 'bg-purple-100 text-purple-800'
+                        : report.status === 'DRAFT' || report.status === 'Draft'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {report.status || 'Draft'}
+                    </span>
+                  ) : (
+                    // If no report, show inspection status
+                    <span className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                      inspection.status === 'Approved' || inspection.status === 'APPROVED'
+                        ? 'bg-green-100 text-green-800'
+                        : inspection.status === 'Rejected' || inspection.status === 'REJECTED'
+                        ? 'bg-red-100 text-red-800'
+                        : inspection.status === 'Submitted' || inspection.status === 'SUBMITTED'
+                        ? 'bg-blue-100 text-blue-800'
+                        : inspection.status === 'QA Review' || inspection.status === 'QA_REVIEW'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {inspection.status || 'Draft'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* QA Comments - Show comments from all reports for this inspection */}
+              <div className="bg-white rounded-xl p-6 border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">QA Review Comments</h3>
+                {report && (
+                  <div className="mb-2 text-xs text-gray-500">
+                    Current Report ID: {report.report_id || report.id} | Status: {report.status}
+                  </div>
+                )}
+                <QAFeedbackDisplayByInspection inspectionId={inspectionId || inspection?.inspection_id} />
+              </div>
+
+              {/* Status Information */}
+              {report && (report.status === 'REJECTED' || report.status === 'APPROVED') && (
+                <div className={`rounded-xl p-6 border ${
+                  report.status === 'APPROVED'
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    {report.status === 'APPROVED' ? (
+                      <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900 mb-1">
+                        Report {report.status === 'APPROVED' ? 'Approved' : 'Rejected'}
+                      </h4>
+                      <p className="text-sm text-gray-700 mb-2">
+                        {report.status === 'APPROVED'
+                          ? 'This report has been approved by QA. The inspection is complete and locked for editing.'
+                          : 'This report has been rejected by QA. Please review the comments above and make necessary revisions.'}
+                      </p>
+                      {report.updated_at && (
+                        <p className="text-xs text-gray-500">
+                          {report.status === 'APPROVED' ? 'Approved' : 'Rejected'} on: {new Date(report.updated_at).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2341,7 +2811,7 @@ function InspectionDetails() {
                 <select
                   value={editFormData.inspection_type}
                   onChange={(e) => setEditFormData({ ...editFormData, inspection_type: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                 >
                   <option value="">Select type</option>
                   <option value="Visual Inspection">Visual Inspection</option>
@@ -2360,28 +2830,13 @@ function InspectionDetails() {
                   <select
                     value={editFormData.priority}
                     onChange={(e) => setEditFormData({ ...editFormData, priority: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                   >
                     <option value="">Select priority</option>
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
                     <option value="HIGH">High</option>
                     <option value="CRITICAL">Critical</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Status
-                  </label>
-                  <select
-                    value={editFormData.status}
-                    onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="Draft">Draft</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>
               </div>
@@ -2396,7 +2851,7 @@ function InspectionDetails() {
                     type="date"
                     value={editFormData.inspection_date}
                     onChange={(e) => setEditFormData({ ...editFormData, inspection_date: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
                 <div>
@@ -2407,7 +2862,7 @@ function InspectionDetails() {
                     type="date"
                     value={editFormData.scheduled_date}
                     onChange={(e) => setEditFormData({ ...editFormData, scheduled_date: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
               </div>
@@ -2421,7 +2876,7 @@ function InspectionDetails() {
                     type="date"
                     value={editFormData.due_date}
                     onChange={(e) => setEditFormData({ ...editFormData, due_date: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
                 <div>
@@ -2432,7 +2887,7 @@ function InspectionDetails() {
                     type="date"
                     value={editFormData.next_inspection_date}
                     onChange={(e) => setEditFormData({ ...editFormData, next_inspection_date: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
               </div>
@@ -2447,7 +2902,7 @@ function InspectionDetails() {
                   required
                   value={editFormData.plant_unit_area}
                   onChange={(e) => setEditFormData({ ...editFormData, plant_unit_area: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="e.g., Plant 1, Unit A"
                 />
               </div>
@@ -2461,7 +2916,7 @@ function InspectionDetails() {
                   value={editFormData.findings_summary}
                   onChange={(e) => setEditFormData({ ...editFormData, findings_summary: e.target.value })}
                   rows={4}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="Enter findings summary..."
                 />
               </div>
@@ -2475,7 +2930,7 @@ function InspectionDetails() {
                   value={editFormData.remarks_general}
                   onChange={(e) => setEditFormData({ ...editFormData, remarks_general: e.target.value })}
                   rows={4}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="Enter general remarks..."
                 />
               </div>
@@ -2489,7 +2944,7 @@ function InspectionDetails() {
                   type="text"
                   value={editFormData.defect_type}
                   onChange={(e) => setEditFormData({ ...editFormData, defect_type: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="Enter defect type..."
                 />
               </div>
@@ -2504,7 +2959,7 @@ function InspectionDetails() {
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                  className="px-6 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
                 >
                   Save Changes
                 </button>
@@ -2513,18 +2968,143 @@ function InspectionDetails() {
           </div>
         </div>
       )}
-      
-      {/* Template Management Modal - Using React Portal to render at body level */}
-      {showTemplateManagement && typeof document !== 'undefined' && createPortal(
-        <TemplateManagement
-          initialTab={showTemplateManagement === 'findings' ? 'findings' : showTemplateManagement === 'recommendations' ? 'recommendations' : 'findings'}
-          onClose={() => {
-            console.log('Closing template management modal')
-            setShowTemplateManagement(false)
-            fetchTemplates()
-          }}
-        />,
-        document.body
+
+      {/* Template Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold text-gray-900">
+                {templateModalType === 'finding' ? 'Finding' : 'Recommendation'} Templates
+              </h3>
+              <button
+                onClick={() => {
+                  setShowTemplateModal(false)
+                  setTemplateModalData({ label: '', text: '' })
+                  setEditingTemplateId(null)
+                  setTemplateIndex(null)
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Icons.X />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+              {/* Left: Existing Templates List */}
+              <div className="border-r pr-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-3">
+                  Existing Templates
+                </h4>
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                  {(templateModalType === 'finding' ? findingTemplates : recommendationTemplates).map((template) => (
+                    <div
+                      key={template.id}
+                      onDoubleClick={() => handleUseTemplate(template)}
+                      className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-red-300 transition-colors cursor-pointer"
+                      title="Double-click to use this template"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h5 className="font-medium text-gray-900 text-sm">{template.label}</h5>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditTemplate(template)
+                            }}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Edit template"
+                          >
+                            <Icons.Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteTemplate(template.id)
+                            }}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Delete template"
+                          >
+                            <Icons.Trash className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 line-clamp-2">{template.text}</p>
+                    </div>
+                  ))}
+                  {((templateModalType === 'finding' ? findingTemplates : recommendationTemplates).length === 0) && (
+                    <p className="text-sm text-gray-500 text-center py-4">No templates yet. Create one below.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Create/Edit Form */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900 mb-3">
+                  {editingTemplateId ? 'Edit' : 'Create New'} Template
+                </h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Template Label
+                    </label>
+                    <input
+                      type="text"
+                      value={templateModalData.label}
+                      onChange={(e) => setTemplateModalData({ ...templateModalData, label: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                      placeholder="e.g., External - Coating condition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Template Text
+                    </label>
+                    <textarea
+                      value={templateModalData.text}
+                      onChange={(e) => setTemplateModalData({ ...templateModalData, text: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                      rows="6"
+                      placeholder="Enter the template text..."
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4 border-t">
+                    {editingTemplateId && (
+                      <button
+                        onClick={() => {
+                          setTemplateModalData({ label: '', text: '' })
+                          setEditingTemplateId(null)
+                        }}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Cancel Edit
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setShowTemplateModal(false)
+                        setTemplateModalData({ label: '', text: '' })
+                        setEditingTemplateId(null)
+                        setTemplateIndex(null)
+                      }}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={handleSaveTemplate}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      {editingTemplateId ? 'Update' : 'Save'} Template
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
@@ -2580,27 +3160,67 @@ function PhotoAnnotationEditor({ photo, photoNumber, onClose, onSave }) {
         
         // Otherwise, fetch as blob with authentication
         console.log('Fetching image as blob from:', photoUrl)
-        const response = await axios.get(photoUrl, {
-          headers: { Authorization: `Bearer ${token}` },
-          responseType: 'blob'
-        })
-        
-        const imageBlob = response.data
-        const imageUrl = URL.createObjectURL(imageBlob)
-        
-        const img = new Image()
-        img.onload = () => {
-          drawImageOnCanvas(img, ctx, canvas)
-          // Clean up object URL after loading
-          URL.revokeObjectURL(imageUrl)
+        try {
+          const response = await axios.get(photoUrl, {
+            headers: { 
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/octet-stream'
+            },
+            responseType: 'blob',
+            timeout: 30000  // 30 second timeout
+          })
+          
+          if (!response.data || response.data.size === 0) {
+            throw new Error('Received empty image data')
+          }
+          
+          const imageBlob = response.data
+          const imageUrl = URL.createObjectURL(imageBlob)
+          
+          const img = new Image()
+          img.crossOrigin = 'anonymous'  // Enable CORS for canvas operations
+          
+          img.onload = () => {
+            try {
+              drawImageOnCanvas(img, ctx, canvas)
+              // Clean up object URL after loading
+              URL.revokeObjectURL(imageUrl)
+            } catch (drawError) {
+              console.error('Error drawing image on canvas:', drawError)
+              setLoadingError(`Failed to draw image: ${drawError.message}`)
+              setImageLoaded(false)
+              URL.revokeObjectURL(imageUrl)
+            }
+          }
+          
+          img.onerror = (error) => {
+            console.error('Error loading image from blob:', error)
+            setLoadingError('Failed to load image from server. Please check if the image file exists.')
+            setImageLoaded(false)
+            URL.revokeObjectURL(imageUrl)
+          }
+          
+          img.src = imageUrl
+        } catch (fetchError) {
+          console.error('Error fetching image blob:', fetchError)
+          // Try fallback: load image directly (may have CORS issues but worth trying)
+          const img = new Image()
+          img.crossOrigin = 'anonymous'
+          img.onload = () => {
+            try {
+              drawImageOnCanvas(img, ctx, canvas)
+            } catch (drawError) {
+              setLoadingError(`Failed to load image: ${fetchError.message || 'Unknown error'}. Please ensure the photo file exists on the server.`)
+              setImageLoaded(false)
+            }
+          }
+          img.onerror = () => {
+            setLoadingError(`Failed to load image: ${fetchError.message || 'Unknown error'}. Please check the photo URL and server connection.`)
+            setImageLoaded(false)
+          }
+          // Try loading with token in URL (if backend supports it)
+          img.src = `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token || '')}`
         }
-        img.onerror = (error) => {
-          console.error('Error loading image:', error)
-          setLoadingError('Failed to load image.')
-          setImageLoaded(false)
-          URL.revokeObjectURL(imageUrl)
-        }
-        img.src = imageUrl
         
       } catch (error) {
         console.error('Error fetching image:', error)
@@ -2886,7 +3506,7 @@ function PhotoAnnotationEditor({ photo, photoNumber, onClose, onSave }) {
             <select
               value={drawingMode}
               onChange={(e) => setDrawingMode(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               <option value="freehand">Freehand</option>
               <option value="line">Line</option>
@@ -2962,7 +3582,7 @@ function PhotoAnnotationEditor({ photo, photoNumber, onClose, onSave }) {
                   const photoUrl = photo.storage_url || `${API_BASE}/photos/${photo.id}/file`
                   img.src = photoUrl
                 }}
-                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
                 Retry
               </button>
@@ -2999,7 +3619,7 @@ function PhotoAnnotationEditor({ photo, photoNumber, onClose, onSave }) {
           </button>
           <button
             onClick={handleSave}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+            className="px-6 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
           >
             Save Annotations
           </button>
@@ -3010,4 +3630,3 @@ function PhotoAnnotationEditor({ photo, photoNumber, onClose, onSave }) {
 }
 
 export default InspectionDetails
-

@@ -37,31 +37,11 @@ async def get_photo_file(
     current_user = Depends(get_optional_user)
 ):
     """Serve photo file (public read for testing)"""
-    from fastapi.responses import Response
     photo = await photo_upload_service.get_photo(photo_id)
     file_path = photo.get("file_path")
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Photo file not found")
-    
-    # Read file and return with CORS headers
-    with open(file_path, "rb") as f:
-        content = f.read()
-    
-    # Determine media type from file extension
-    import mimetypes
-    media_type, _ = mimetypes.guess_type(file_path)
-    if not media_type:
-        media_type = "image/jpeg"  # Default to JPEG
-    
-    return Response(
-        content=content,
-        media_type=media_type,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
+    return FileResponse(file_path)
 
 @router.get("/{photo_id}")
 async def get_photo(

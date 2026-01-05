@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from datetime import datetime
 import os
-from app.database.schemas import ReportCreate, ReportResponse, API510ReportRequest
+from app.database.schemas import ReportCreate, ReportResponse, API510ReportRequest, ReportReviewRequest
 from app.routers.report_generation.service_report_generation import ReportGenerationService
 from app.dependencies import get_current_user
 
@@ -47,6 +47,29 @@ async def get_equipment_reports(
     """Get all reports for an equipment"""
     return await report_service.get_equipment_reports(equipment_id)
 
+# Specific routes must come before /{report_id} route
+@router.get("/submitted", response_model=list[ReportResponse])
+async def get_submitted_reports(current_user: dict = Depends(get_current_user)):
+    """Get all submitted reports for QA review (engineers only)"""
+    # Check if user is engineer
+    if current_user.get("role", "").upper() != "ENGINEER":
+        raise HTTPException(status_code=403, detail="Only engineers can view submitted reports")
+    return await report_service.get_submitted_reports()
+
+@router.get("/all", response_model=list[ReportResponse])
+async def get_all_reports(current_user: dict = Depends(get_current_user)):
+    """Get all reports with all statuses (for dashboard statistics)"""
+    return await report_service.get_all_reports()
+
+@router.get("/inspection/{inspection_id}", response_model=ReportResponse)
+async def get_report_by_inspection_id(inspection_id: int, current_user: dict = Depends(get_current_user)):
+    """Get report by inspection_id"""
+    report = await report_service.get_report_by_inspection_id(inspection_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found for this inspection")
+    return report
+
+# Parameterized routes come after specific routes
 @router.get("/{report_id}/export-pdf")
 async def export_report_pdf(report_id: str, current_user: dict = Depends(get_current_user)):
     """Export report in PDF format for submission - returns PDF file"""
@@ -77,8 +100,29 @@ async def export_report_pdf(report_id: str, current_user: dict = Depends(get_cur
         print(error_trace)
         raise HTTPException(status_code=500, detail=f"Error exporting PDF: {str(e)}")
 
+@router.post("/{report_id}/submit", response_model=ReportResponse)
+async def submit_report(report_id: str, current_user: dict = Depends(get_current_user)):
+    """Submit report for QA review"""
+    return await report_service.submit_report(report_id, current_user)
+
+@router.post("/{report_id}/review", response_model=ReportResponse)
+async def review_report(
+    report_id: str,
+    review_data: ReportReviewRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Review report (approve or reject) - engineers only"""
+    # Check if user is engineer
+    if current_user.get("role", "").upper() != "ENGINEER":
+        raise HTTPException(status_code=403, detail="Only engineers can review reports")
+    return await report_service.review_report(
+        report_id,
+        review_data.action,
+        review_data.comment or "",
+        current_user
+    )
+
 @router.get("/{report_id}", response_model=ReportResponse)
 async def get_report(report_id: str, current_user: dict = Depends(get_current_user)):
     """Get report by report_id (UUID string)"""
     return await report_service.get_report(report_id)
-

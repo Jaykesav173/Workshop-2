@@ -44,15 +44,96 @@ function MyInspections() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [equipmentMap, setEquipmentMap] = useState({})
+  const [userRole, setUserRole] = useState(null)
+  const [reportStatusMap, setReportStatusMap] = useState({}) // Map of inspection_id -> report status
+
+  // Get user role on mount
+  useEffect(() => {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr)
+        setUserRole(userData.role?.toUpperCase() || 'INSPECTOR')
+      } catch (e) {
+        setUserRole('INSPECTOR')
+      }
+    } else {
+      setUserRole('INSPECTOR')
+    }
+  }, [])
 
   useEffect(() => {
     fetchInspections()
     fetchEquipment()
   }, [])
 
+  // Fetch report statuses after inspections are loaded
+  useEffect(() => {
+    if (inspections.length > 0) {
+      fetchReportStatuses()
+    }
+  }, [inspections])
+
+  // Fetch report statuses for inspections that might have reports
+  // This is a fallback in case inspection status hasn't synced yet
+  const fetchReportStatuses = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      // Only check inspections that are still in Draft/In Progress status
+      const draftInspections = inspections.filter(i => 
+        i.status === 'Draft' || 
+        i.status === 'DRAFT' || 
+        i.status === 'In Progress' || 
+        i.status === 'IN_PROGRESS'
+      )
+      
+      if (draftInspections.length === 0) return
+      
+      const statusMap = {}
+      // Fetch report for each draft inspection (limit to avoid too many calls)
+      const promises = draftInspections.slice(0, 20).map(async (inspection) => {
+        try {
+          const inspectionId = inspection.inspection_id || inspection.id
+          const response = await axios.get(`${API_BASE}/reports/inspection/${inspectionId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          if (response.data && response.data.status) {
+            const reportStatus = response.data.status
+            // Map report status to inspection status format
+            if (reportStatus !== 'DRAFT' && reportStatus !== 'Draft') {
+              const statusMapping = {
+                'SUBMITTED': 'Submitted',
+                'QA_REVIEW': 'QA Review',
+                'APPROVED': 'Approved',
+                'REJECTED': 'Rejected'
+              }
+              return { inspectionId, status: statusMapping[reportStatus] || reportStatus }
+            }
+          }
+        } catch (err) {
+          // No report for this inspection
+          return null
+        }
+        return null
+      })
+      
+      const results = await Promise.all(promises)
+      results.forEach(result => {
+        if (result) {
+          statusMap[result.inspectionId] = result.status
+        }
+      })
+      
+      setReportStatusMap(statusMap)
+    } catch (err) {
+      // Fail silently
+      console.log('Could not fetch report statuses:', err.message)
+    }
+  }
+
   useEffect(() => {
     filterInspections()
-  }, [searchQuery, statusFilter, inspections])
+  }, [searchQuery, statusFilter, inspections, reportStatusMap])
 
   const fetchInspections = async () => {
     try {
@@ -107,18 +188,45 @@ function MyInspections() {
     // Apply status filter
     if (statusFilter !== 'all') {
       if (statusFilter === 'draft') {
-        filtered = filtered.filter(i => i.status === 'Draft' || i.status === 'In Progress')
-      } else if (statusFilter === 'completed') {
-        filtered = filtered.filter(i => i.status === 'Completed')
-      } else if (statusFilter === 'high-priority') {
-        filtered = filtered.filter(i => i.priority === 'HIGH' || i.priority === 'CRITICAL' || i.priority === 'High')
+        filtered = filtered.filter(i => 
+          i.status === 'Draft' || 
+          i.status === 'DRAFT' || 
+          i.status === 'In Progress' || 
+          i.status === 'IN_PROGRESS'
+        )
+      } else if (statusFilter === 'submitted') {
+        filtered = filtered.filter(i => 
+          i.status === 'Submitted' || 
+          i.status === 'SUBMITTED' ||
+          i.status === 'QA Review' ||
+          i.status === 'QA_REVIEW'
+        )
+      } else if (statusFilter === 'approved') {
+        filtered = filtered.filter(i => 
+          i.status === 'Approved' || 
+          i.status === 'APPROVED'
+        )
+      } else if (statusFilter === 'rejected') {
+        filtered = filtered.filter(i => 
+          i.status === 'Rejected' || 
+          i.status === 'REJECTED'
+        )
       }
     }
 
     setFilteredInspections(filtered)
   }
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, status) => {
+    // For admins: only allow deletion of "In Progress" inspections
+    if (userRole === 'ADMIN') {
+      const normalizedStatus = status?.toLowerCase() || ''
+      if (normalizedStatus !== 'in progress' && normalizedStatus !== 'in_progress') {
+        alert('Admins can only delete inspections that are "In Progress".')
+        return
+      }
+    }
+    
     if (!window.confirm('Are you sure you want to delete this inspection?')) return
     
     try {
@@ -136,11 +244,19 @@ function MyInspections() {
   const getStatusBadge = (status) => {
     const statusMap = {
       'Draft': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Draft' },
-      'In Progress': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'In Progress' },
+      'In Progress': { bg: 'bg-red-100', text: 'text-red-800', label: 'In Progress' },
       'Completed': { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' },
       'PENDING': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Draft' }, // Backward compatibility
-      'IN_PROGRESS': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'In Progress' }, // Backward compatibility
+      'IN_PROGRESS': { bg: 'bg-red-100', text: 'text-red-800', label: 'In Progress' }, // Backward compatibility
       'COMPLETED': { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' }, // Backward compatibility
+      'Rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' },
+      'REJECTED': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' },
+      'Approved': { bg: 'bg-green-100', text: 'text-green-800', label: 'Approved' },
+      'APPROVED': { bg: 'bg-green-100', text: 'text-green-800', label: 'Approved' },
+      'Submitted': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Submitted' },
+      'SUBMITTED': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Submitted' },
+      'QA Review': { bg: 'bg-purple-100', text: 'text-purple-800', label: 'QA Review' },
+      'QA_REVIEW': { bg: 'bg-purple-100', text: 'text-purple-800', label: 'QA Review' },
     }
     const style = statusMap[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status || 'Unknown' }
     return (
@@ -173,16 +289,24 @@ function MyInspections() {
       {/* Page Header */}
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Inspections</h1>
-          <p className="text-gray-600">Manage and track your inspection workflows</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            {userRole === 'ADMIN' ? 'Inspections Overview' : 'My Inspections'}
+          </h1>
+          <p className="text-gray-600">
+            {userRole === 'ADMIN' 
+              ? 'View and manage all inspections across the system' 
+              : 'Manage and track your inspection workflows'}
+          </p>
         </div>
-        <button
-          onClick={() => navigate('/inspection/new')}
-          className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
-        >
-          <Icons.Plus />
-          New Inspection
-        </button>
+        {userRole !== 'ADMIN' && (
+          <button
+            onClick={() => navigate('/inspection/new')}
+            className="px-6 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-colors flex items-center gap-2"
+          >
+            <Icons.Plus />
+            New Inspection
+          </button>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -193,8 +317,8 @@ function MyInspections() {
               <p className="text-sm text-gray-600 mb-1">Total Inspections</p>
               <h2 className="text-3xl font-bold text-gray-900">{totalInspections}</h2>
             </div>
-            <div className="p-4 bg-blue-100 rounded-xl">
-              <Icons.Clipboard className="w-8 h-8 text-blue-600" />
+            <div className="p-4 bg-red-100 rounded-xl">
+              <Icons.Clipboard className="w-8 h-8 text-red-600" />
             </div>
           </div>
         </div>
@@ -220,19 +344,20 @@ function MyInspections() {
               placeholder="Search by report number, vessel name, or tag..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
             />
           </div>
           <div className="w-full md:w-48">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
             >
               <option value="all">All Statuses</option>
               <option value="draft">Draft</option>
-              <option value="completed">Completed</option>
-              <option value="high-priority">High Priority</option>
+              <option value="submitted">Submitted</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
             </select>
           </div>
         </div>
@@ -247,7 +372,7 @@ function MyInspections() {
             <p className="mb-4">No inspections found</p>
             <button
               onClick={() => navigate('/inspection/new')}
-              className="px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+              className="px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
             >
               Create Your First Inspection
             </button>
@@ -277,6 +402,16 @@ function MyInspections() {
                     ? new Date(inspection.created_at).toLocaleDateString()
                     : 'N/A'
                   
+                  // Check if report is approved (from reportStatusMap or inspection status)
+                  const currentStatus = (reportStatusMap[inspectionId] && 
+                    (inspection.status === 'Draft' || 
+                     inspection.status === 'DRAFT' || 
+                     inspection.status === 'In Progress' || 
+                     inspection.status === 'IN_PROGRESS'))
+                    ? reportStatusMap[inspectionId] 
+                    : inspection.status
+                  const isReportApproved = (currentStatus || '').toUpperCase() === 'APPROVED'
+                  
                   return (
                     <tr key={inspectionId} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{reportNo}</td>
@@ -284,30 +419,50 @@ function MyInspections() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{inspectionDate}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">User {inspection.user_id || 'N/A'}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{getPriorityBadge(inspection.priority)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(inspection.status)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getStatusBadge(
+                          // Use report status if available and inspection status is still Draft/In Progress
+                          (reportStatusMap[inspectionId] && 
+                           (inspection.status === 'Draft' || 
+                            inspection.status === 'DRAFT' || 
+                            inspection.status === 'In Progress' || 
+                            inspection.status === 'IN_PROGRESS'))
+                            ? reportStatusMap[inspectionId] 
+                            : inspection.status
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => navigate(`/inspection/${inspectionId}`)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="View"
-                          >
-                            <Icons.Eye />
-                          </button>
-                          <button
-                            onClick={() => navigate(`/inspection/${inspectionId}?edit=true`)}
-                            className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Icons.Pencil />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(inspectionId)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Icons.Trash />
-                          </button>
+                          {/* For admins: only show view button (read-only) */}
+                          {userRole === 'ADMIN' ? (
+                            <button
+                              onClick={() => navigate(`/inspection/${inspectionId}`)}
+                              className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                              title="View"
+                            >
+                              <Icons.Eye />
+                            </button>
+                          ) : (
+                            <>
+                              {/* For inspectors: show edit and delete buttons (hide delete if report is approved) */}
+                              <button
+                                onClick={() => navigate(`/inspection/${inspectionId}?edit=true`)}
+                                className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                                title="Edit"
+                              >
+                                <Icons.Pencil />
+                              </button>
+                              {!isReportApproved && (
+                                <button
+                                  onClick={() => handleDelete(inspectionId, inspection.status)}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Delete"
+                                >
+                                  <Icons.Trash />
+                                </button>
+                              )}
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -323,4 +478,3 @@ function MyInspections() {
 }
 
 export default MyInspections
-

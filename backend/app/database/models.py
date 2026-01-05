@@ -127,28 +127,3 @@ class Recommendation(Base):
     recommendation_text = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-# 8. Finding Template Model - Dynamic Template Management
-class FindingTemplate(Base):
-    __tablename__ = "FindingTemplate"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    label = Column(String(255), nullable=False)  # Display label (e.g., "External - Coating condition")
-    text = Column(Text, nullable=False)  # Template text
-    created_by = Column(Integer, ForeignKey("User.id"), nullable=True)  # Who created the template
-    is_active = Column(String(10), default="ACTIVE")  # ACTIVE or INACTIVE
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-# 9. Recommendation Template Model - Dynamic Template Management
-class RecommendationTemplate(Base):
-    __tablename__ = "RecommendationTemplate"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    label = Column(String(255), nullable=False)  # Display label (e.g., "Touch-up coating")
-    text = Column(Text, nullable=False)  # Template text
-    created_by = Column(Integer, ForeignKey("User.id"), nullable=True)  # Who created the template
-    is_active = Column(String(10), default="ACTIVE")  # ACTIVE or INACTIVE
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-

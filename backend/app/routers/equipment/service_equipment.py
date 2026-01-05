@@ -14,7 +14,7 @@ class EquipmentService:
     def __init__(self):
         self.db = get_db()
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-
+    
     # Create equipment
     async def create_equipment(self, equipment: EquipmentCreate, current_user: dict):
         try:
@@ -34,32 +34,32 @@ class EquipmentService:
                 # "created_by": None,
                 "created_at": str(datetime.utcnow())
             }
-
+            
             res = self.db.table("equipment").insert(equipment_data).execute()
-
+            
             if res.data:
                 return EquipmentResponse(**res.data[0])
-            raise HTTPException(status_code=400, detail="Failed to create equipment")
+                raise HTTPException(status_code=400, detail="Failed to create equipment")
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error creating equipment: {str(e)}")
-
+    
     # Upload equipment image
     async def upload_equipment_image(self, equipment_id: str, file: UploadFile, current_user: dict, part_view: str = "General"):
         try:
             # Verify if the equipment exists in the database
             await self.get_equipment(equipment_id)
-
+            
             file_ext = os.path.splitext(file.filename)[1]
             unique_filename = f"{uuid.uuid4()}{file_ext}"
             file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
-
+            
             with open(file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
-
+            
             file_size = len(content)
-
+            
             photo_data = {
                 "equipment_id": int(equipment_id), 
                 "uploaded_by": current_user.get("id"),
@@ -71,9 +71,9 @@ class EquipmentService:
                 "part_view": part_view,
                 "uploaded_at": str(datetime.utcnow())
             }
-
+            
             res = self.db.table("Photo").insert(photo_data).execute()
-
+            
             if res.data:
                 return {
                     "success": True,
@@ -85,7 +85,7 @@ class EquipmentService:
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error uploading image: {str(e)}")
-
+    
     # to get all equipment
     async def get_all_equipment(self):
         try:
@@ -116,7 +116,7 @@ class EquipmentService:
             return [EquipmentResponse(**eq) for eq in equipment_list]
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
-
+    
     # Get the equipment by ID
     async def get_equipment(self, equipment_id: str):
         try:
@@ -138,7 +138,7 @@ class EquipmentService:
             return EquipmentResponse(**equipment)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
-
+    
     # Update equipment information
     async def update_equipment(self, equipment_id: str, equipment: EquipmentCreate):
         try:
@@ -157,23 +157,23 @@ class EquipmentService:
                 "status": equipment.status,
                 "updated_at": str(datetime.utcnow())
             }
-
+            
             res = self.db.table("equipment").update(update_data).eq("id", equipment_id).execute()
-
+            
             if not res.data:
                 raise HTTPException(status_code=404, detail="Equipment not found")
-
+            
             return EquipmentResponse(**res.data[0])
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error updating equipment: {str(e)}")
-
+    
     # Delete equipment
     async def delete_equipment(self, equipment_id: str):
         try:
             # Check if exists
             await self.get_equipment(equipment_id)
-
+            
             # Delete photos first
             photos = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).execute()
             if photos.data:
@@ -184,12 +184,12 @@ class EquipmentService:
                         except:
                             pass
                 self.db.table("Photo").delete().eq("equipment_id", equipment_id).execute()
-
+            
             # Delete equipment
             self.db.table("equipment").delete().eq("id", equipment_id).execute()
 
             return {"success": True, "message": "Equipment deleted successfully"}
-
+            
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error deleting equipment: {str(e)}")
 

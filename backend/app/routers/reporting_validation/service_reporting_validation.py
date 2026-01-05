@@ -15,7 +15,27 @@ class ReportHistoryService:
     async def search_reports(self, search: ReportSearchRequest) -> list[ReportResponse]:
         """Search reports by date, equipment, or inspector"""
         try:
-            query = self.db.table("Report").select("*")
+            # Only select essential fields - exclude large JSON fields (content, labeled_photos, labeled_defects)
+            # These can be fetched separately if needed for detail view
+            query = self.db.table("Report").select(
+                "report_id,"
+                "inspection_id,"
+                "equipment_id,"
+                "created_by,"
+                "title,"
+                "report_type,"
+                "status,"
+                "api_510_compliant,"
+                "inspection_date,"
+                "next_inspection_due,"
+                "inspection_frequency,"
+                "defect_types_summary,"
+                "report_path,"
+                "report_url,"
+                "pdf_path,"
+                "pdf_url,"
+                "created_at"
+            )
             
             # Filter by date range
             if search.start_date:
@@ -39,10 +59,88 @@ class ReportHistoryService:
             if search.report_type:
                 query = query.eq("report_type", search.report_type)
             
+            # Order by created_at descending and limit to prevent timeout
+            # Limit first to reduce data transfer, then sort
+            query = query.limit(1000)
+            
             res = query.execute()
             
             if res.data:
-                return [ReportResponse(**report) for report in res.data]
+                # Sort by created_at descending (newest first) in Python
+                # This avoids potential issues with Supabase order syntax
+                sorted_data = sorted(
+                    res.data, 
+                    key=lambda x: x.get('created_at') or '', 
+                    reverse=True
+                )
+                
+                reports = []
+                for db_record in sorted_data:
+                    # Skip records missing required fields
+                    if not db_record.get('report_id'):
+                        continue
+                    
+                    # Set default values for missing fields - ensure required fields are not None
+                    report_type = db_record.get('report_type')
+                    if not report_type or report_type is None:
+                        report_type = 'API_510'
+                    
+                    created_by = db_record.get('created_by')
+                    if created_by is None:
+                        created_by = 0  # Default to 0 if not set
+                    else:
+                        # Ensure it's an integer
+                        try:
+                            created_by = int(created_by)
+                        except (ValueError, TypeError):
+                            created_by = 0
+                    
+                    status = db_record.get('status')
+                    if not status or status is None:
+                        status = 'DRAFT'
+                    
+                    # Handle created_at - required field
+                    created_at = db_record.get('created_at')
+                    if not created_at:
+                        # Skip records without created_at
+                        continue
+                    
+                    # Handle api_510_compliant conversion
+                    api_510_value = db_record.get('api_510_compliant')
+                    if api_510_value is None:
+                        api_510_value = False
+                    elif isinstance(api_510_value, bool):
+                        pass  # Already boolean
+                    elif isinstance(api_510_value, str):
+                        api_510_value = api_510_value.lower() in ('true', 'yes', '1')
+                    else:
+                        api_510_value = bool(api_510_value)
+                    
+                    response_data = {
+                        'report_id': str(db_record.get('report_id')),  # Ensure it's a string
+                        'inspection_id': db_record.get('inspection_id'),
+                        'equipment_id': db_record.get('equipment_id'),
+                        'created_by': created_by,  # Ensure it's not None and is int
+                        'title': db_record.get('title'),
+                        'report_type': report_type,  # Ensure it's not None
+                        'status': status,  # Ensure it's not None
+                        'api_510_compliant': api_510_value,
+                        'inspection_date': db_record.get('inspection_date'),
+                        'next_inspection_due': db_record.get('next_inspection_due'),
+                        'inspection_frequency': db_record.get('inspection_frequency'),
+                        'defect_types_summary': db_record.get('defect_types_summary'),
+                        'report_path': db_record.get('report_path'),
+                        'report_url': db_record.get('report_url'),
+                        'pdf_path': db_record.get('pdf_path'),
+                        'pdf_url': db_record.get('pdf_url'),
+                        'created_at': created_at,  # Required field
+                        'updated_at': None,  # Column doesn't exist in Report table
+                        'content': None,  # Excluded from list view
+                        'labeled_photos': None,  # Excluded from list view
+                        'labeled_defects': None,  # Excluded from list view
+                    }
+                    reports.append(ReportResponse(**response_data))
+                return reports
             return []
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error searching reports: {str(e)}")
@@ -50,8 +148,10 @@ class ReportHistoryService:
     async def get_inspection_trends(self) -> dict:
         """Get trend analytics for inspection frequency"""
         try:
-            # Get all reports
-            reports = self.db.table("Report").select("*").execute()
+            # Only select fields needed for analytics - exclude large JSON fields
+            reports = self.db.table("Report").select(
+                "created_at,equipment_id,inspection_frequency"
+            ).limit(5000).execute()
             
             if not reports.data:
                 return {
@@ -71,9 +171,22 @@ class ReportHistoryService:
             
             for report in reports.data:
                 # Monthly trends
-                created_at = datetime.fromisoformat(report.get("created_at", "").replace("Z", "+00:00"))
-                month_key = created_at.strftime("%Y-%m")
-                by_month[month_key] = by_month.get(month_key, 0) + 1
+                try:
+                    created_at_str = report.get("created_at", "")
+                    if created_at_str:
+                        # Handle different date formats
+                        if isinstance(created_at_str, str):
+                            created_at_str = created_at_str.replace("Z", "+00:00")
+                            created_at = datetime.fromisoformat(created_at_str)
+                        elif isinstance(created_at_str, datetime):
+                            created_at = created_at_str
+                        else:
+                            continue
+                        month_key = created_at.strftime("%Y-%m")
+                        by_month[month_key] = by_month.get(month_key, 0) + 1
+                except Exception as e:
+                    # Skip invalid dates
+                    continue
                 
                 # By equipment
                 if report.get("equipment_id"):
@@ -137,8 +250,8 @@ class ReportHistoryService:
             trends = await self.get_inspection_trends()
             defect_summary = await self.get_defect_type_summary()
             
-            # Get reports by status
-            reports = self.db.table("Report").select("status").execute()
+            # Get reports by status - only select status field
+            reports = self.db.table("Report").select("status").limit(5000).execute()
             by_status = {}
             if reports.data:
                 for report in reports.data:

@@ -3,7 +3,7 @@ Inspection Workflow Routes - Asillah (Module 2)
 API endpoints for inspection workflow management
 """
 from fastapi import APIRouter, Depends
-from app.database.schemas import InspectionCreate, InspectionResponse, ObservationCreate, ObservationResponse
+from app.database.schemas import InspectionCreate, InspectionResponse, InspectionUpdate, ObservationCreate, ObservationResponse
 from app.routers.inspection_workflow.service_inspection_workflow import InspectionWorkflowService
 from app.routers.inspection_workflow.service_observations import ObservationService
 from app.routers.inspection_workflow.service_inspection_photo import InspectionPhotoService
@@ -47,11 +47,11 @@ async def update_inspection_status(
 @router.put("/{inspection_id}", response_model=InspectionResponse)
 async def update_inspection(
     inspection_id: int,
-    inspection: InspectionCreate,
+    inspection_update: InspectionUpdate,
     current_user: dict = Depends(get_current_user)
 ):
     """Update inspection details"""
-    return await inspection_service.update_inspection(inspection_id, inspection, current_user)
+    return await inspection_service.update_inspection(inspection_id, inspection_update)
 
 @router.delete("/{inspection_id}")
 async def delete_inspection(
@@ -169,4 +169,3 @@ async def delete_inspection_photo_link(
         inspection_id=inspection_id,
         photo_id=photo_id
     )
-

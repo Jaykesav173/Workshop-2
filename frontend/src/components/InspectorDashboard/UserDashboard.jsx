@@ -161,7 +161,7 @@ export default function UserDashboard() {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="bg-blue-500 text-white w-10 h-10 rounded-full grid place-items-center">
+              <div className="bg-red-600 text-white w-10 h-10 rounded-full grid place-items-center">
                 {avatarLetter}
               </div>
 
@@ -232,7 +232,7 @@ function NavItem({ icon: Icon, label, active, onClick }) {
     <div
       onClick={onClick}
       className={`flex items-center gap-2 p-2 rounded cursor-pointer
-        ${active ? "bg-blue-100 text-blue-700" : "hover:bg-gray-100"}`}
+        ${active ? "bg-red-100 text-red-700" : "hover:bg-gray-100"}`}
     >
       <Icon className="size-4" />
       <span>{label}</span>

@@ -7,6 +7,7 @@ Schemas for 4 core models:
 2. Photo - Asillah (Photo Upload)
 3. Equipment - Yi Jing (Equipment Information)
 4. Report - Abdalla (Intelligent Report Generation) & Jay (Report History & Review)
+5. Templates - FindingTemplate and RecommendationTemplate
 """
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
@@ -17,18 +18,26 @@ from typing import Optional
 # ============================================
 class UserBase(BaseModel):
     name: str
-    email: EmailStr
+    email: Optional[EmailStr] = None
     username: str
-    role: str
+    role: Optional[str] = "USER"
 
 class UserCreate(UserBase):
     password: str
-    Account_status: str = "ACTIVE"
+    Account_status: Optional[str] = "ACTIVE"
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    role: Optional[str] = None
+    Account_status: Optional[str] = None
 
 class UserResponse(UserBase):
     id: int
-    Account_status: str
-    created_at: datetime
+    Account_status: Optional[str] = "ACTIVE"
+    created_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -114,13 +123,32 @@ class InspectionBase(BaseModel):
     next_inspection_date: Optional[datetime] = None
     remarks_general: Optional[str] = None
     findings_summary: Optional[str] = None
-    plant_unit_area: Optional[str] = None  # Plant/Unit/Area location - required when creating inspection
+    plant_unit_area: Optional[str] = None  # Plant/Unit/Area location
 
 class InspectionCreate(InspectionBase):
     # Allow equipment_id from frontend, will be converted to equipment_tag_no
     equipment_id: Optional[int] = None
     # Make inspection_date optional in create (will default to now if not provided)
     inspection_date: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+class InspectionUpdate(BaseModel):
+    """Schema for updating inspection - all fields optional"""
+    inspection_date: Optional[datetime] = None
+    equipment_tag_no: Optional[str] = None
+    defect_type: Optional[str] = None
+    remarks: Optional[str] = None
+    inspection_type: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    scheduled_date: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+    next_inspection_date: Optional[datetime] = None
+    remarks_general: Optional[str] = None
+    findings_summary: Optional[str] = None
+    plant_unit_area: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -198,7 +226,6 @@ class ReportResponse(ReportBase):
     status: str
     created_at: datetime
     updated_at: Optional[datetime] = None
-    report_no: Optional[str] = None  # Formatted report number (extracted from content JSON)
     
     class Config:
         from_attributes = True
@@ -254,7 +281,31 @@ class API510ReportRequest(BaseModel):
     initial_inspection_text: Optional[str] = "Initial/Pre-Inspection — Not applicable"
 
 # ============================================
-# Template Management Schemas
+# QA Review Schemas
+# ============================================
+class QACommentBase(BaseModel):
+    report_id: str
+    section: str  # Header, Findings, Photos, Recommendations, Conclusion
+    comment: str
+
+class QACommentCreate(QACommentBase):
+    pass
+
+class QACommentResponse(QACommentBase):
+    id: int
+    created_by: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+class ReportReviewRequest(BaseModel):
+    action: str  # 'approve' or 'reject'
+    comment: Optional[str] = None
+
+# ============================================
+# 6. Template Schemas
 # ============================================
 class FindingTemplateBase(BaseModel):
     label: str
@@ -262,7 +313,7 @@ class FindingTemplateBase(BaseModel):
     is_active: Optional[str] = "ACTIVE"
 
 class FindingTemplateCreate(FindingTemplateBase):
-    pass
+    created_by: Optional[int] = None
 
 class FindingTemplateUpdate(BaseModel):
     label: Optional[str] = None
@@ -272,7 +323,7 @@ class FindingTemplateUpdate(BaseModel):
 class FindingTemplateResponse(FindingTemplateBase):
     id: int
     created_by: Optional[int] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
     class Config:
@@ -284,7 +335,7 @@ class RecommendationTemplateBase(BaseModel):
     is_active: Optional[str] = "ACTIVE"
 
 class RecommendationTemplateCreate(RecommendationTemplateBase):
-    pass
+    created_by: Optional[int] = None
 
 class RecommendationTemplateUpdate(BaseModel):
     label: Optional[str] = None
@@ -294,7 +345,7 @@ class RecommendationTemplateUpdate(BaseModel):
 class RecommendationTemplateResponse(RecommendationTemplateBase):
     id: int
     created_by: Optional[int] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
     class Config:

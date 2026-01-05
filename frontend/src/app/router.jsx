@@ -22,6 +22,9 @@ import EquipmentModule from '../modules/equipment/Equipment.jsx'
 import AnalyticsModule from '../modules/analytics/Analytics.jsx'
 import AdminDashboard from '../modules/admin/AdminDashboard.jsx'
 import InspectorDashboard from '../modules/inspector/InspectorDashboard.jsx'
+import EngineerDashboard from '../modules/engineer/EngineerDashboard.jsx'
+import UserManagement from '../modules/admin/UserManagement.jsx'
+import ReviewInspection from '../modules/review/ReviewInspection.jsx'
 
 // New auth routes from dev-haifa
 import ForgotPassword from "../modules/auth/ForgotPassword.jsx"
@@ -53,7 +56,9 @@ function Router() {
       <Route element={<MainLayout />}>
         {/* Dashboard Routes - keep our dashboards */}
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/inspector/dashboard" element={<InspectorDashboard />} />
+        <Route path="/engineer/dashboard" element={<EngineerDashboard />} />
         
         {/* Module Routes */}
         <Route path="/photo-upload" element={<PhotoUploadModule />} />
@@ -67,6 +72,7 @@ function Router() {
         <Route path="/monitoring" element={<MonitoringModule />} />
         <Route path="/equipment" element={<EquipmentModule />} />
         <Route path="/analytics" element={<AnalyticsModule />} />
+        <Route path="/review-inspection" element={<ReviewInspection />} />
       </Route>
     </Routes>
   )

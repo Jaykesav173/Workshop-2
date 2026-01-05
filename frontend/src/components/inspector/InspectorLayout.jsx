@@ -124,11 +124,11 @@ export default function InspectorLayout({ children, activeMenuId = 'inspection' 
                 }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                   isActive
-                    ? 'bg-blue-50 text-blue-600 font-medium'
+                    ? 'bg-red-50 text-red-600 font-medium'
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                <div className={`${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
+                <div className={`${isActive ? 'text-red-600' : 'text-gray-500'}`}>
                   <item.icon />
                 </div>
                 {sidebarOpen && <span className="text-sm">{item.label}</span>}
@@ -151,7 +151,7 @@ export default function InspectorLayout({ children, activeMenuId = 'inspection' 
                 <input
                   type="text"
                   placeholder="Search inspections, equipment, sites..."
-                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -165,7 +165,7 @@ export default function InspectorLayout({ children, activeMenuId = 'inspection' 
                 <Icons.Settings />
               </button>
               <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
                   {user?.username?.charAt(0).toUpperCase() || 'I'}
                 </div>
                 {user && (

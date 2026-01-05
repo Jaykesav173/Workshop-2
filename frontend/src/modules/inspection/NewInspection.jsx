@@ -23,14 +23,13 @@ function NewInspection() {
     equipment_id: '',
     inspection_type: '',
     priority: 'MEDIUM',
-    status: 'Draft',  // Default status matches database schema
+    status: 'Draft',  // Default status - will be set automatically
     inspection_date: new Date().toISOString().split('T')[0],
     scheduled_date: '',
     due_date: '',
     next_inspection_date: '',
     findings_summary: '',  // Changed from 'summary' to match schema
     remarks_general: '',   // Changed from 'remarks' to match schema
-    plant_unit_area: '',   // Plant/Unit/Area location - required field
   })
 
   // Check authentication on mount
@@ -104,7 +103,6 @@ function NewInspection() {
         next_inspection_date: formatDateToISO(formData.next_inspection_date),
         findings_summary: formData.findings_summary || null,
         remarks_general: formData.remarks_general || null,
-        plant_unit_area: formData.plant_unit_area || null,
       }
 
       // Remove null/empty values
@@ -184,19 +182,6 @@ function NewInspection() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Plant/Unit/Area <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.plant_unit_area}
-                  onChange={(e) => setFormData({ ...formData, plant_unit_area: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter Plant/Unit/Area (e.g., Unit 1, Plant A, Area B)"
-                />
-              </div>
             </div>
           </div>
 
@@ -235,21 +220,6 @@ function NewInspection() {
                   <option value="MEDIUM">Medium</option>
                   <option value="HIGH">High</option>
                   <option value="CRITICAL">Critical</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Status <span className="text-red-500">*</span>
-                </label>
-                <select
-                  required
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="Draft">Draft</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
                 </select>
               </div>
               <div>

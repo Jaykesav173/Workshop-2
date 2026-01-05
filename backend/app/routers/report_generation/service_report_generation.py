@@ -2,6 +2,8 @@
 Report Generation Service - Abdalla (Intelligent Report Generation)
 Business logic for generating API 510-compliant reports with exact PDF formatting
 Matches the exact layout from sample reports
+
+VERSION: 2025-01-15 (Latest Update)
 """
 import uuid
 from fastapi import HTTPException
@@ -227,7 +229,6 @@ class ReportGenerationService:
         self.margin = 15 * mm  # 15mm margins
         self.content_width = self.page_width - (2 * self.margin)
         self.content_height = self.page_height - (2 * self.margin)  # Full content height
-        self.content_height = self.page_height - (2 * self.margin)
     
     async def generate_report(
         self, 
@@ -337,7 +338,7 @@ class ReportGenerationService:
                 "labeled_defects": json.dumps([]),
                 "inspection_frequency": None,
                 "defect_types_summary": json.dumps({}),
-                "status": "COMPLETED",
+                "status": "DRAFT",
                 "created_at": str(datetime.utcnow())
             }
             
@@ -2387,4 +2388,3 @@ class ReportGenerationService:
             return []
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching reports: {str(e)}")
-

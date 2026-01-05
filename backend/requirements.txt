@@ -9,7 +9,10 @@ supabase
 pydantic
 pydantic-settings
 opencv-python
+<<<<<<< HEAD
 email-validator
+=======
+>>>>>>> origin/Jaykesav
 python-multipart
 reportlab
 Pillow

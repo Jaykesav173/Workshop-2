@@ -122,23 +122,6 @@ function Reports() {
     turnaround_code: null // Auto-generated from report_date
   })
   
-  // Map inspection type to standardized code for report number
-  const mapInspectionTypeToCode = (inspectionType) => {
-    if (!inspectionType) return 'VI'
-    const typeUpper = inspectionType.toUpperCase().trim()
-    const mapping = {
-      'VISUAL': 'VI',
-      'VISUAL INSPECTION': 'VI',
-      'NDT': 'NDT',
-      'NDT INSPECTION': 'NDT',
-      'COMPREHENSIVE': 'COMP',
-      'ROUTINE': 'ROUT',
-    }
-    if (mapping[typeUpper]) return mapping[typeUpper]
-    if (typeUpper.length <= 4) return typeUpper
-    return 'VI'
-  }
-
   // Function to generate report number according to format
   const generateReportNumber = (plant, equipmentTag, reportDate, inspectionType = 'VI', turnaroundCode = null) => {
     if (!plant || !equipmentTag || !reportDate) {
@@ -148,8 +131,8 @@ function Reports() {
     // Normalize plant name: remove spaces, convert to uppercase
     const plantNormalized = plant.replace(/\s+/g, '').toUpperCase()
     
-    // Map inspection type to standardized code
-    const inspectionTypeCode = mapInspectionTypeToCode(inspectionType)
+    // Normalize inspection type: uppercase, default to "VI"
+    const inspectionTypeNormalized = (inspectionType || 'VI').toUpperCase()
     
     // Extract year from report_date and create turnaround code
     let turnaroundCodeNormalized
@@ -170,8 +153,8 @@ function Reports() {
       }
     }
     
-    // Construct report number: <PLANT>/<INSPECTION_TYPE>/<EQUIPMENT_TAG>/<TURNAROUND_CODE>
-    return `${plantNormalized}/${inspectionTypeCode}/${equipmentTag}/${turnaroundCodeNormalized}`
+    // Construct report number: PLANT/INSPECTION_TYPE/EQUIPMENT_TAG/TURNAROUND_CODE
+    return `${plantNormalized}/${inspectionTypeNormalized}/${equipmentTag}/${turnaroundCodeNormalized}`
   }
   
   // Auto-generate report number when relevant fields change
@@ -305,32 +288,6 @@ function Reports() {
       }
     }
   }, [urlInspectionId, location.state])
-
-  // Fetch inspection data when inspection_id is available to auto-populate plant field
-  useEffect(() => {
-    const fetchInspectionData = async () => {
-      if (inspectionId) {
-        try {
-          const token = localStorage.getItem('token')
-          const response = await axios.get(`${API_BASE}/inspections/${inspectionId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-          const inspection = response.data
-          // Auto-populate plant field from inspection if not already set
-          if (inspection?.plant_unit_area && !header.plant) {
-            setHeader(prev => ({
-              ...prev,
-              plant: inspection.plant_unit_area
-            }))
-            console.log('📋 Auto-populated plant field from inspection:', inspection.plant_unit_area)
-          }
-        } catch (err) {
-          console.error('Error fetching inspection data:', err)
-        }
-      }
-    }
-    fetchInspectionData()
-  }, [inspectionId])
   
   // Fetch equipment list
   useEffect(() => {
@@ -357,8 +314,7 @@ function Reports() {
         equipment_tag: selectedEquipment.equipment_tag_no || selectedEquipment.name || '',
         equipment_description: selectedEquipment.equipment_description || 
                               `${selectedEquipment.type || ''} - ${selectedEquipment.equipment_tag_no || selectedEquipment.name || ''}`,
-        // Only set plant from equipment if not already set from inspection
-        plant: prev.plant || selectedEquipment.location || '',
+        plant: selectedEquipment.location || '',
         dosh_no: selectedEquipment.dosh_registration_no || ''
       }))
       setEquipmentId(selectedEquipment.id)
@@ -561,13 +517,35 @@ function Reports() {
       const response = await reportService.generateReport(reportData)
       console.log('📋 Report generation response:', response)
       console.log('📋 Report ID (report_id):', response.report_id)
+      
+      if (!response || (!response.report_id && !response.id)) {
+        throw new Error('Report generation succeeded but no report ID was returned')
+      }
+      
       const reportId = response.report_id || response.id
       setGeneratedReportId(reportId)
       setSuccess(`Report generated successfully! Report ID: ${reportId}`)
     } catch (err) {
       console.error('❌ Error generating report:', err)
+      console.error('❌ Error response:', err.response)
       console.error('❌ Error details:', err.response?.data)
-      setError(err.response?.data?.detail || 'Failed to generate report. Please try again.')
+      console.error('❌ Error message:', err.message)
+      
+      // Extract detailed error message
+      let errorMessage = 'Failed to generate report. Please try again.'
+      if (err.response?.data) {
+        if (typeof err.response.data === 'string') {
+          errorMessage = err.response.data
+        } else if (err.response.data.detail) {
+          errorMessage = err.response.data.detail
+        } else if (err.response.data.message) {
+          errorMessage = err.response.data.message
+        }
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -759,7 +737,7 @@ function Reports() {
               <h2 className="text-xl font-semibold text-gray-900">Findings</h2>
               <button
                 onClick={addFinding}
-                className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
               >
                 <Icons.Plus className="w-4 h-4" />
                 Add Finding
@@ -829,7 +807,7 @@ function Reports() {
               <h2 className="text-xl font-semibold text-gray-900">Recommendations</h2>
               <button
                 onClick={addRecommendation}
-                className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
               >
                 <Icons.Plus className="w-4 h-4" />
                 Add Recommendation
@@ -923,7 +901,7 @@ function Reports() {
                 className={`cursor-pointer inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
                   loading
                     ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-red-600 text-white hover:bg-red-700'
                 }`}
               >
                 <Icons.Upload className="w-5 h-5" />
@@ -1051,7 +1029,7 @@ function Reports() {
             {generatedReportId && (
               <button
                 onClick={handleDownloadPDF}
-                className="w-full mt-4 px-6 py-3.5 bg-blue-600 text-white text-lg font-semibold rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                className="w-full mt-4 px-6 py-3.5 bg-red-600 text-white text-lg font-semibold rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
               >
                 <Icons.Download className="w-5 h-5" />
                 Download PDF

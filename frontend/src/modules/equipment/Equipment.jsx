@@ -34,8 +34,8 @@ const FormRow = React.memo(({ label, placeholder, type = "input", name, form, se
           placeholder={placeholder}
           value={form[name] || ""}
           onChange={onChange || ((e) => setForm({ ...form, [name]: e.target.value }))}
-          className={`w-full px-3 text-base text-gray-800 focus:outline-none placeholder-gray-500 bg-white h-10 rounded-lg border shadow-sm focus:ring-1 
-          ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
+          className={`w-full px-4 py-2 text-base text-gray-800 focus:outline-none placeholder-gray-500 bg-white rounded-xl border focus:ring-2 
+          ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500" : "border-gray-300 focus:border-red-500 focus:ring-red-500"}`}
         />
       ) : (
         <div className="relative w-full">
@@ -43,7 +43,7 @@ const FormRow = React.memo(({ label, placeholder, type = "input", name, form, se
             name={name}
             value={form[name] || ""}
             onChange={(e) => setForm({ ...form, [name]: e.target.value })}
-            className="w-full px-3 text-base text-gray-800 focus:outline-none bg-white h-10 rounded-lg appearance-none cursor-pointer border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="w-full px-4 py-2 text-base text-gray-800 focus:outline-none bg-white rounded-xl appearance-none cursor-pointer border border-gray-300 focus:border-red-500 focus:ring-2 focus:ring-red-500"
           >
             <option disabled value="">
               {placeholder}
@@ -63,12 +63,12 @@ const FormRow = React.memo(({ label, placeholder, type = "input", name, form, se
 });
 
 const DetailsRow = ({ label, value }) => (
-  <div className="flex items-center mb-1 w-full justify-center">
-    <span className="w-1/3 text-right text-base font-bold text-black mr-6 select-none">
+  <div className="flex items-center mb-3 w-full">
+    <span className="w-1/3 text-sm font-medium text-gray-700 select-none">
       {label}
     </span>
-    <div className="w-1/2 min-h-[44px] bg-[#e9e9e9] rounded-lg flex items-center px-4 text-base text-[#333] shadow-sm">
-      {value || "Value"}
+    <div className="flex-1 min-h-[44px] bg-gray-50 rounded-xl flex items-center px-4 text-sm text-gray-900 border border-gray-200">
+      {value || "N/A"}
     </div>
   </div>
 );
@@ -469,77 +469,71 @@ export default function EquipmentDetailsRegistration() {
 
   // RENDER UI
   return (
-
-    <div className="bg-white min-h-screen font-sans text-black ml-[250px] mt-[80px]">
-
-      {/* Page Title */}
-      <div className="px-8 py-6">
-        <h1 className="text-3xl font-bold text-gray-800">Equipment Information</h1>
+    <>
+      {/* Page Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Equipment Information</h1>
+        <p className="text-gray-600">Register and manage equipment details</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex px-8 pt-0 space-x-0 border-b border-gray-300">
-        {menuItems.map((item) => (
-          <button
-            key={item}
-            onClick={() => {
-              // Prevent switching to Update tab manually if not editing, or handle logic
-              if (item === "Equipment Details Update" && !editingId) return;
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="flex -mb-px">
+            {menuItems.map((item) => (
+              <button
+                key={item}
+                onClick={() => {
+                  // Prevent switching to Update tab manually if not editing, or handle logic
+                  if (item === "Equipment Details Update" && !editingId) return;
 
-              setActiveTab(item);
+                  setActiveTab(item);
 
-              if (item === "Equipment Registration" && !editingId) {
-                // Clear form if switching to registration and not editing
-                setForm({
-                  equipment_tag_no: "",
-                  equipment_description: "",
-                  plant_area: "",
-                  dosh_registration_no: "",
-                  type_id: "",
-                  material: "",
-                  nominal_thickness: "",
-                  corrosion_allowance: "",
-                  design_pressure: "",
-                  design_temperature: "",
-                  location: "",
-                  status: "ACTIVE"
-                });
-                setErrors({});
-                setViewParts([]);
-              }
-            }}
-            className={`
-              text-sm px-6 py-2 font-bold transition-all duration-300
-              ${activeTab === item
-                ? "bg-blue-500 text-white shadow-md transform scale-[1.02]"
-                : "bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800 border border-transparent"
-              }
-            `}
-            style={{
-              borderRadius: "8px 8px 0 0",
-              marginRight: "4px",
-            }}
-          >
-            {item}
-          </button>
-        ))}
-        <div className="flex-1 border-b border-gray-300"></div>
-      </div>
+                  if (item === "Equipment Registration" && !editingId) {
+                    // Clear form if switching to registration and not editing
+                    setForm({
+                      equipment_tag_no: "",
+                      equipment_description: "",
+                      plant_area: "",
+                      dosh_registration_no: "",
+                      type_id: "",
+                      material: "",
+                      nominal_thickness: "",
+                      corrosion_allowance: "",
+                      design_pressure: "",
+                      design_temperature: "",
+                      location: "",
+                      status: "ACTIVE"
+                    });
+                    setErrors({});
+                    setViewParts([]);
+                  }
+                }}
+                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === item
+                    ? 'border-red-600 text-red-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {item}
+              </button>
+            ))}
+          </nav>
+        </div>
 
-      {/* Main Content */}
-      <div className="p-8">
-        <div className="w-full">
+        {/* Tab Content */}
+        <div className="p-6">
 
           {/* Equipment Registration / Update page */}
           {(activeTab === "Equipment Registration" || activeTab === "Equipment Details Update") && (
-            <div className="p-5 bg-[#f8f8f8] rounded-2xl shadow-lg">
+            <div className="space-y-6">
               <div className="flex flex-col md:flex-row gap-6">
 
                 {/* Left side - Image */}
-                <div className="w-full md:w-1/3 flex flex-col items-center pt-8">
+                <div className="w-full md:w-1/3 flex flex-col items-center">
                   <div
-                    className={`w-full overflow-hidden border-2 border-dashed rounded-lg min-h-[520px] flex flex-col items-center justify-center transition-colors
-                      ${isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-200"}`}
+                    className={`w-full overflow-hidden border-2 border-dashed rounded-xl min-h-[520px] flex flex-col items-center justify-center transition-colors
+                      ${isDragging ? "border-red-500 bg-red-50" : "border-gray-300 bg-gray-100"}`}
                     onDragOver={(e) => {
                       e.preventDefault();
                       setIsDragging(true);
@@ -585,15 +579,16 @@ export default function EquipmentDetailsRegistration() {
                   />
 
                   <button
-                    className="mt-6 px-6 py-2 text-base font-semibold bg-blue-500 text-white rounded-lg hover:bg-blue-600 shadow-md transition-colors"
+                    className="mt-6 px-4 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
                     onClick={() => document.getElementById("equipment-image").click()}
                   >
+                    <Upload size={18} />
                     {imageFile ? "Change Image" : (editImageUrl ? "Insert new image" : "Insert Image from Files")}
                   </button>
                 </div>
 
                 {/* Right side - Form */}
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormRow label="Equipment Tag No:" placeholder="eg. T-101" name="equipment_tag_no" form={form} setForm={setForm} options={options} required />
                   <FormRow label="Plant/Unit/Area:" placeholder="eg. Plant A" name="location" form={form} setForm={setForm} options={options} required />
 
@@ -653,14 +648,14 @@ export default function EquipmentDetailsRegistration() {
               </div>
 
               {/* View Parts Section */}
-              <div className="mt-8 border-t border-gray-200 pt-6">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Additional View Parts</h3>
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional View Parts</h3>
                 <div className="flex flex-wrap gap-6">
                   {viewParts.map((part) => (
                     <div key={part.id} className="flex flex-col gap-2 relative group">
                       {/* Image Box */}
                       <div
-                        className="w-40 h-40 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 overflow-hidden cursor-pointer hover:border-blue-500 transition-colors relative"
+                        className="w-40 h-40 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center bg-white overflow-hidden cursor-pointer hover:border-red-500 transition-colors relative"
                         onClick={() => document.getElementById(`part-file-${part.id}`).click()}
                       >
                         {part.previewUrl || part.existingUrl ? (
@@ -697,7 +692,7 @@ export default function EquipmentDetailsRegistration() {
                               handlePartChange(part.id, "partView", val);
                             }
                           }}
-                          className="w-40 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="w-40 px-3 py-2 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
                         >
                           <option value="" disabled>Select View</option>
                           {partViewOptions.map((opt) => (
@@ -713,7 +708,7 @@ export default function EquipmentDetailsRegistration() {
                             placeholder="Type Custom View..."
                             value={part.partView === "Custom" ? "" : part.partView} // clear "Custom" placeholder visual
                             onChange={(e) => handlePartChange(part.id, "partView", e.target.value)}
-                            className="w-40 px-2 py-1 text-sm border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-40 px-3 py-2 text-sm border border-red-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
                             autoFocus
                           />
                         )}
@@ -732,7 +727,7 @@ export default function EquipmentDetailsRegistration() {
                   {/* Add Button */}
                   <button
                     onClick={handleAddPart}
-                    className="w-40 h-40 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center bg-white hover:bg-gray-50 transition-colors text-blue-500"
+                    className="w-40 h-40 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center bg-white hover:bg-gray-50 transition-colors text-red-600"
                   >
                     <Plus size={32} />
                     <span className="font-semibold text-sm mt-2">Add Part</span>
@@ -741,15 +736,15 @@ export default function EquipmentDetailsRegistration() {
               </div>
 
               {/* Save button */}
-              <div className="mt-16 flex flex-col items-center gap-2">
-                <span className="text-red-700 text-base">
+              <div className="flex flex-col items-center gap-2 pt-6 border-t border-gray-200">
+                <span className="text-red-600 text-sm font-medium">
                   ***Please make sure the information inserted is correct before saving.
                 </span>
                 <button
                   onClick={handleSaveEquipment}
-                  className="px-8 py-2 text-base font-semibold bg-blue-500 text-white border border-blue-500 rounded-lg shadow-sm hover:bg-blue-600"
+                  className="px-6 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
                 >
-                  {editingId ? "Update" : "Save"}
+                  {editingId ? "Update Equipment" : "Save Equipment"}
                 </button>
                 {editingId && (
                   <button
@@ -773,7 +768,7 @@ export default function EquipmentDetailsRegistration() {
                       setViewParts([]);
                       setActiveTab("Equipment Registration"); // Switch back to registration
                     }}
-                    className="px-8 py-2 text-base font-semibold bg-blue-500 text-white border border-blue-500 rounded-lg shadow-sm hover:bg-blue-600"
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
                   >
                     Cancel Edit
                   </button>
@@ -784,12 +779,12 @@ export default function EquipmentDetailsRegistration() {
 
           {/* TAB: Equipment Details */}
           {activeTab === "Equipment Details" && (
-            <div className="w-full">
+            <div className="space-y-6">
               {!viewingItem ? (
                 /* LIST VIEW */
-                <div className="w-full">
+                <div className="space-y-6">
                   {/* Filter Section */}
-                  <div className="flex flex-col gap-4 mb-6 bg-gray-50 p-6 rounded-lg border border-gray-200">
+                  <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
 
                     {/* Search Bar */}
                     <div className="relative w-full">
@@ -799,7 +794,7 @@ export default function EquipmentDetailsRegistration() {
                       <input
                         type="text"
                         placeholder="Search equipment by tag, description, location, or DOSH no..."
-                        className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
                         value={searchQuery}
                         onChange={(e) => {
                           setSearchQuery(e.target.value);
@@ -820,7 +815,7 @@ export default function EquipmentDetailsRegistration() {
                             setFilterValue(""); // Reset value when category changes
                             setCurrentPage(1);
                           }}
-                          className="px-4 py-2 bg-gray-300 text-black text-l rounded-full border-none focus:ring-2 focus:ring-gray-400 cursor-pointer"
+                          className="px-4 py-2 bg-white text-gray-800 text-sm rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                         >
                           <option value="">Select your filter here</option>
                           <option value="type_id" disabled={activeFilters.some(f => f.category === "type_id")}>Type</option>
@@ -849,7 +844,7 @@ export default function EquipmentDetailsRegistration() {
                             }
                           }}
                           disabled={!filterCategory}
-                          className="px-4 py-2 bg-gray-300 text-black text-l rounded-full border-none focus:ring-2 focus:ring-gray-400 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-4 py-2 bg-white text-gray-800 text-sm rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <option value="">Select the value here</option>
                           {filterCategory === "type_id" && options.types.map(t => (
@@ -867,7 +862,7 @@ export default function EquipmentDetailsRegistration() {
 
                     <div className="flex flex-wrap gap-2">
                       {activeFilters.map((filter, index) => (
-                        <div key={index} className="flex items-center gap-2 px-4 py-1.5 bg-gray-200 text-gray-800 rounded-lg text-base font-medium tracking-wider">
+                        <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-800 rounded-xl text-sm font-medium">
                           <span>
                             {filter.category === "type_id" ? "Type" :
                               filter.category.charAt(0).toUpperCase() + filter.category.slice(1)}:
@@ -901,15 +896,15 @@ export default function EquipmentDetailsRegistration() {
 
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full bg-white border border-gray-300">
-                      <thead className="text-base">
-                        <tr className="bg-gray-100">
-                          <th className="py-2 px-4 border-b text-center">Tag No</th>
-                          <th className="py-2 px-4 border-b text-center">Description</th>
-                          <th className="py-2 px-4 border-b text-center">Location</th>
-                          <th className="py-2 px-4 border-b text-center">DOSH No</th>
-                          <th className="py-2 px-4 border-b text-center">Actions</th>
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <table className="min-w-full">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="py-3 px-4 text-left text-sm font-medium text-gray-700">Tag No</th>
+                          <th className="py-3 px-4 text-left text-sm font-medium text-gray-700">Description</th>
+                          <th className="py-3 px-4 text-left text-sm font-medium text-gray-700">Location</th>
+                          <th className="py-3 px-4 text-left text-sm font-medium text-gray-700">DOSH No</th>
+                          <th className="py-3 px-4 text-left text-sm font-medium text-gray-700">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -965,15 +960,15 @@ export default function EquipmentDetailsRegistration() {
                           return (
                             <>
                               {currentItems.map((item) => (
-                                <tr key={item.id} className="hover:bg-gray-50 text-base">
-                                  <td className="py-2 px-4 border-b text-center">{highlightText(item.equipment_tag_no, searchQuery)}</td>
-                                  <td className="py-2 px-4 border-b text-center">{highlightText(item.equipment_description, searchQuery)}</td>
-                                  <td className="py-2 px-4 border-b text-center">{highlightText(item.location, searchQuery)}</td>
-                                  <td className="py-2 px-4 border-b text-center">{highlightText(item.dosh_registration_no, searchQuery)}</td>
-                                  <td className="py-2 px-4 border-b flex gap-2 justify-center">
+                                <tr key={item.id} className="hover:bg-gray-50 border-b border-gray-100">
+                                  <td className="py-3 px-4 text-sm text-gray-900">{highlightText(item.equipment_tag_no, searchQuery)}</td>
+                                  <td className="py-3 px-4 text-sm text-gray-900">{highlightText(item.equipment_description, searchQuery)}</td>
+                                  <td className="py-3 px-4 text-sm text-gray-900">{highlightText(item.location, searchQuery)}</td>
+                                  <td className="py-3 px-4 text-sm text-gray-900">{highlightText(item.dosh_registration_no, searchQuery)}</td>
+                                  <td className="py-3 px-4">
                                     <button
                                       onClick={() => setViewingItem(item)}
-                                      className="bg-green-500 text-white px-6 py-1 rounded hover:bg-green-600 font-semibold"
+                                      className="px-4 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
                                     >
                                       View
                                     </button>
@@ -993,19 +988,19 @@ export default function EquipmentDetailsRegistration() {
                                         <button
                                           onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                           disabled={currentPage === 1}
-                                          className="p-1 rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
+                                          className="p-2 rounded-xl border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 transition-colors"
                                         >
-                                          <ChevronLeft size={20} />
+                                          <ChevronLeft size={18} />
                                         </button>
-                                        <span className="text-sm font-medium text-gray-700">
+                                        <span className="text-sm font-medium text-gray-700 px-2">
                                           Page {currentPage} of {totalPages}
                                         </span>
                                         <button
                                           onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                           disabled={currentPage === totalPages}
-                                          className="p-1 rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
+                                          className="p-2 rounded-xl border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 transition-colors"
                                         >
-                                          <ChevronRight size={20} />
+                                          <ChevronRight size={18} />
                                         </button>
                                       </div>
                                     </div>
@@ -1021,11 +1016,11 @@ export default function EquipmentDetailsRegistration() {
                 </div>
               ) : (
                 /* READ-ONLY DETAILS VIEW */
-                <div className="p-5 bg-[#f8f8f8] rounded-2xl shadow-lg">
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <div className="flex flex-col md:flex-row gap-6">
                     {/* Left side - Image */}
-                    <div className="w-full md:w-1/3 flex flex-col items-center pt-8">
-                      <div className="w-full bg-gray-200 overflow-hidden border border-gray-300 rounded-lg min-h-[520px] flex items-center justify-center">
+                    <div className="w-full md:w-1/3 flex flex-col items-center">
+                      <div className="w-full bg-gray-100 overflow-hidden border border-gray-300 rounded-xl min-h-[520px] flex items-center justify-center">
                         {/* Show equipment image if available in database, else show text */}
                         {viewingItem.image_url ? (
                           <img
@@ -1055,15 +1050,15 @@ export default function EquipmentDetailsRegistration() {
                       <DetailsRow label="Design Pressure (barg):" value={viewingItem.design_pressure} />
                       <DetailsRow label="Design Temperature (°C):" value={viewingItem.design_temperature} />
 
-                      <div className="flex items-center gap-4 mt-4 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                        <span className="font-bold text-base text-gray-800">Status:</span>
+                      <div className="flex items-center gap-4 mt-4 bg-red-50 p-4 rounded-xl border border-red-200">
+                        <span className="text-sm font-medium text-gray-700">Status:</span>
                         <select
                           value={viewingItem.status || "ACTIVE"}
                           onChange={(e) => handleStatusUpdate(e.target.value)}
-                          className={`px-4 py-2 rounded-lg font-bold text-white cursor-pointer border-none outline-none
-                             ${viewingItem.status === "ACTIVE" ? "bg-green-500 hover:bg-green-600" :
-                              viewingItem.status === "MAINTENANCE" ? "bg-orange-500 hover:bg-orange-600" :
-                                "bg-gray-500 hover:bg-gray-600"}`}
+                          className={`px-4 py-2 rounded-xl font-medium text-white cursor-pointer border-none outline-none transition-colors
+                             ${viewingItem.status === "ACTIVE" ? "bg-green-600 hover:bg-green-700" :
+                              viewingItem.status === "MAINTENANCE" ? "bg-orange-600 hover:bg-orange-700" :
+                                "bg-gray-600 hover:bg-gray-700"}`}
                         >
                           <option value="ACTIVE" className="bg-white text-black">Active</option>
                           <option value="INACTIVE" className="bg-white text-black">Inactive</option>
@@ -1075,16 +1070,16 @@ export default function EquipmentDetailsRegistration() {
 
                   {/* Additional View Parts Gallery */}
                   {viewingItem.photos && viewingItem.photos.some(p => !["General", "General View"].includes(p.part_view)) && (
-                    <div className="mt-8 px-4 w-full">
-                      <h3 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Additional Views</h3>
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Views</h3>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {viewingItem.photos
                           .filter(p => !["General", "General View"].includes(p.part_view))
                           .map((photo) => {
                             const filename = photo.file_path ? photo.file_path.split(/[\\/]/).pop() : "";
                             return (
-                              <div key={photo.id} className="flex flex-col items-center bg-white p-2 rounded-lg shadow-sm border border-gray-200">
-                                <div className="w-full h-40 bg-gray-100 rounded-md overflow-hidden mb-2">
+                              <div key={photo.id} className="flex flex-col items-center bg-white p-3 rounded-xl shadow-sm border border-gray-200">
+                                <div className="w-full h-40 bg-gray-100 rounded-xl overflow-hidden mb-2">
                                   <img
                                     src={`http://localhost:8000/static/uploads/${filename}`}
                                     alt={photo.part_view}
@@ -1101,25 +1096,24 @@ export default function EquipmentDetailsRegistration() {
                   )}
 
                   {/* Buttons */}
-                  <div className="mt-12 flex flex-col items-center gap-4">
+                  <div className="mt-6 pt-6 border-t border-gray-200 flex flex-wrap justify-center gap-3">
                     <button
                       onClick={() => handleEdit(viewingItem)}
-                      className="px-8 py-2 text-base font-bold bg-blue-500 text-white rounded-xl shadow-md hover:bg-blue-600 transition-transform hover:scale-105"
+                      className="px-6 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
                     >
-                      Edit
+                      Edit Equipment
                     </button>
                     <button
                       onClick={() => setViewingItem(null)}
-                      className="px-8 py-2 text-base font-bold bg-blue-500 text-white border border-blue-500 rounded-xl shadow-md hover:bg-blue-600 transition-transform hover:scale-105"
+                      className="px-6 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
                     >
                       Back to List
                     </button>
-
                     <button
                       onClick={() => handleDelete(viewingItem.id)}
-                      className="px-8 py-2 text-base font-bold bg-red-500 text-white rounded-xl shadow-md hover:bg-red-600 transition-transform hover:scale-105"
+                      className="px-6 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
                     >
-                      Delete
+                      Delete Equipment
                     </button>
                   </div>
                 </div>
@@ -1127,7 +1121,7 @@ export default function EquipmentDetailsRegistration() {
             </div>
           )}
         </div>
-      </div >
-    </div >
+      </div>
+    </>
   );
 }
