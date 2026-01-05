@@ -114,276 +114,325 @@ function Analysis() {
   }, [yearFilter, monthFilter, startDate, endDate, equipmentTypeFilter]);
 
   const fetchUpcomingSchedules = useCallback(async () => {
-    if (!currentUser) return;
+  if (!currentUser) return;
+  
+  try {
+    console.log('🔄 Fetching inspection schedules...');
     
-    try {
-      console.log('🔄 Fetching upcoming inspection schedules...');
-      
-      // Get inspector ID from current user
-      const inspectorId = currentUser.id || currentUser.user_id;
-      
-      const { data: scheduleData, error: scheduleError } = await supabase
-        .from('InspectionSchedule')
-        .select(`
-          schedule_id,
-          equipment_id,
-          engineer_id,
-          inspector_id,
-          scheduled_date,
-          start_time,
-          end_time,
-          details,
-          status,
-          priority,
-          created_at
-        `)
-        .eq('inspector_id', inspectorId)  // Only show schedules for this inspector
-        .gte('scheduled_date', new Date().toISOString().split('T')[0])  // Future dates only
-        .order('scheduled_date', { ascending: true })
-        .limit(10);
-      
-      if (scheduleError) throw scheduleError;
-      
-      // Fetch equipment details for these schedules
-      const equipmentIds = [...new Set(scheduleData?.map(s => s.equipment_id) || [])];
-      let equipmentData = [];
-      
-      if (equipmentIds.length > 0) {
-        const { data: eqData, error: eqError } = await supabase
-          .from('equipment')
-          .select(`
-            id,
-            equipment_tag_no,
-            equipment_description,
-            location
-          `)
-          .in('id', equipmentIds);
-        
-        if (eqError) console.warn('Could not fetch equipment details:', eqError);
-        equipmentData = eqData || [];
-      }
-      
-      // Combine schedule data with equipment details
-      const combinedData = scheduleData?.map(schedule => {
-        const equipment = equipmentData.find(eq => eq.id === schedule.equipment_id);
-        const scheduleDate = new Date(schedule.scheduled_date);
-        const today = new Date();
-        const daysUntil = Math.floor((scheduleDate - today) / (1000 * 60 * 60 * 24));
-        
-        // Convert time format
-        const formatTime = (timeString) => {
-          if (!timeString) return '';
-          const time = new Date(`2000-01-01T${timeString}`);
-          return time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-        };
-        
-        return {
-          scheduleId: schedule.schedule_id,
-          equipmentId: schedule.equipment_id,
-          equipmentTag: equipment?.equipment_tag_no || `ID: ${schedule.equipment_id}`,
-          equipmentDescription: equipment?.equipment_description || 'Equipment not found',
-          location: equipment?.location || 'Unknown',
-          scheduledDate: schedule.scheduled_date,
-          startTime: formatTime(schedule.start_time),
-          endTime: formatTime(schedule.end_time),
-          status: schedule.status || 'Scheduled',
-          priority: schedule.priority || 'Medium',
-          daysUntil: daysUntil >= 0 ? daysUntil : 0
-        };
-      }) || [];
-      
-      setUpcomingSchedules(combinedData);
-      console.log(`✅ Loaded ${combinedData.length} upcoming schedules`);
-      
-    } catch (err) {
-      console.error('❌ Error fetching inspection schedules:', err);
-      setError('Failed to load upcoming inspection schedules');
+    // Get inspector ID from current user
+    const inspectorId = currentUser.id || currentUser.user_id;
+    
+    // Fetch schedules - include 'Confirmed' status for upcoming
+    const { data: scheduleData, error: scheduleError } = await supabase
+      .from('inspectionschedule')
+      .select(`
+        schedule_id,
+        equipment_id,
+        engineer_id,
+        inspector_id,
+        scheduled_date,
+        start_time,
+        end_time,
+        details,
+        status,
+        priority,
+        created_at,
+        updated_at
+      `)
+      .eq('inspector_id', inspectorId)
+      .in('status', ['Confirmed', 'Scheduled', 'In Progress', 'Pending', 'Completed'])
+      .order('scheduled_date', { ascending: true })
+      .limit(20);
+    
+    if (scheduleError) {
+      console.error('❌ Error fetching from inspectionschedule:', scheduleError);
+      throw scheduleError;
     }
-  }, [currentUser]);
-
-  const fetchData = useCallback(async () => {
-    if (!currentUser) return;
     
-    setLoading(true);
-    setError(null);
+    // Fetch equipment details
+    const equipmentIds = [...new Set(scheduleData?.map(s => s.equipment_id) || [])];
+    let equipmentData = [];
     
-    try {
-      console.log('🔄 Fetching analysis data from Supabase...');
-      
-      // 1. Build inspection query with filters
-      let query = supabase
-        .from('Inspection')
-        .select(`
-          inspection_id,
-          equipment_tag_no,
-          inspection_date,
-          status,
-          priority,
-          scheduled_date,
-          due_date,
-          next_inspection_date,
-          defect_type,
-          remarks,
-          user_id,
-          inspection_type,
-          remarks_general,
-          findings_summary,
-          plant_unit_area,
-          report_no,
-          created_at,
-          updated_at
-        `);
-      
-      // Apply date filters only if dates are selected
-      if (startDate) {
-        query = query.gte('inspection_date', startDate);
-      }
-      if (endDate) {
-        query = query.lte('inspection_date', endDate);
-      }
-      
-      // Apply year filter
-      if (yearFilter !== 'all') {
-        const startYear = `${yearFilter}-01-01`;
-        const endYear = `${yearFilter}-12-31`;
-        query = query.gte('inspection_date', startYear)
-                     .lte('inspection_date', endYear);
-      }
-      
-      // Apply month filter (if year is also selected)
-      if (monthFilter !== 'all' && yearFilter !== 'all') {
-        const month = monthFilter.padStart(2, '0');
-        const startMonth = `${yearFilter}-${month}-01`;
-        const endMonth = `${yearFilter}-${month}-31`;
-        query = query.gte('inspection_date', startMonth)
-                     .lte('inspection_date', endMonth);
-      }
-      
-      query = query.order('inspection_date', { ascending: false });
-      
-      const { data: inspectionData, error: inspectionError } = await query;
-      
-      if (inspectionError) throw inspectionError;
-      
-      // 2. Fetch observations for these inspections
-      const inspectionIds = inspectionData?.map(i => i.inspection_id) || [];
-      let observationData = [];
-      
-      if (inspectionIds.length > 0) {
-        const { data: obsData, error: obsError } = await supabase
-          .from('Observation')
-          .select(`
-            observation_id,
-            inspection_id,
-            component,
-            location,
-            observation_type,
-            severity,
-            status,
-            priority,
-            action_required,
-            created_at
-          `)
-          .in('inspection_id', inspectionIds);
-        
-        if (obsError) console.warn('Could not fetch observations:', obsError);
-        observationData = obsData || [];
-      }
-      
-      // 3. Fetch findings for these observations
-      const observationIds = observationData?.map(o => o.observation_id) || [];
-      let findingData = [];
-      
-      if (observationIds.length > 0) {
-        const { data: findData, error: findError } = await supabase
-          .from('Finding')
-          .select(`
-            finding_id,
-            observation_id,
-            finding_key,
-            finding_text,
-            created_at
-          `)
-          .in('observation_id', observationIds);
-        
-        if (findError) console.warn('Could not fetch findings:', findError);
-        findingData = findData || [];
-      }
-      
-      // 4. Fetch equipment data
-      const { data: equipmentData, error: equipmentError } = await supabase
+    if (equipmentIds.length > 0) {
+      const { data: eqData, error: eqError } = await supabase
         .from('equipment')
         .select(`
           id,
           equipment_tag_no,
           equipment_description,
-          type_id,
-          location,
-          inspection_due_date,
-          status,
-          nominal_thickness,
-          corrosion_allowance,
-          design_pressure,
-          design_temperature,
-          created_at
+          location
         `)
-        .order('equipment_tag_no');
+        .in('id', equipmentIds);
       
-      if (equipmentError) throw equipmentError;
+      if (eqError) console.warn('Could not fetch equipment details:', eqError);
+      equipmentData = eqData || [];
+    }
+    
+    // Fetch engineer details for schedules with engineer_id
+    
+    const engineerIds = [...new Set(scheduleData?.map(s => s.engineer_id).filter(id => id) || [])];
+    let engineerData = [];
+    
+    if (engineerIds.length > 0) {
+      const { data: engData, error: engError } = await supabase
+        .from('users')
+        .select(`
+          id,
+          email,
+          first_name,
+          last_name,
+          name,  // ADD THIS LINE - some tables might have 'name' field instead
+          role
+        `)
+        .in('id', engineerIds);
       
-      // 5. Apply equipment type filter to the data
-      let filteredInspections = inspectionData || [];
-      let filteredEquipment = equipmentData || [];
+      if (engError) console.warn('Could not fetch engineer details:', engError);
+      engineerData = engData || [];
+    }
+    
+    // Combine schedule data with equipment and engineer details
+    const combinedData = scheduleData?.map(schedule => {
+      const equipment = equipmentData.find(eq => eq.id === schedule.equipment_id);
+      const engineer = engineerData.find(eng => eng.id === schedule.engineer_id);
+      const scheduleDate = new Date(schedule.scheduled_date);
+      const today = new Date();
+      const daysUntil = Math.floor((scheduleDate - today) / (1000 * 60 * 60 * 24));
       
-      if (equipmentTypeFilter !== 'all') {
-        filteredEquipment = equipmentData.filter(eq => 
-          eq.equipment_description === equipmentTypeFilter
-        );
-        
-        const equipmentTags = filteredEquipment.map(eq => eq.equipment_tag_no);
-        filteredInspections = inspectionData.filter(insp => 
-          equipmentTags.includes(insp.equipment_tag_no)
-        );
+      // Format time
+      const formatTime = (timeString) => {
+        if (!timeString) return '';
+        const time = new Date(`2000-01-01T${timeString}`);
+        return time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      };
+      
+      // Get engineer name - try multiple possible fields
+      let engineerName = 'Not assigned';
+      if (engineer) {
+        if (engineer.name && engineer.name.trim() !== '') {
+          engineerName = engineer.name;
+        } else if (engineer.first_name || engineer.last_name) {
+          engineerName = `${engineer.first_name || ''} ${engineer.last_name || ''}`.trim();
+        } else if (engineer.email) {
+          engineerName = engineer.email.split('@')[0]; // Use email username as fallback
+        }
       }
       
-      // 6. Fetch unique equipment types from equipment_description
-      const uniqueEquipmentTypes = [];
-      const seenDescriptions = new Set();
-      
-      equipmentData?.forEach(eq => {
-        if (eq.equipment_description && !seenDescriptions.has(eq.equipment_description)) {
-          seenDescriptions.add(eq.equipment_description);
-          uniqueEquipmentTypes.push({
-            id: eq.equipment_description,
-            name: eq.equipment_description
-          });
-        }
-      });
-      
-      // Sort alphabetically
-      uniqueEquipmentTypes.sort((a, b) => a.name.localeCompare(b.name));
-      
-      setEquipmentTypes(uniqueEquipmentTypes);
-      
-      setInspections(filteredInspections);
-      setObservations(observationData || []);
-      setEquipmentList(filteredEquipment);
-      
-      // Calculate all derived data
-      await calculateAllData(filteredInspections, observationData || [], filteredEquipment);
-      
-      // Also fetch upcoming schedules
-      await fetchUpcomingSchedules();
-      
-      console.log('✅ Analysis data loaded successfully');
-      
-    } catch (err) {
-      console.error('❌ Error fetching analysis data:', err);
-      setError(err.message || 'Failed to load analysis data. Please try again.');
-    } finally {
-      setLoading(false);
+      return {
+        scheduleId: schedule.schedule_id,
+        equipmentId: schedule.equipment_id,
+        equipmentTag: equipment?.equipment_tag_no || `ID: ${schedule.equipment_id}`,
+        equipmentDescription: equipment?.equipment_description || 'Equipment not found',
+        location: equipment?.location || 'Unknown',
+        scheduledDate: schedule.scheduled_date,
+        startTime: formatTime(schedule.start_time),
+        endTime: formatTime(schedule.end_time),
+        status: schedule.status || 'Pending',
+        priority: schedule.priority || 'Medium',
+        engineerId: schedule.engineer_id,
+        engineerName: engineerName, // Use the calculated engineer name
+        engineerEmail: engineer?.email || '',
+        daysUntil: daysUntil >= 0 ? daysUntil : 0,
+        createdAt: schedule.created_at,
+        updatedAt: schedule.updated_at
+      };
+    }) || [];
+    
+    setUpcomingSchedules(combinedData);
+    console.log(`✅ Loaded ${combinedData.length} inspection schedules`);
+    
+  } catch (err) {
+    console.error('❌ Error fetching inspection schedules:', err);
+    setError('Failed to load inspection schedules.');
+  }
+}, [currentUser]);
+  const fetchData = useCallback(async () => {
+  if (!currentUser) return;
+  
+  setLoading(true);
+  setError(null);
+  
+  try {
+    console.log('🔄 Fetching analysis data from Supabase...');
+    
+    // Get inspector ID from current user
+    const inspectorId = currentUser.id || currentUser.user_id;
+    
+    // 1. Build inspection query with filters - ADDED INSPECTOR FILTERING
+    let query = supabase
+      .from('Inspection')
+      .select(`
+        inspection_id,
+        equipment_tag_no,
+        inspection_date,
+        status,
+        priority,
+        scheduled_date,
+        due_date,
+        next_inspection_date,
+        defect_type,
+        remarks,
+        user_id,
+        inspection_type,
+        remarks_general,
+        findings_summary,
+        plant_unit_area,
+        report_no,
+        created_at,
+        updated_at
+      `)
+      .eq('user_id', inspectorId);  // ADDED: Filter by current inspector
+    
+    // Apply date filters only if dates are selected
+    if (startDate) {
+      query = query.gte('inspection_date', startDate);
     }
-  }, [currentUser, startDate, endDate, yearFilter, monthFilter, equipmentTypeFilter, fetchUpcomingSchedules]);
+    if (endDate) {
+      query = query.lte('inspection_date', endDate);
+    }
+    
+    // Apply year filter
+    if (yearFilter !== 'all') {
+      const startYear = `${yearFilter}-01-01`;
+      const endYear = `${yearFilter}-12-31`;
+      query = query.gte('inspection_date', startYear)
+                   .lte('inspection_date', endYear);
+    }
+    
+    // Apply month filter (if year is also selected)
+    if (monthFilter !== 'all' && yearFilter !== 'all') {
+      const month = monthFilter.padStart(2, '0');
+      const startMonth = `${yearFilter}-${month}-01`;
+      const endMonth = `${yearFilter}-${month}-31`;
+      query = query.gte('inspection_date', startMonth)
+                   .lte('inspection_date', endMonth);
+    }
+    
+    query = query.order('inspection_date', { ascending: false });
+    
+    const { data: inspectionData, error: inspectionError } = await query;
+    
+    if (inspectionError) throw inspectionError;
+    
+    // 2. Fetch observations for these inspections
+    const inspectionIds = inspectionData?.map(i => i.inspection_id) || [];
+    let observationData = [];
+    
+    if (inspectionIds.length > 0) {
+      const { data: obsData, error: obsError } = await supabase
+        .from('Observation')
+        .select(`
+          observation_id,
+          inspection_id,
+          component,
+          location,
+          observation_type,
+          severity,
+          status,
+          priority,
+          action_required,
+          created_at
+        `)
+        .in('inspection_id', inspectionIds);
+      
+      if (obsError) console.warn('Could not fetch observations:', obsError);
+      observationData = obsData || [];
+    }
+    
+    // 3. Fetch findings for these observations
+    const observationIds = observationData?.map(o => o.observation_id) || [];
+    let findingData = [];
+    
+    if (observationIds.length > 0) {
+      const { data: findData, error: findError } = await supabase
+        .from('Finding')
+        .select(`
+          finding_id,
+          observation_id,
+          finding_key,
+          finding_text,
+          created_at
+        `)
+        .in('observation_id', observationIds);
+      
+      if (findError) console.warn('Could not fetch findings:', findError);
+      findingData = findData || [];
+    }
+    
+    // 4. Fetch equipment data
+    const { data: equipmentData, error: equipmentError } = await supabase
+      .from('equipment')
+      .select(`
+        id,
+        equipment_tag_no,
+        equipment_description,
+        type_id,
+        location,
+        inspection_due_date,
+        status,
+        nominal_thickness,
+        corrosion_allowance,
+        design_pressure,
+        design_temperature,
+        created_at
+      `)
+      .order('equipment_tag_no');
+    
+    if (equipmentError) throw equipmentError;
+    
+    // 5. Apply equipment type filter to the data
+    let filteredInspections = inspectionData || [];
+    let filteredEquipment = equipmentData || [];
+    
+    if (equipmentTypeFilter !== 'all') {
+      filteredEquipment = equipmentData.filter(eq => 
+        eq.equipment_description === equipmentTypeFilter
+      );
+      
+      const equipmentTags = filteredEquipment.map(eq => eq.equipment_tag_no);
+      filteredInspections = inspectionData.filter(insp => 
+        equipmentTags.includes(insp.equipment_tag_no)
+      );
+    }
+    
+    // 6. Fetch unique equipment types from equipment_description
+    const uniqueEquipmentTypes = [];
+    const seenDescriptions = new Set();
+    
+    equipmentData?.forEach(eq => {
+      if (eq.equipment_description && !seenDescriptions.has(eq.equipment_description)) {
+        seenDescriptions.add(eq.equipment_description);
+        uniqueEquipmentTypes.push({
+          id: eq.equipment_description,
+          name: eq.equipment_description
+        });
+      }
+    });
+    
+    // Sort alphabetically
+    uniqueEquipmentTypes.sort((a, b) => a.name.localeCompare(b.name));
+    
+    setEquipmentTypes(uniqueEquipmentTypes);
+    
+    setInspections(filteredInspections);
+    setObservations(observationData || []);
+    setEquipmentList(filteredEquipment);
+    
+    // Calculate all derived data
+    await calculateAllData(filteredInspections, observationData || [], filteredEquipment);
+    
+    // Also fetch upcoming schedules
+    await fetchUpcomingSchedules();
+    
+    console.log('✅ Analysis data loaded successfully');
+    console.log(`📊 Loaded ${filteredInspections.length} inspections for inspector ${inspectorId}`);
+    
+  } catch (err) {
+    console.error('❌ Error fetching analysis data:', err);
+    setError(err.message || 'Failed to load analysis data. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+}, [currentUser, startDate, endDate, yearFilter, monthFilter, equipmentTypeFilter, fetchUpcomingSchedules]);
 
   const calculateAllData = async (inspections, observations, equipment) => {
     calculateSummaryMetrics(inspections, observations);
@@ -2102,87 +2151,258 @@ function Analysis() {
               )}
             </div>
 
-            <div>
-              <div className="flex items-center mb-4">
-                <CalendarClock className="text-blue-500 mr-2" size={20} />
-                <h3 className="font-medium text-blue-900">Upcoming Inspection Schedules</h3>
-              </div>
-              
-              {upcomingSchedules.length > 0 ? (
-                <div className="overflow-x-auto border border-blue-200 rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-blue-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase">Equipment</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase">Scheduled Date & Time</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase">Days Until</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase">Status</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase">Priority</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {upcomingSchedules.slice(0, 5).map((schedule, index) => (
-                        <tr key={`schedule-${schedule.scheduleId || index}`} className="hover:bg-blue-50">
-                          <td className="px-4 py-3">
-                            <div>
-                              <p className="font-medium text-gray-900">{schedule.equipmentTag}</p>
-                              <p className="text-sm text-gray-500 truncate max-w-xs">{schedule.equipmentDescription}</p>
-                              <p className="text-xs text-gray-400 mt-1">{schedule.location}</p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="space-y-1">
-                              <span className="text-sm font-medium text-gray-900">{schedule.scheduledDate}</span>
-                              <div className="text-xs text-gray-600">
-                                <span className="font-medium">{schedule.startTime}</span>
-                                <span className="mx-1">-</span>
-                                <span className="font-medium">{schedule.endTime}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`
-                              px-4 py-1 text-xs font-medium rounded-full whitespace-nowrap
-                              ${schedule.daysUntil === 0 ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
-                                schedule.daysUntil <= 3 ? 'bg-orange-100 text-orange-800 border border-orange-200' :
-                                schedule.daysUntil <= 7 ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                                'bg-green-100 text-green-800 border border-green-200'}
-                            `}>
-                              {schedule.daysUntil === 0 ? 'Today' :
-                              schedule.daysUntil === 1 ? 'Tomorrow' :
-                              `${schedule.daysUntil} days`}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`
-                              px-3 py-1 text-xs font-medium rounded-full
-                              ${schedule.status === 'Completed' ? 'bg-green-100 text-green-800 border border-green-200' :
-                                schedule.status === 'In Progress' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                                schedule.status === 'Cancelled' ? 'bg-red-100 text-red-800 border border-red-200' :
-                                'bg-yellow-100 text-yellow-800 border border-yellow-200'}
-                            `}>
-                              {schedule.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${getRiskColor(schedule.priority)}`}>
-                              {schedule.priority}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-8 border border-gray-200 rounded-lg">
-                  <CalendarClock className="mx-auto text-gray-400 mb-3" size={32} />
-                  <p className="text-gray-500 font-medium">No upcoming inspection schedules found</p>
-                  <p className="text-sm text-gray-400 mt-1">You don't have any scheduled inspections in the future</p>
-                </div>
-              )}
-            </div>
+           <div>
+  <div className="flex items-center mb-4">
+    <CalendarClock className="text-blue-500 mr-2" size={20} />
+    <h3 className="font-medium text-blue-900">Upcoming Inspection Schedules</h3>
+  </div>
+  
+  {(() => {
+    // Filter for "Confirmed" status only (not "Completed")
+    const confirmedSchedules = upcomingSchedules.filter(schedule => 
+      schedule.status === 'Confirmed'
+    );
+    
+    return confirmedSchedules.length > 0 ? (
+      <div className="overflow-x-auto border border-blue-200 rounded-lg">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-blue-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase">Equipment</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase">Scheduled Date & Time</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase">Days Until</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase">Priority</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {confirmedSchedules.slice(0, 5).map((schedule, index) => (
+              <tr key={`confirmed-${schedule.scheduleId || index}`} className="hover:bg-blue-50">
+                <td className="px-4 py-3">
+                  <div>
+                    <p className="font-medium text-gray-900">{schedule.equipmentTag}</p>
+                    <p className="text-sm text-gray-500 truncate max-w-xs">{schedule.equipmentDescription}</p>
+                    <p className="text-xs text-gray-400 mt-1">{schedule.location}</p>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="space-y-1">
+                    <span className="text-sm font-medium text-gray-900">{schedule.scheduledDate}</span>
+                    <div className="text-xs text-gray-600">
+                      <span className="font-medium">{schedule.startTime}</span>
+                      <span className="mx-1">-</span>
+                      <span className="font-medium">{schedule.endTime}</span>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`
+                    px-4 py-1 text-xs font-medium rounded-full whitespace-nowrap
+                    ${schedule.daysUntil === 0 ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
+                      schedule.daysUntil <= 3 ? 'bg-orange-100 text-orange-800 border border-orange-200' :
+                      schedule.daysUntil <= 7 ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                      'bg-green-100 text-green-800 border border-green-200'}
+                  `}>
+                    {schedule.daysUntil === 0 ? 'Today' :
+                    schedule.daysUntil === 1 ? 'Tomorrow' :
+                    `${schedule.daysUntil} days`}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${getRiskColor(schedule.priority)}`}>
+                    {schedule.priority}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div className="text-center py-8 border border-gray-200 rounded-lg">
+        <CalendarClock className="mx-auto text-gray-400 mb-3" size={32} />
+        <p className="text-gray-500 font-medium">No confirmed upcoming inspection schedules</p>
+        <p className="text-sm text-gray-400 mt-1">Only schedules with "Confirmed" status appear here</p>
+      </div>
+    );
+  })()}
+</div>
           </div>
+
+          {/* Completed Inspections Section */}
+<div className="mt-8 pt-6 border-t border-gray-200">
+  <div className="flex items-center mb-4">
+    <CheckCircle className="text-green-500 mr-2" size={20} />
+    <h3 className="font-medium text-green-900">Recently Completed Inspections</h3>
+  </div>
+  
+  {(() => {
+    // Filter completed schedules from the upcomingSchedules data
+    const completedSchedules = upcomingSchedules.filter(schedule => 
+      schedule.status === 'Completed'
+    );
+    
+    // Also get completed inspections from the Inspection table
+    const completedInspections = inspections.filter(insp => 
+      insp.status === 'Completed'
+    ).slice(0, 5);
+    
+    console.log('Completed schedules:', completedSchedules);
+    console.log('Completed inspections:', completedInspections);
+    
+    // Create a map of equipment to engineer from completed schedules
+    const equipmentEngineerMap = {};
+    completedSchedules.forEach(schedule => {
+      console.log('Schedule engineer:', {
+        tag: schedule.equipmentTag,
+        engineerId: schedule.engineerId,
+        engineerName: schedule.engineerName
+      });
+      equipmentEngineerMap[schedule.equipmentTag] = {
+        engineerName: schedule.engineerName,
+        engineerId: schedule.engineerId,
+        engineerEmail: schedule.engineerEmail
+      };
+    });
+    
+    // Combine both data sources
+    const allCompleted = [
+      ...completedSchedules.map(schedule => ({
+        scheduleId: schedule.scheduleId,
+        equipmentTag: schedule.equipmentTag,
+        equipmentDescription: schedule.equipmentDescription,
+        location: schedule.location,
+        scheduledDate: schedule.scheduledDate,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        status: 'Completed',
+        priority: schedule.priority || 'Medium',
+        completedDate: schedule.scheduledDate,
+        engineerId: schedule.engineerId,
+        engineerName: schedule.engineerName,
+        engineerEmail: schedule.engineerEmail,
+        source: 'Schedule'
+      })),
+      ...completedInspections.map(insp => {
+        // Check if there's engineer info for this equipment from schedules
+        const equipmentInfo = equipmentEngineerMap[insp.equipment_tag_no] || {};
+        
+        console.log('Inspection engineer check:', {
+          equipmentTag: insp.equipment_tag_no,
+          foundEngineer: equipmentInfo.engineerName,
+          hasEngineerId: !!insp.engineer_id
+        });
+        
+        return {
+          scheduleId: insp.inspection_id,
+          equipmentTag: insp.equipment_tag_no,
+          equipmentDescription: equipmentList.find(eq => eq.equipment_tag_no === insp.equipment_tag_no)?.equipment_description || 'Unknown',
+          location: equipmentList.find(eq => eq.equipment_tag_no === insp.equipment_tag_no)?.location || 'Unknown',
+          scheduledDate: insp.inspection_date,
+          startTime: 'N/A',
+          endTime: 'N/A',
+          status: 'Completed',
+          priority: insp.priority || 'Medium',
+          completedDate: insp.inspection_date,
+          engineerId: insp.engineer_id || equipmentInfo.engineerId,
+          engineerName: insp.engineer_name || equipmentInfo.engineerName || 'Not recorded',
+          engineerEmail: equipmentInfo.engineerEmail || '',
+          source: 'Inspection'
+        };
+      })
+    ];
+    
+    console.log('All completed data:', allCompleted);
+    
+    // Sort by date (most recent first) and limit to 8
+    const sortedCompleted = allCompleted
+      .sort((a, b) => new Date(b.completedDate || b.scheduledDate) - new Date(a.completedDate || a.scheduledDate))
+      .slice(0, 8);
+    
+    return sortedCompleted.length > 0 ? (
+      <div className="overflow-x-auto border border-green-200 rounded-lg">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-green-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-green-700 uppercase">Equipment</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-green-700 uppercase">Completion Date</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-green-700 uppercase">Checked By (Engineer)</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-green-700 uppercase">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-green-700 uppercase">Priority</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-green-700 uppercase">Details</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {sortedCompleted.map((item, index) => (
+              <tr key={`completed-${item.scheduleId || item.inspection_id || index}`} className="hover:bg-green-50">
+                <td className="px-4 py-3">
+                  <div>
+                    <p className="font-medium text-gray-900">{item.equipmentTag}</p>
+                    <p className="text-sm text-gray-500 truncate max-w-xs">{item.equipmentDescription}</p>
+                    {item.location && (
+                      <p className="text-xs text-gray-400 mt-1">{item.location}</p>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="space-y-1">
+                    <span className="text-sm font-medium text-gray-900">
+                      {new Date(item.completedDate || item.scheduledDate).toLocaleDateString()}
+                    </span>
+                    {(item.startTime !== 'N/A' && item.endTime !== 'N/A') && (
+                      <div className="text-xs text-gray-600">
+                        <span className="font-medium">{item.startTime}</span>
+                        <span className="mx-1">-</span>
+                        <span className="font-medium">{item.endTime}</span>
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="text-sm">
+                    {/* DEBUG: Show what we have */}
+                    <div className="text-sm font-medium text-gray-900">
+                      Engineer ID: {item.engineerId || 'No ID'}
+                    </div>
+                    
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`
+                    px-3 py-1 text-xs font-medium rounded-full
+                    ${item.status === 'Completed' ? 'bg-green-100 text-green-800 border border-green-200' :
+                      item.status === 'In Progress' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                      'bg-yellow-100 text-yellow-800 border border-yellow-200'}
+                  `}>
+                    {item.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${getRiskColor(item.priority)}`}>
+                    {item.priority}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="text-xs text-gray-500 italic">
+                    {item.source === 'Schedule' ? 'Scheduled inspection' : 'From Inspection table'}
+                    {item.engineerName === 'Not recorded' && item.source === 'Inspection' && (
+                      <p className="text-red-500 mt-1">No engineer recorded</p>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div className="text-center py-8 border border-gray-200 rounded-lg">
+        <CheckCircle className="mx-auto text-gray-400 mb-3" size={32} />
+        <p className="text-gray-500 font-medium">No recently completed inspections found</p>
+        <p className="text-sm text-gray-400 mt-1">Completed inspections will appear here</p>
+      </div>
+    );
+  })()}
+</div>
         </div>
       </div>
     </div>
