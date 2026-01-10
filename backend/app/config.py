@@ -30,9 +30,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
         "http://172.20.10.11:5173",
         "http://172.20.10.2:5173",
-        "*"  # Remove in production
     ]
     
     # Storage Configuration
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     
     # AI Model Configuration
     MODEL_PATH: str = os.path.join(os.path.dirname(__file__), "ai_models", "model.tflite")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     
     # Email Configuration (for notifications)
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
@@ -57,18 +59,18 @@ settings = Settings()
 # Use service role key if provided, otherwise fall back to SUPABASE_KEY
 if settings.SUPABASE_SERVICE_ROLE_KEY:
     settings.SUPABASE_KEY = settings.SUPABASE_SERVICE_ROLE_KEY
-    print("✅ Using SUPABASE_SERVICE_ROLE_KEY (service role key)")
+    print("[OK] Using SUPABASE_SERVICE_ROLE_KEY (service role key)")
 elif settings.SUPABASE_KEY:
     # Check if it looks like an anon key (shorter, starts with eyJ)
     # Service role keys are typically longer
     if len(settings.SUPABASE_KEY) < 200:
-        print("⚠️  WARNING: SUPABASE_KEY appears to be an anon key (too short)")
+        print("[WARNING] SUPABASE_KEY appears to be an anon key (too short)")
         print("   Backend needs SERVICE_ROLE_KEY to bypass RLS")
         print("   Get it from: Supabase Dashboard > Settings > API > service_role key")
     else:
-        print("✅ Using SUPABASE_KEY (assuming it's service role key)")
+        print("[OK] Using SUPABASE_KEY (assuming it's service role key)")
 
 # Validate required settings
 if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
-    raise ValueError("❌ Missing SUPABASE_URL or SUPABASE_KEY in environment variables")
+    raise ValueError("[ERROR] Missing SUPABASE_URL or SUPABASE_KEY in environment variables")
 

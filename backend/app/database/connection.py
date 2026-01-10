@@ -17,7 +17,7 @@ def get_db():
 
 # Test connection on import
 try:
-    print("✅ Connected to Supabase:", settings.SUPABASE_URL)
+    print("[OK] Connected to Supabase:", settings.SUPABASE_URL)
 except Exception as e:
-    print(f"❌ Failed to connect to Supabase: {e}")
+    print(f"[ERROR] Failed to connect to Supabase: {e}")
 

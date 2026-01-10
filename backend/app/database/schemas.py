@@ -351,3 +351,29 @@ class RecommendationTemplateResponse(RecommendationTemplateBase):
     class Config:
         from_attributes = True
 
+# ============================================
+# 7. Schedule Schemas - Inspection Schedule
+# ============================================
+class ScheduleBase(BaseModel):
+    equipment_id: int
+    inspector_id: int
+    engineer_id: Optional[int] = None
+    scheduled_date: str  # Date as string (YYYY-MM-DD)
+    start_time: str  # Time as string (HH:MM)
+    end_time: str  # Time as string (HH:MM)
+    location: Optional[str] = None
+    priority: Optional[str] = "Medium"  # High, Medium, Low
+    status: Optional[str] = "Pending"  # Pending, Confirmed, In Progress, Completed, Cancelled
+    details: Optional[str] = None
+
+class ScheduleCreate(ScheduleBase):
+    inspector_email: Optional[str] = None  # For email notifications, not stored in DB
+
+class ScheduleResponse(ScheduleBase):
+    schedule_id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+

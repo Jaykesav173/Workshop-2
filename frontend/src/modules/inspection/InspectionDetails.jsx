@@ -3,7 +3,7 @@
  * 4-tab layout: Overview, Observations, Photos, Report
  */
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import { API_BASE } from '../../services/api'
 import { photoService } from '../../services/photoService'
@@ -216,6 +216,7 @@ function InspectionDetails() {
   const { id } = useParams()
   const inspectionId = id ? parseInt(id, 10) : null
   const navigate = useNavigate()
+  const location = useLocation()
   const [activeTab, setActiveTab] = useState('overview')
   const [inspection, setInspection] = useState(null)
   const [equipment, setEquipment] = useState(null)
@@ -360,20 +361,51 @@ function InspectionDetails() {
   const [report, setReport] = useState(null)
   const [generatingReport, setGeneratingReport] = useState(false)
 
+  // Helper function to get read-only message based on status
+  const getReadOnlyMessage = (action = 'perform this action') => {
+    const isApproved = (report?.status === 'APPROVED' || report?.status === 'Approved' || 
+                       inspection?.status === 'Approved' || inspection?.status === 'APPROVED')
+    if (isApproved) {
+      return `Cannot ${action}. Report is approved and inspection is locked for editing.`
+    }
+    return `Cannot ${action}. Report is submitted and in read-only mode.`
+  }
+
   // Check if editing is allowed (only when report is DRAFT or doesn't exist)
   const isEditAllowed = () => {
+    // Check inspection status first - if Approved, no editing allowed
+    const inspectionStatus = inspection?.status
+    if (inspectionStatus && (inspectionStatus === 'Approved' || inspectionStatus === 'APPROVED')) {
+      return false
+    }
+    
+    // Check inspection status for Submitted - no editing allowed
+    if (inspectionStatus && (inspectionStatus === 'Submitted' || inspectionStatus === 'SUBMITTED')) {
+      return false
+    }
+    
     if (!report) return true // No report yet, editing allowed
     const status = report.status
     // Only allow editing when status is DRAFT or REJECTED (can revise after rejection)
-    return status === 'DRAFT' || status === 'REJECTED'
+    return status === 'DRAFT' || status === 'Draft' || status === 'REJECTED' || status === 'Rejected'
   }
 
   // Check if report is submitted (read-only mode)
   const isReadOnly = () => {
+    // Check inspection status first - if Approved or Submitted, read-only
+    const inspectionStatus = inspection?.status
+    if (inspectionStatus) {
+      const statusUpper = String(inspectionStatus).toUpperCase()
+      if (statusUpper === 'APPROVED' || statusUpper === 'SUBMITTED') {
+        return true
+      }
+    }
+    
     if (!report) return false
     const status = report.status
-    // Read-only when SUBMITTED, QA_REVIEW, or APPROVED
-    return status === 'SUBMITTED' || status === 'QA_REVIEW' || status === 'APPROVED'
+    // Read-only when SUBMITTED, QA_REVIEW, or APPROVED (case-insensitive)
+    const statusUpper = String(status).toUpperCase()
+    return statusUpper === 'SUBMITTED' || statusUpper === 'QA_REVIEW' || statusUpper === 'APPROVED'
   }
 
   useEffect(() => {
@@ -382,8 +414,9 @@ function InspectionDetails() {
 
   // Refresh inspection when report status changes to sync inspection status
   useEffect(() => {
-    if (report?.status && (report.status === 'APPROVED' || report.status === 'REJECTED')) {
-      // Refresh inspection to get updated status
+    if (report?.status) {
+      // Refresh inspection to get updated status whenever report status changes
+      // This ensures the Status tab and inspection list show the correct status
       fetchInspection()
     }
   }, [report?.status])
@@ -408,6 +441,14 @@ function InspectionDetails() {
       fetchReportByInspectionId(inspection.inspection_id)
     }
   }, [inspection?.inspection_id]) // Only depend on inspection_id, not entire inspection object
+
+  // Refresh report when navigating back to this page (location.pathname changes)
+  useEffect(() => {
+    if (inspection?.inspection_id && location.pathname.includes(`/inspection/${id}`)) {
+      // Refresh report to get latest status
+      fetchReportByInspectionId(inspection.inspection_id)
+    }
+  }, [location.pathname, inspection?.inspection_id, id])
 
   const fetchInspection = async () => {
     try {
@@ -1037,7 +1078,7 @@ function InspectionDetails() {
 
   const handleEditObservation = (obs) => {
     if (isReadOnly()) {
-      alert('Cannot edit observations. Report is submitted and in read-only mode.')
+      alert(getReadOnlyMessage('edit observations'))
       return
     }
     // Find observation index to get its number
@@ -1199,7 +1240,7 @@ function InspectionDetails() {
   const handlePhotoUpload = async (event) => {
     // Prevent upload if read-only
     if (isReadOnly()) {
-      alert('Cannot upload photos. Report is submitted and in read-only mode.')
+      alert(getReadOnlyMessage('upload photos'))
       event.target.value = '' // Clear file input
       return
     }
@@ -1367,7 +1408,11 @@ function InspectionDetails() {
     e.stopPropagation() // Prevent selection when clicking delete
     
     if (isReadOnly()) {
-      alert('Cannot delete photos. Report is submitted and in read-only mode.')
+      const statusMsg = (report?.status === 'APPROVED' || report?.status === 'Approved' || 
+                        inspection?.status === 'Approved' || inspection?.status === 'APPROVED')
+        ? 'Cannot delete photos. Report is approved and inspection is locked for editing.'
+        : 'Cannot delete photos. Report is submitted and in read-only mode.'
+      alert(statusMsg)
       return
     }
     
@@ -1812,13 +1857,16 @@ function InspectionDetails() {
                 </div>
               )}
               {userRole !== 'ADMIN' && isReadOnly() && (
-                <div className="mt-6 px-4 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
-                  Report Submitted - View Only Mode (Cannot edit until QA review is complete)
-                </div>
-              )}
-              {userRole !== 'ADMIN' && report?.status === 'APPROVED' && (
-                <div className="mt-6 px-4 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
-                  Report Approved - Locked for editing
+                <div className={`mt-6 px-4 py-2 rounded-lg text-sm font-medium ${
+                  (report?.status === 'APPROVED' || report?.status === 'Approved' || 
+                   inspection?.status === 'Approved' || inspection?.status === 'APPROVED')
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-blue-100 text-blue-800'
+                }`}>
+                  {(report?.status === 'APPROVED' || report?.status === 'Approved' || 
+                    inspection?.status === 'Approved' || inspection?.status === 'APPROVED')
+                    ? 'Report Approved - View Only Mode (Inspection locked for editing)'
+                    : 'Report Submitted - View Only Mode (Cannot edit until QA review is complete)'}
                 </div>
               )}
             </div>
@@ -1834,7 +1882,7 @@ function InspectionDetails() {
                   <button
                     onClick={() => {
                       if (isReadOnly()) {
-                        alert('Cannot add observations. Report is submitted and in read-only mode.')
+                        alert(getReadOnlyMessage('add observations'))
                         return
                       }
                       setEditingObservationId(null)
@@ -2014,7 +2062,7 @@ function InspectionDetails() {
                       <button
                         onClick={() => {
                           if (isReadOnly()) {
-                            alert('Cannot add recommendations. Report is submitted and in read-only mode.')
+                            alert(getReadOnlyMessage('add recommendations'))
                             return
                           }
                           handleAddRecommendation()
@@ -2101,7 +2149,7 @@ function InspectionDetails() {
                             <button 
                               onClick={() => {
                                 if (isReadOnly()) {
-                                  alert('Cannot edit observations. Report is submitted and in read-only mode.')
+                                  alert(getReadOnlyMessage('edit observations'))
                                   return
                                 }
                                 handleEditObservation(obs)
@@ -2114,7 +2162,7 @@ function InspectionDetails() {
                             <button
                               onClick={async () => {
                                 if (isReadOnly()) {
-                                  alert('Cannot delete observations. Report is submitted and in read-only mode.')
+                                  alert(getReadOnlyMessage('delete observations'))
                                   return
                                 }
                                 if (window.confirm('Are you sure you want to delete this observation?')) {
@@ -2242,7 +2290,7 @@ function InspectionDetails() {
                       <button
                         onClick={() => {
                           if (isReadOnly()) {
-                            alert('Cannot link photos. Report is submitted and in read-only mode.')
+                            alert(getReadOnlyMessage('link photos'))
                             return
                           }
                           setShowLinkModal(true)
@@ -2458,7 +2506,7 @@ function InspectionDetails() {
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   if (isReadOnly()) {
-                                    alert('Cannot annotate photos. Report is submitted and in read-only mode.')
+                                    alert(getReadOnlyMessage('annotate photos'))
                                     return
                                   }
                                   setAnnotatingPhoto(photo)
@@ -2629,7 +2677,9 @@ function InspectionDetails() {
                         {generatingReport ? 'Regenerating...' : 'Regenerate Report'}
                       </button>
                     ) : null}
-                    {report.status === 'DRAFT' ? (
+                    {(report.status === 'DRAFT' || report.status === 'Draft' || 
+                      report.status === 'REJECTED' || report.status === 'Rejected' ||
+                      report.status === 'NEEDS REVISION' || report.status === 'Needs Revision') ? (
                       <button
                         onClick={async () => {
                           try {
@@ -2638,14 +2688,27 @@ function InspectionDetails() {
                               alert('Report ID not found')
                               return
                             }
-                            if (!confirm('Are you sure you want to submit this report for QA review? You will not be able to edit it until it is reviewed.')) {
+                            const statusText = report.status === 'REJECTED' || report.status === 'Rejected' 
+                              ? 'resubmit this rejected report' 
+                              : 'submit this report for QA review'
+                            if (!confirm(`Are you sure you want to ${statusText}? You will not be able to edit it until it is reviewed.`)) {
                               return
                             }
                             const updatedReport = await reportService.submitReport(reportId)
                             setReport(updatedReport)
                             alert('Report submitted successfully for QA review!')
-                            // Refresh inspection to get updated status
-                            fetchInspection()
+                            // Refresh report to get updated status
+                            if (inspection?.inspection_id) {
+                              await fetchReportByInspectionId(inspection.inspection_id)
+                            }
+                            // Refresh inspection to get updated status (this will also update the Status tab)
+                            await fetchInspection()
+                            // Force a re-render by updating the report state again
+                            if (inspection?.inspection_id) {
+                              setTimeout(async () => {
+                                await fetchReportByInspectionId(inspection.inspection_id)
+                              }, 500)
+                            }
                           } catch (err) {
                             console.error('❌ Error submitting report:', err)
                             alert(`Failed to submit report: ${err.response?.data?.detail || err.message || 'Unknown error'}`)
@@ -2654,7 +2717,7 @@ function InspectionDetails() {
                         className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                       >
                         <Icons.FileText />
-                        Submit Report
+                        {report.status === 'REJECTED' || report.status === 'Rejected' ? 'Resubmit Report' : 'Submit Report'}
                       </button>
                     ) : null}
                   </div>

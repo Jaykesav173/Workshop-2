@@ -35,7 +35,12 @@ class QAReviewService:
                 raise HTTPException(status_code=404, detail="Report not found")
             
             report_status = report_res.data[0].get("status")
-            if report_status not in ["SUBMITTED", "QA_REVIEW", "REJECTED"]:
+            # Make status check case-insensitive
+            report_status_upper = str(report_status).upper() if report_status else ""
+            # Normalize "NEEDS REVISION" to handle spaces
+            report_status_normalized = report_status_upper.replace(" ", "_")
+            allowed_statuses = ["SUBMITTED", "QA_REVIEW", "REJECTED", "NEEDS_REVISION", "NEEDSREVISION"]
+            if report_status_normalized not in allowed_statuses and report_status_upper not in ["SUBMITTED", "QA_REVIEW", "REJECTED"]:
                 raise HTTPException(status_code=400, detail=f"Cannot add comments. Report status: {report_status}")
             
             # Create comment
@@ -51,8 +56,8 @@ class QAReviewService:
             if not res.data:
                 raise HTTPException(status_code=500, detail="Failed to create comment")
             
-            # Update report status to QA_REVIEW if it's SUBMITTED
-            if report_status == "SUBMITTED":
+            # Update report status to QA_REVIEW if it's SUBMITTED (case-insensitive)
+            if report_status_upper == "SUBMITTED":
                 self.db.table("Report").update({"status": "QA_REVIEW"}).eq("report_id", report_id).execute()
             
             return QACommentResponse(**res.data[0])

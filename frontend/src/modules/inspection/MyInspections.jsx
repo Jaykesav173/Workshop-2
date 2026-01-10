@@ -3,7 +3,7 @@
  * Main list view with summary cards, search, filter, and table
  */
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import { API_BASE } from '../../services/api'
 
@@ -38,6 +38,7 @@ const Icons = {
 
 function MyInspections() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [inspections, setInspections] = useState([])
   const [filteredInspections, setFilteredInspections] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -67,6 +68,13 @@ function MyInspections() {
     fetchEquipment()
   }, [])
 
+  // Refresh data when navigating back to this page
+  useEffect(() => {
+    if (location.pathname === '/inspection/list' || location.pathname === '/inspection') {
+      fetchInspections()
+    }
+  }, [location.pathname])
+
   // Fetch report statuses after inspections are loaded
   useEffect(() => {
     if (inspections.length > 0) {
@@ -79,19 +87,12 @@ function MyInspections() {
   const fetchReportStatuses = async () => {
     try {
       const token = localStorage.getItem('token')
-      // Only check inspections that are still in Draft/In Progress status
-      const draftInspections = inspections.filter(i => 
-        i.status === 'Draft' || 
-        i.status === 'DRAFT' || 
-        i.status === 'In Progress' || 
-        i.status === 'IN_PROGRESS'
-      )
-      
-      if (draftInspections.length === 0) return
-      
+      // Check ALL inspections, not just Draft/In Progress, to catch status changes
+      // This ensures we get the latest report status even if inspection status hasn't synced
       const statusMap = {}
-      // Fetch report for each draft inspection (limit to avoid too many calls)
-      const promises = draftInspections.slice(0, 20).map(async (inspection) => {
+      
+      // Fetch report for each inspection (limit to avoid too many calls)
+      const promises = inspections.slice(0, 50).map(async (inspection) => {
         try {
           const inspectionId = inspection.inspection_id || inspection.id
           const response = await axios.get(`${API_BASE}/reports/inspection/${inspectionId}`, {
@@ -100,18 +101,28 @@ function MyInspections() {
           if (response.data && response.data.status) {
             const reportStatus = response.data.status
             // Map report status to inspection status format
-            if (reportStatus !== 'DRAFT' && reportStatus !== 'Draft') {
-              const statusMapping = {
-                'SUBMITTED': 'Submitted',
-                'QA_REVIEW': 'QA Review',
-                'APPROVED': 'Approved',
-                'REJECTED': 'Rejected'
-              }
-              return { inspectionId, status: statusMapping[reportStatus] || reportStatus }
+            const statusMapping = {
+              'SUBMITTED': 'Submitted',
+              'Submitted': 'Submitted',
+              'QA_REVIEW': 'QA Review',
+              'QA Review': 'QA Review',
+              'APPROVED': 'Approved',
+              'Approved': 'Approved',
+              'REJECTED': 'Rejected',
+              'Rejected': 'Rejected',
+              'DRAFT': 'Draft',
+              'Draft': 'Draft'
             }
+            const mappedStatus = statusMapping[reportStatus] || reportStatus
+            // Always return the report status if it exists (even if DRAFT)
+            // This ensures we show the most up-to-date status
+            return { inspectionId, status: mappedStatus }
           }
         } catch (err) {
-          // No report for this inspection
+          // No report for this inspection (404 is expected)
+          if (err.response?.status !== 404) {
+            console.log(`Could not fetch report for inspection ${inspection.inspection_id || inspection.id}:`, err.message)
+          }
           return null
         }
         return null
@@ -402,14 +413,9 @@ function MyInspections() {
                     ? new Date(inspection.created_at).toLocaleDateString()
                     : 'N/A'
                   
-                  // Check if report is approved (from reportStatusMap or inspection status)
-                  const currentStatus = (reportStatusMap[inspectionId] && 
-                    (inspection.status === 'Draft' || 
-                     inspection.status === 'DRAFT' || 
-                     inspection.status === 'In Progress' || 
-                     inspection.status === 'IN_PROGRESS'))
-                    ? reportStatusMap[inspectionId] 
-                    : inspection.status
+                  // Use report status if available (it's more up-to-date than inspection status)
+                  // Report status takes precedence because it reflects the actual report state
+                  const currentStatus = reportStatusMap[inspectionId] || inspection.status
                   const isReportApproved = (currentStatus || '').toUpperCase() === 'APPROVED'
                   
                   return (
@@ -421,14 +427,9 @@ function MyInspections() {
                       <td className="px-6 py-4 whitespace-nowrap">{getPriorityBadge(inspection.priority)}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getStatusBadge(
-                          // Use report status if available and inspection status is still Draft/In Progress
-                          (reportStatusMap[inspectionId] && 
-                           (inspection.status === 'Draft' || 
-                            inspection.status === 'DRAFT' || 
-                            inspection.status === 'In Progress' || 
-                            inspection.status === 'IN_PROGRESS'))
-                            ? reportStatusMap[inspectionId] 
-                            : inspection.status
+                          // Use report status if available (it's more up-to-date)
+                          // Report status takes precedence over inspection status
+                          reportStatusMap[inspectionId] || inspection.status
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

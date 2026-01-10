@@ -2388,3 +2388,262 @@ class ReportGenerationService:
             return []
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching reports: {str(e)}")
+    
+    async def get_all_reports(self) -> list[ReportResponse]:
+        """Get all reports with all statuses (for dashboard statistics)"""
+        try:
+            # Fetch all reports without ordering first to avoid potential syntax issues
+            res = self.db.table("Report").select("*").execute()
+            if res.data:
+                reports = []
+                for db_record in res.data:
+                    api_510_value = db_record.get('api_510_compliant')
+                    if api_510_value is None:
+                        api_510_value = False
+                    elif isinstance(api_510_value, str):
+                        api_510_value = api_510_value.lower() in ('true', 'yes', '1')
+                    
+                    report_no = None
+                    try:
+                        if db_record.get('content'):
+                            content_data = json.loads(db_record.get('content'))
+                            if isinstance(content_data, dict) and 'header' in content_data:
+                                report_no = content_data['header'].get('report_no')
+                    except Exception:
+                        pass
+                    
+                    try:
+                        # Ensure all required fields are present
+                        response_data = {
+                            'report_id': db_record.get('report_id') or db_record.get('id') or str(uuid.uuid4()),
+                            'created_by': db_record.get('created_by') or 0,
+                            'status': db_record.get('status') or 'DRAFT',
+                            'report_type': db_record.get('report_type') or 'API_510',
+                            'created_at': db_record.get('created_at'),
+                            'updated_at': db_record.get('updated_at'),
+                            'equipment_id': db_record.get('equipment_id'),
+                            'title': db_record.get('title'),
+                            'content': db_record.get('content'),
+                            'inspection_date': db_record.get('inspection_date'),
+                            'next_inspection_due': db_record.get('next_inspection_due'),
+                            'api_510_compliant': bool(api_510_value),
+                            'report_path': db_record.get('report_path'),
+                            'report_url': db_record.get('report_url'),
+                            'pdf_path': db_record.get('pdf_path'),
+                            'pdf_url': db_record.get('pdf_url'),
+                            'labeled_photos': db_record.get('labeled_photos'),
+                            'labeled_defects': db_record.get('labeled_defects'),
+                            'inspection_frequency': db_record.get('inspection_frequency'),
+                            'defect_types_summary': db_record.get('defect_types_summary'),
+                        }
+                        
+                        # Ensure created_at is a datetime object
+                        if response_data['created_at'] and isinstance(response_data['created_at'], str):
+                            try:
+                                from datetime import datetime
+                                response_data['created_at'] = datetime.fromisoformat(response_data['created_at'].replace('Z', '+00:00'))
+                            except:
+                                response_data['created_at'] = datetime.utcnow()
+                        
+                        if not response_data['created_at']:
+                            from datetime import datetime
+                            response_data['created_at'] = datetime.utcnow()
+                        
+                        # Validate and create ReportResponse
+                        report = ReportResponse(**response_data)
+                        reports.append(report)
+                    except Exception as validation_error:
+                        # Skip reports that fail validation but log the error
+                        import traceback
+                        print(f"⚠️ Warning: Skipping report {db_record.get('report_id', 'unknown')} due to validation error: {validation_error}")
+                        print(traceback.format_exc())
+                        continue
+                
+                # Sort by created_at descending in Python (most recent first)
+                # Handle both string and datetime objects
+                def get_sort_key(report):
+                    created_at = report.created_at
+                    if created_at is None:
+                        return 0
+                    # If it's a datetime object, use timestamp for comparison
+                    if hasattr(created_at, 'timestamp'):
+                        return created_at.timestamp()
+                    # If it's a string, try to parse it
+                    if isinstance(created_at, str):
+                        try:
+                            from datetime import datetime
+                            dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                            return dt.timestamp()
+                        except:
+                            return 0
+                    return 0
+                
+                # Sort reports before returning
+                try:
+                    reports.sort(key=get_sort_key, reverse=True)
+                except Exception as sort_error:
+                    print(f"⚠️ Warning: Error sorting reports: {sort_error}")
+                    # Return unsorted if sorting fails
+                
+                return reports
+            return []
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching all reports: {str(e)}")
+    
+    async def submit_report(self, report_id: str, current_user: dict = None) -> ReportResponse:
+        """Submit report for QA review"""
+        try:
+            # First, get the report to find its inspection_id
+            report_res = self.db.table("Report").select("*").eq("report_id", report_id).execute()
+            if not report_res.data:
+                raise HTTPException(status_code=404, detail="Report not found")
+            
+            report_data = report_res.data[0]
+            inspection_id = report_data.get('inspection_id')
+            
+            # Update report status
+            res = self.db.table("Report").update({
+                "status": "Submitted"
+            }).eq("report_id", report_id).execute()
+            
+            if not res.data:
+                raise HTTPException(status_code=404, detail="Report not found")
+            
+            # Update inspection status to match report status
+            if inspection_id:
+                try:
+                    self.db.table("Inspection").update({
+                        "status": "Submitted"
+                    }).eq("inspection_id", inspection_id).execute()
+                    print(f"✅ Updated inspection {inspection_id} status to 'Submitted'")
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not update inspection status: {e}")
+                    # Don't fail the whole operation if inspection update fails
+            
+            db_record = res.data[0]
+            api_510_value = db_record.get('api_510_compliant')
+            if api_510_value is None:
+                api_510_value = False
+            elif isinstance(api_510_value, str):
+                api_510_value = api_510_value.lower() in ('true', 'yes', '1')
+            
+            report_no = None
+            try:
+                if db_record.get('content'):
+                    content_data = json.loads(db_record.get('content'))
+                    if isinstance(content_data, dict) and 'header' in content_data:
+                        report_no = content_data['header'].get('report_no')
+            except Exception:
+                pass
+            
+            response_data = {
+                **db_record,
+                'api_510_compliant': bool(api_510_value),
+                'report_no': report_no,
+            }
+            return ReportResponse(**response_data)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error submitting report: {str(e)}")
+    
+    async def get_submitted_reports(self) -> list[ReportResponse]:
+        """Get all submitted reports for QA review"""
+        try:
+            res = self.db.table("Report").select("*").eq("status", "Submitted").order("created_at", desc=True).execute()
+            if res.data:
+                reports = []
+                for db_record in res.data:
+                    api_510_value = db_record.get('api_510_compliant')
+                    if api_510_value is None:
+                        api_510_value = False
+                    elif isinstance(api_510_value, str):
+                        api_510_value = api_510_value.lower() in ('true', 'yes', '1')
+                    
+                    report_no = None
+                    try:
+                        if db_record.get('content'):
+                            content_data = json.loads(db_record.get('content'))
+                            if isinstance(content_data, dict) and 'header' in content_data:
+                                report_no = content_data['header'].get('report_no')
+                    except Exception:
+                        pass
+                    
+                    response_data = {
+                        **db_record,
+                        'api_510_compliant': bool(api_510_value),
+                        'report_no': report_no,
+                    }
+                    reports.append(ReportResponse(**response_data))
+                return reports
+            return []
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching submitted reports: {str(e)}")
+    
+    async def review_report(self, report_id: str, action: str, comment: str, current_user: dict = None) -> ReportResponse:
+        """Approve or reject a report (for engineers)"""
+        try:
+            # Validate action
+            action_upper = action.upper() if action else ""
+            if action_upper not in ["APPROVE", "REJECT"]:
+                raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'")
+            
+            # Get the report to find its inspection_id
+            report_res = self.db.table("Report").select("*").eq("report_id", report_id).execute()
+            if not report_res.data:
+                raise HTTPException(status_code=404, detail="Report not found")
+            
+            report_data = report_res.data[0]
+            inspection_id = report_data.get('inspection_id')
+            
+            # Determine new status
+            if action_upper == "APPROVE":
+                new_status = "APPROVED"
+            else:  # REJECT
+                new_status = "REJECTED"
+            
+            # Update report status
+            res = self.db.table("Report").update({
+                "status": new_status
+            }).eq("report_id", report_id).execute()
+            
+            if not res.data:
+                raise HTTPException(status_code=404, detail="Report not found")
+            
+            # Update inspection status to match report status
+            if inspection_id:
+                try:
+                    self.db.table("Inspection").update({
+                        "status": new_status
+                    }).eq("inspection_id", inspection_id).execute()
+                    print(f"✅ Updated inspection {inspection_id} status to '{new_status}'")
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not update inspection status: {e}")
+                    # Don't fail the whole operation if inspection update fails
+            
+            db_record = res.data[0]
+            api_510_value = db_record.get('api_510_compliant')
+            if api_510_value is None:
+                api_510_value = False
+            elif isinstance(api_510_value, str):
+                api_510_value = api_510_value.lower() in ('true', 'yes', '1')
+            
+            report_no = None
+            try:
+                if db_record.get('content'):
+                    content_data = json.loads(db_record.get('content'))
+                    if isinstance(content_data, dict) and 'header' in content_data:
+                        report_no = content_data['header'].get('report_no')
+            except Exception:
+                pass
+            
+            response_data = {
+                **db_record,
+                'api_510_compliant': bool(api_510_value),
+                'report_no': report_no,
+            }
+            return ReportResponse(**response_data)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error reviewing report: {str(e)}")

@@ -1,6 +1,6 @@
 """
 Template Management Service
-Business logic for FindingTemplate and RecommendationTemplate CRUD operations
+Business logic for finding and recommendation templates
 """
 from fastapi import HTTPException
 from app.database.connection import get_db
@@ -8,57 +8,58 @@ from app.database.schemas import (
     FindingTemplateCreate, FindingTemplateUpdate, FindingTemplateResponse,
     RecommendationTemplateCreate, RecommendationTemplateUpdate, RecommendationTemplateResponse
 )
+from datetime import datetime
 
 class TemplateService:
     def __init__(self):
         self.db = get_db()
     
-    # Finding Template Methods
-    async def get_finding_templates(self, active_only: bool = True) -> list:
+    async def get_finding_templates(self, active_only: bool = True) -> list[FindingTemplateResponse]:
         """Get all finding templates"""
         try:
             query = self.db.table("FindingTemplate").select("*")
             if active_only:
                 query = query.eq("is_active", "ACTIVE")
-            result = query.order("created_at", desc=True).execute()
-            return result.data or []
+            
+            res = query.execute()
+            if res.data:
+                return [FindingTemplateResponse(**template) for template in res.data]
+            return []
         except Exception as e:
-            print(f"Error fetching finding templates: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to fetch finding templates: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error fetching finding templates: {str(e)}")
     
-    async def create_finding_template(self, template: FindingTemplateCreate, user_id: int) -> dict:
+    async def create_finding_template(self, template: FindingTemplateCreate) -> FindingTemplateResponse:
         """Create a new finding template"""
         try:
-            data = {
+            template_data = {
                 "label": template.label,
                 "text": template.text,
+                "created_by": template.created_by,
                 "is_active": template.is_active or "ACTIVE",
-                "created_by": user_id
+                "created_at": str(datetime.utcnow()),
+                "updated_at": str(datetime.utcnow())
             }
-            result = self.db.table("FindingTemplate").insert(data).execute()
-            if not result.data:
-                raise HTTPException(status_code=400, detail="Failed to create finding template")
-            return result.data[0]
+            
+            res = self.db.table("FindingTemplate").insert(template_data).execute()
+            if not res.data:
+                raise HTTPException(status_code=500, detail="Failed to create finding template")
+            
+            return FindingTemplateResponse(**res.data[0])
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Error creating finding template: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to create finding template: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error creating finding template: {str(e)}")
     
-    async def update_finding_template(self, template_id: int, template: FindingTemplateUpdate, user_id: int) -> dict:
+    async def update_finding_template(self, template_id: int, template: FindingTemplateUpdate, current_user: dict) -> FindingTemplateResponse:
         """Update an existing finding template"""
         try:
-            # Check if template exists and user has permission
-            existing = self.db.table("FindingTemplate").select("*").eq("id", template_id).execute()
-            if not existing.data:
+            # Check if template exists
+            res = self.db.table("FindingTemplate").select("*").eq("id", template_id).execute()
+            if not res.data:
                 raise HTTPException(status_code=404, detail="Finding template not found")
             
-            # Only allow update if user created it or is admin
-            if existing.data[0].get("created_by") != user_id:
-                # Check if user is admin (you may need to fetch user role)
-                raise HTTPException(status_code=403, detail="Not authorized to update this template")
-            
-            update_data = {}
+            # Build update data
+            update_data = {"updated_at": str(datetime.utcnow())}
             if template.label is not None:
                 update_data["label"] = template.label
             if template.text is not None:
@@ -66,77 +67,86 @@ class TemplateService:
             if template.is_active is not None:
                 update_data["is_active"] = template.is_active
             
-            result = self.db.table("FindingTemplate").update(update_data).eq("id", template_id).execute()
-            if not result.data:
-                raise HTTPException(status_code=400, detail="Failed to update finding template")
-            return result.data[0]
+            res = self.db.table("FindingTemplate").update(update_data).eq("id", template_id).execute()
+            if not res.data:
+                raise HTTPException(status_code=404, detail="Finding template not found after update")
+            
+            return FindingTemplateResponse(**res.data[0])
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Error updating finding template: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to update finding template: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error updating finding template: {str(e)}")
     
-    async def delete_finding_template(self, template_id: int, user_id: int) -> dict:
-        """Soft delete a finding template (set is_active to INACTIVE)"""
+    async def delete_finding_template(self, template_id: int, current_user: dict) -> dict:
+        """Delete a finding template (soft delete)"""
         try:
-            existing = self.db.table("FindingTemplate").select("*").eq("id", template_id).execute()
-            if not existing.data:
+            # Check if template exists
+            res = self.db.table("FindingTemplate").select("*").eq("id", template_id).execute()
+            if not res.data:
                 raise HTTPException(status_code=404, detail="Finding template not found")
             
-            if existing.data[0].get("created_by") != user_id:
-                raise HTTPException(status_code=403, detail="Not authorized to delete this template")
+            # Soft delete by setting is_active to 'INACTIVE'
+            update_data = {
+                "is_active": "INACTIVE",
+                "updated_at": str(datetime.utcnow())
+            }
             
-            result = self.db.table("FindingTemplate").update({"is_active": "INACTIVE"}).eq("id", template_id).execute()
-            return {"message": "Template deleted successfully"}
+            res = self.db.table("FindingTemplate").update(update_data).eq("id", template_id).execute()
+            if not res.data:
+                raise HTTPException(status_code=404, detail="Finding template not found after update")
+            
+            return {"success": True, "message": "Finding template deleted successfully"}
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Error deleting finding template: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to delete finding template: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error deleting finding template: {str(e)}")
     
-    # Recommendation Template Methods
-    async def get_recommendation_templates(self, active_only: bool = True) -> list:
+    async def get_recommendation_templates(self, active_only: bool = True) -> list[RecommendationTemplateResponse]:
         """Get all recommendation templates"""
         try:
             query = self.db.table("RecommendationTemplate").select("*")
             if active_only:
                 query = query.eq("is_active", "ACTIVE")
-            result = query.order("created_at", desc=True).execute()
-            return result.data or []
+            
+            res = query.execute()
+            if res.data:
+                return [RecommendationTemplateResponse(**template) for template in res.data]
+            return []
         except Exception as e:
-            print(f"Error fetching recommendation templates: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to fetch recommendation templates: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error fetching recommendation templates: {str(e)}")
     
-    async def create_recommendation_template(self, template: RecommendationTemplateCreate, user_id: int) -> dict:
+    async def create_recommendation_template(self, template: RecommendationTemplateCreate) -> RecommendationTemplateResponse:
         """Create a new recommendation template"""
         try:
-            data = {
+            template_data = {
                 "label": template.label,
                 "text": template.text,
+                "created_by": template.created_by,
                 "is_active": template.is_active or "ACTIVE",
-                "created_by": user_id
+                "created_at": str(datetime.utcnow()),
+                "updated_at": str(datetime.utcnow())
             }
-            result = self.db.table("RecommendationTemplate").insert(data).execute()
-            if not result.data:
-                raise HTTPException(status_code=400, detail="Failed to create recommendation template")
-            return result.data[0]
+            
+            res = self.db.table("RecommendationTemplate").insert(template_data).execute()
+            if not res.data:
+                raise HTTPException(status_code=500, detail="Failed to create recommendation template")
+            
+            return RecommendationTemplateResponse(**res.data[0])
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Error creating recommendation template: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to create recommendation template: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error creating recommendation template: {str(e)}")
     
-    async def update_recommendation_template(self, template_id: int, template: RecommendationTemplateUpdate, user_id: int) -> dict:
+    async def update_recommendation_template(self, template_id: int, template: RecommendationTemplateUpdate, current_user: dict) -> RecommendationTemplateResponse:
         """Update an existing recommendation template"""
         try:
-            existing = self.db.table("RecommendationTemplate").select("*").eq("id", template_id).execute()
-            if not existing.data:
+            # Check if template exists
+            res = self.db.table("RecommendationTemplate").select("*").eq("id", template_id).execute()
+            if not res.data:
                 raise HTTPException(status_code=404, detail="Recommendation template not found")
             
-            if existing.data[0].get("created_by") != user_id:
-                raise HTTPException(status_code=403, detail="Not authorized to update this template")
-            
-            update_data = {}
+            # Build update data
+            update_data = {"updated_at": str(datetime.utcnow())}
             if template.label is not None:
                 update_data["label"] = template.label
             if template.text is not None:
@@ -144,31 +154,37 @@ class TemplateService:
             if template.is_active is not None:
                 update_data["is_active"] = template.is_active
             
-            result = self.db.table("RecommendationTemplate").update(update_data).eq("id", template_id).execute()
-            if not result.data:
-                raise HTTPException(status_code=400, detail="Failed to update recommendation template")
-            return result.data[0]
+            res = self.db.table("RecommendationTemplate").update(update_data).eq("id", template_id).execute()
+            if not res.data:
+                raise HTTPException(status_code=404, detail="Recommendation template not found after update")
+            
+            return RecommendationTemplateResponse(**res.data[0])
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Error updating recommendation template: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to update recommendation template: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error updating recommendation template: {str(e)}")
     
-    async def delete_recommendation_template(self, template_id: int, user_id: int) -> dict:
-        """Soft delete a recommendation template (set is_active to INACTIVE)"""
+    async def delete_recommendation_template(self, template_id: int, current_user: dict) -> dict:
+        """Delete a recommendation template (soft delete)"""
         try:
-            existing = self.db.table("RecommendationTemplate").select("*").eq("id", template_id).execute()
-            if not existing.data:
+            # Check if template exists
+            res = self.db.table("RecommendationTemplate").select("*").eq("id", template_id).execute()
+            if not res.data:
                 raise HTTPException(status_code=404, detail="Recommendation template not found")
             
-            if existing.data[0].get("created_by") != user_id:
-                raise HTTPException(status_code=403, detail="Not authorized to delete this template")
+            # Soft delete by setting is_active to 'INACTIVE'
+            update_data = {
+                "is_active": "INACTIVE",
+                "updated_at": str(datetime.utcnow())
+            }
             
-            result = self.db.table("RecommendationTemplate").update({"is_active": "INACTIVE"}).eq("id", template_id).execute()
-            return {"message": "Template deleted successfully"}
+            res = self.db.table("RecommendationTemplate").update(update_data).eq("id", template_id).execute()
+            if not res.data:
+                raise HTTPException(status_code=404, detail="Recommendation template not found after update")
+            
+            return {"success": True, "message": "Recommendation template deleted successfully"}
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Error deleting recommendation template: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to delete recommendation template: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error deleting recommendation template: {str(e)}")
 

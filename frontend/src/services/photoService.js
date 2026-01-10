@@ -4,6 +4,7 @@
  */
 import axios from 'axios'
 import { API_BASE } from './api.js'
+import { isValidImageUrl, getSafeImageUrl } from '../utils/imageUtils'
 
 export const photoService = {
   /**
@@ -88,12 +89,42 @@ export const photoService = {
   },
 
   /**
-   * Get photo file URL
+   * Get photo file URL - prefers Supabase Storage URL, falls back to API endpoint
    * @param {number} photoId - Photo ID
-   * @returns {string} Photo file URL
+   * @param {string|null} storageUrl - Optional storage_url from photo object
+   * @returns {string} Photo file URL (validated HTTPS URL)
    */
-  getPhotoFileUrl(photoId) {
-    return `${API_BASE}/photos/${photoId}/file`
+  getPhotoFileUrl(photoId, storageUrl = null) {
+    // If storage_url is provided and valid, use it
+    if (storageUrl && isValidImageUrl(storageUrl)) {
+      return storageUrl;
+    }
+    // Fallback to API endpoint (which should serve files or redirect to Supabase)
+    return `${API_BASE}/photos/${photoId}/file`;
+  },
+  
+  /**
+   * Get safe image URL for rendering - validates and sanitizes URLs
+   * @param {Object} photo - Photo object with storage_url or id
+   * @returns {string} Safe HTTPS URL for image rendering
+   */
+  getSafePhotoUrl(photo) {
+    if (!photo) {
+      return null;
+    }
+    
+    // Prefer storage_url if valid
+    if (photo.storage_url && isValidImageUrl(photo.storage_url)) {
+      return photo.storage_url;
+    }
+    
+    // Fallback to API endpoint if photo has an ID
+    if (photo.id || photo.photo_id) {
+      return this.getPhotoFileUrl(photo.id || photo.photo_id);
+    }
+    
+    // No valid URL available
+    return null;
   },
 
   /**
