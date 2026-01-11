@@ -557,13 +557,23 @@ function InspectionDetails() {
   const fetchReportByInspectionId = async (inspectionId) => {
     try {
       const token = localStorage.getItem('token')
+      if (!token) {
+        console.warn('⚠️ No token found, cannot fetch report')
+        setReport(null)
+        return
+      }
+      
       const response = await axios.get(`${API_BASE}/reports/inspection/${inspectionId}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      console.log('📋 Report fetched for inspection:', response.data)
-      setReport(response.data)
+      
+      // Handle new response format: { report: null } or { report: {...} }
+      const reportData = response.data?.report !== undefined ? response.data.report : response.data
+      console.log('📋 Report fetched for inspection:', reportData)
+      setReport(reportData) // Set to null if not found (valid state)
     } catch (err) {
-      // Report might not exist yet, which is fine
+      // Report might not exist yet, which is now handled by backend returning { report: null }
+      // Only log actual errors, not expected "no report" scenarios
       if (err.response?.status !== 404) {
         console.error('Error fetching report:', err)
       }

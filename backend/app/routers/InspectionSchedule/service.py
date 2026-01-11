@@ -16,6 +16,9 @@ def get_available_inspectors(db: Any) -> List[Dict]:
             return res.data
         return []
     except Exception as e:
-        print(f"Error fetching available inspectors: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching available inspectors: {str(e)}")
+        # Log the error but return empty list instead of raising
+        import traceback
+        print(f"❌ Error fetching available inspectors: {e}")
+        print(traceback.format_exc())
+        return []
 

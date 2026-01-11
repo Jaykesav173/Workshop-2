@@ -64,81 +64,134 @@ function MyInspections() {
   }, [])
 
   useEffect(() => {
-    fetchInspections()
-    fetchEquipment()
+    let isMounted = true
+    
+    const loadData = async () => {
+      setLoading(true)
+      try {
+        await Promise.all([fetchInspections(), fetchEquipment()])
+      } catch (err) {
+        console.error('Error loading initial data:', err)
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+    
+    loadData()
+    
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   // Refresh data when navigating back to this page
   useEffect(() => {
     if (location.pathname === '/inspection/list' || location.pathname === '/inspection') {
-      fetchInspections()
+      const loadData = async () => {
+        setLoading(true)
+        try {
+          await Promise.all([fetchInspections(), fetchEquipment()])
+        } catch (err) {
+          console.error('Error refreshing data:', err)
+        } finally {
+          setLoading(false)
+        }
+      }
+      loadData()
     }
   }, [location.pathname])
 
-  // Fetch report statuses after inspections are loaded
+  // Fetch report statuses after inspections are loaded (debounced to prevent rapid calls)
   useEffect(() => {
-    if (inspections.length > 0) {
+    if (inspections.length === 0) return
+    
+    // Debounce to prevent multiple rapid calls when inspections array changes
+    const timeoutId = setTimeout(() => {
       fetchReportStatuses()
-    }
+    }, 500) // Wait 500ms after inspections load before fetching reports
+    
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspections])
 
   // Fetch report statuses for inspections that might have reports
-  // This is a fallback in case inspection status hasn't synced yet
+  // OPTIMIZED: Batch requests with timeout and throttling to prevent server overload
   const fetchReportStatuses = async () => {
+    if (!inspections || inspections.length === 0) return
+    
     try {
       const token = localStorage.getItem('token')
-      // Check ALL inspections, not just Draft/In Progress, to catch status changes
-      // This ensures we get the latest report status even if inspection status hasn't synced
-      const statusMap = {}
+      if (!token) return
       
-      // Fetch report for each inspection (limit to avoid too many calls)
-      const promises = inspections.slice(0, 50).map(async (inspection) => {
-        try {
-          const inspectionId = inspection.inspection_id || inspection.id
-          const response = await axios.get(`${API_BASE}/reports/inspection/${inspectionId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-          if (response.data && response.data.status) {
-            const reportStatus = response.data.status
-            // Map report status to inspection status format
-            const statusMapping = {
-              'SUBMITTED': 'Submitted',
-              'Submitted': 'Submitted',
-              'QA_REVIEW': 'QA Review',
-              'QA Review': 'QA Review',
-              'APPROVED': 'Approved',
-              'Approved': 'Approved',
-              'REJECTED': 'Rejected',
-              'Rejected': 'Rejected',
-              'DRAFT': 'Draft',
-              'Draft': 'Draft'
+      const statusMap = {}
+      const inspectionsToCheck = inspections.slice(0, 50) // Limit to first 50
+      
+      // OPTIMIZATION: Process in batches of 10 with delays to prevent overwhelming server
+      const BATCH_SIZE = 10
+      const DELAY_MS = 100 // Delay between batches
+      
+      for (let i = 0; i < inspectionsToCheck.length; i += BATCH_SIZE) {
+        const batch = inspectionsToCheck.slice(i, i + BATCH_SIZE)
+        
+        const batchPromises = batch.map(async (inspection) => {
+          try {
+            const inspectionId = inspection.inspection_id || inspection.id
+            if (!inspectionId) return null
+            
+            const response = await axios.get(`${API_BASE}/reports/inspection/${inspectionId}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            })
+            
+            // Handle new response format: { report: null } or { report: {...} }
+            const reportData = response.data?.report !== undefined ? response.data.report : response.data
+            
+            if (reportData && reportData.status) {
+              const reportStatus = reportData.status
+              const statusMapping = {
+                'SUBMITTED': 'Submitted',
+                'Submitted': 'Submitted',
+                'QA_REVIEW': 'QA Review',
+                'QA Review': 'QA Review',
+                'APPROVED': 'Approved',
+                'Approved': 'Approved',
+                'REJECTED': 'Rejected',
+                'Rejected': 'Rejected',
+                'DRAFT': 'Draft',
+                'Draft': 'Draft'
+              }
+              const mappedStatus = statusMapping[reportStatus] || reportStatus
+              return { inspectionId, status: mappedStatus }
             }
-            const mappedStatus = statusMapping[reportStatus] || reportStatus
-            // Always return the report status if it exists (even if DRAFT)
-            // This ensures we show the most up-to-date status
-            return { inspectionId, status: mappedStatus }
-          }
-        } catch (err) {
-          // No report for this inspection (404 is expected)
-          if (err.response?.status !== 404) {
-            console.log(`Could not fetch report for inspection ${inspection.inspection_id || inspection.id}:`, err.message)
+          } catch (err) {
+            // Silently ignore errors - null report is valid
+            // Only log unexpected errors (not 404s)
+            if (err.response?.status !== 404) {
+              console.warn(`Could not fetch report for inspection ${inspection.inspection_id || inspection.id}:`, err.message)
+            }
+            return null
           }
           return null
+        })
+        
+        // Wait for batch to complete
+        const batchResults = await Promise.allSettled(batchPromises)
+        batchResults.forEach((result) => {
+          if (result.status === 'fulfilled' && result.value) {
+            statusMap[result.value.inspectionId] = result.value.status
+          }
+        })
+        
+        // Delay before next batch (except for last batch)
+        if (i + BATCH_SIZE < inspectionsToCheck.length) {
+          await new Promise(resolve => setTimeout(resolve, DELAY_MS))
         }
-        return null
-      })
-      
-      const results = await Promise.all(promises)
-      results.forEach(result => {
-        if (result) {
-          statusMap[result.inspectionId] = result.status
-        }
-      })
+      }
       
       setReportStatusMap(statusMap)
     } catch (err) {
-      // Fail silently
-      console.log('Could not fetch report statuses:', err.message)
+      console.warn('Error fetching report statuses:', err.message)
     }
   }
 
@@ -149,26 +202,41 @@ function MyInspections() {
   const fetchInspections = async () => {
     try {
       const token = localStorage.getItem('token')
+      if (!token) {
+        console.warn('No auth token found')
+        setInspections([])
+        setFilteredInspections([])
+        return
+      }
+      
       const response = await axios.get(`${API_BASE}/inspections/`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      setInspections(response.data || [])
-      setFilteredInspections(response.data || [])
+      
+      const inspectionsData = response.data || []
+      setInspections(inspectionsData)
+      setFilteredInspections(inspectionsData)
     } catch (err) {
       console.error('Error fetching inspections:', err)
+      // Set empty arrays on error to prevent showing stale data
       setInspections([])
       setFilteredInspections([])
-    } finally {
-      setLoading(false)
+      throw err // Re-throw so caller can handle it
     }
   }
 
   const fetchEquipment = async () => {
     try {
       const token = localStorage.getItem('token')
+      if (!token) {
+        console.warn('No auth token found for equipment')
+        return
+      }
+      
       const response = await axios.get(`${API_BASE}/equipment/`, {
         headers: { Authorization: `Bearer ${token}` }
       })
+      
       const map = {}
       ;(response.data || []).forEach(eq => {
         map[eq.id] = eq
@@ -176,6 +244,8 @@ function MyInspections() {
       setEquipmentMap(map)
     } catch (err) {
       console.error('Error fetching equipment:', err)
+      // Keep existing equipmentMap on error (don't clear it)
+      throw err // Re-throw so caller can handle it
     }
   }
 

@@ -27,8 +27,8 @@ async def create_inspection(
 
 @router.get("/", response_model=list[InspectionResponse])
 async def get_inspections(current_user: dict = Depends(get_current_user)):
-    """Get all inspections"""
-    return await inspection_service.get_inspections()
+    """Get inspections - filtered by user role"""
+    return await inspection_service.get_inspections(current_user)
 
 @router.get("/{inspection_id}", response_model=InspectionResponse)
 async def get_inspection(inspection_id: int, current_user: dict = Depends(get_current_user)):

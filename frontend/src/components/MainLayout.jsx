@@ -116,7 +116,7 @@ export default function MainLayout() {
     { id: 'photos', label: 'Inspection Schedule', icon: Icons.Camera, path: '/photo-upload' },
     { id: 'defect-ai', label: 'Defect AI', icon: Icons.Bot, path: '/defect-ai' },
     { id: 'equipment', label: 'Equipment', icon: Icons.Building, path: '/equipment' },
-    { id: 'monitoring', label: 'Report History & Review', icon: Icons.Activity, path: '/monitoring' },
+    { id: 'analytics', label: 'Inspection Analysis', icon: Icons.BarChart, path: '/analytics' },
   ]
 
   // Admin menu items
@@ -134,6 +134,7 @@ export default function MainLayout() {
     { id: 'dashboard', label: 'Dashboard', icon: Icons.Dashboard, path: '/engineer/dashboard' },
     { id: 'photos', label: 'Create Inspection', icon: Icons.Camera, path: '/photo-upload' },
     { id: 'review', label: 'Review Inspection', icon: Icons.FileCheck, path: '/review-inspection' },
+    { id: 'analytics', label: 'Inspection Analysis', icon: Icons.BarChart, path: '/analytics' },
   ]
 
   // Get menu items based on user role
@@ -245,44 +246,68 @@ export default function MainLayout() {
       // Fetch latest reports to check for status updates (Approved/Rejected)
       try {
         const token = localStorage.getItem('token')
-        const reportRes = await fetch(`http://localhost:8000/api/reports/all`, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-        })
-        if (reportRes.ok) {
-        const allReports = await reportRes.json()
-
-        const myReports = allReports.filter(r =>
-          (r.created_by === userId || r.inspector_name === user?.username || r.inspector_name === user?.name) &&
-          (r.status === 'APPROVED' || r.status === 'NEEDS REVISION' || r.status === 'Rejection')
-        )
-
-        myReports.forEach(r => {
-          let msg = r.status === 'APPROVED' ? "Report Approved" : "Report Needs Revision"
-          newNotifs.push({
-            id: `rep_${r.report_id}`,
-            title: msg,
-            message: `Report "${r.report_title}" status: ${r.status}`,
-            created_at: r.created_at,
-            action_link: `/validation/${r.report_id}`
+        let allReports = []
+        
+        if (token) {
+          const reportRes = await fetch(`http://localhost:8000/api/reports/all`, {
+            headers: { 'Authorization': `Bearer ${token}` }
           })
-        })
+          
+          // Only process if response is successful
+          if (reportRes.ok) {
+            try {
+              const reportsData = await reportRes.json()
+              
+              // Ensure reportsData is an array
+              if (Array.isArray(reportsData)) {
+                allReports = reportsData
+                
+                const myReports = allReports.filter(r =>
+                  r && (r.created_by === userId || r.inspector_name === user?.username || r.inspector_name === user?.name) &&
+                  (r.status === 'APPROVED' || r.status === 'NEEDS REVISION' || r.status === 'Rejection')
+                )
+
+                myReports.forEach(r => {
+                  if (r && r.report_id) {
+                    let msg = r.status === 'APPROVED' ? "Report Approved" : "Report Needs Revision"
+                    newNotifs.push({
+                      id: `rep_${r.report_id}`,
+                      title: msg,
+                      message: `Report "${r.title || r.report_title || 'Untitled'}" status: ${r.status}`,
+                      created_at: r.created_at,
+                      action_link: `/validation/${r.report_id}`
+                    })
+                  }
+                })
+              }
+            } catch (parseError) {
+              console.warn("Failed to parse reports response:", parseError)
+            }
+          } else {
+            // Log but don't fail - 500 errors are now handled gracefully by backend
+            console.warn(`Reports endpoint returned status ${reportRes.status}`)
+          }
+        }
 
         // --- 3. ENGINEER/ADMIN: REPORT REVIEWS ---
         // If user is ADMIN or ENGINEER (or equivalent reviewer role), check for "Submitted" reports
-        const userRole = user?.role?.toUpperCase() || ''
-        if (userRole === 'ADMIN' || userRole === 'ENGINEER') {
-          const pendingReview = allReports.filter(r => r.status === 'Submitted')
+        if (allReports.length > 0) {
+          const userRole = user?.role?.toUpperCase() || ''
+          if (userRole === 'ADMIN' || userRole === 'ENGINEER') {
+            const pendingReview = allReports.filter(r => r && r.status === 'Submitted')
 
-          pendingReview.forEach(r => {
-            newNotifs.push({
-              id: `rev_${r.report_id}`, // Distinct ID prefix for reviews
-              title: "Report Submitted for Review",
-              message: `Report "${r.report_title}" by ${r.inspector_name} is waiting for review.`,
-              created_at: r.created_at || new Date().toISOString(),
-              action_link: `/validation/${r.report_id}`
+            pendingReview.forEach(r => {
+              if (r && r.report_id) {
+                newNotifs.push({
+                  id: `rev_${r.report_id}`, // Distinct ID prefix for reviews
+                  title: "Report Submitted for Review",
+                  message: `Report "${r.title || r.report_title || 'Untitled'}" by ${r.inspector_name || 'Unknown'} is waiting for review.`,
+                  created_at: r.created_at || new Date().toISOString(),
+                  action_link: `/validation/${r.report_id}`
+                })
+              }
             })
-          })
-        }
+          }
         }
       } catch (reportError) {
         console.warn("Failed to fetch reports for notifications:", reportError)

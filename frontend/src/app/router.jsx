@@ -57,8 +57,8 @@ function Router() {
         {/* Dashboard Routes - keep our dashboards */}
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/admin/users" element={<UserManagement />} />
-        <Route path="/inspector/dashboard" element={<InspectorDashboard />} />
-        <Route path="/engineer/dashboard" element={<EngineerDashboard />} />
+        <Route path="/inspector/dashboard" element={<MonitoringModule />} />
+        <Route path="/engineer/dashboard" element={<MonitoringModule />} />
         
         {/* Module Routes */}
         <Route path="/photo-upload" element={<PhotoUploadModule />} />

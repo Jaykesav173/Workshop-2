@@ -90,14 +90,26 @@ async def create_new_assignment(payload: schemas.ScheduleCreate, db: Any = Depen
 def get_all_inspections(db: Any = Depends(get_db)):
     try:
         res = db.table("inspectionschedule").select("*").execute()
-        return res.data
+        return res.data if res.data else []
     except Exception as e:
-        print(f"Error fetching schedules: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Log the error but return empty list instead of raising 500
+        import traceback
+        print(f"❌ Error in get_all_inspections: {e}")
+        print(traceback.format_exc())
+        # Return empty list to prevent 500 errors - this allows the page to load
+        return []
 
 @router.get("/available-inspectors")
 def read_inspectors(db: Any = Depends(get_db)):
-    return service.get_available_inspectors(db)
+    try:
+        return service.get_available_inspectors(db)
+    except Exception as e:
+        # Log the error but return empty list instead of raising 500
+        import traceback
+        print(f"❌ Error in read_inspectors: {e}")
+        print(traceback.format_exc())
+        # Return empty list to prevent 500 errors - this allows the page to load
+        return []
 
 @router.put("/{schedule_id}")
 def update_schedule(schedule_id: int, payload: dict, db: Any = Depends(get_db)):

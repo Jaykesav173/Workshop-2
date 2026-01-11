@@ -96,14 +96,32 @@ class InspectionWorkflowService:
             print(traceback.format_exc())
             raise HTTPException(status_code=500, detail=f"Error creating inspection: {str(e)}")
     
-    async def get_inspections(self) -> list[InspectionResponse]:
-        """Get all inspections"""
+    async def get_inspections(self, current_user: dict = None) -> list[InspectionResponse]:
+        """Get inspections - filtered by user role
+        
+        - INSPECTOR: Only sees their own inspections (where user_id matches)
+        - ENGINEER/ADMIN: Sees all inspections
+        """
         try:
-            res = self.db.table("Inspection").select("*").execute()
+            user_role = current_user.get("role", "").upper() if current_user else ""
+            user_id = current_user.get("id") if current_user else None
+            
+            # For INSPECTOR role, filter by user_id
+            if user_role == "INSPECTOR" and user_id:
+                print(f"🔍 Filtering inspections for INSPECTOR (ID: {user_id})")
+                res = self.db.table("Inspection").select("*").eq("user_id", user_id).execute()
+            else:
+                # For ENGINEER, ADMIN, or other roles, return all inspections
+                print(f"🔍 Fetching all inspections for role: {user_role}")
+                res = self.db.table("Inspection").select("*").execute()
+            
             if res.data:
                 return [InspectionResponse(**inspection) for inspection in res.data]
             return []
         except Exception as e:
+            import traceback
+            print(f"❌ Error fetching inspections: {e}")
+            print(traceback.format_exc())
             raise HTTPException(status_code=500, detail=f"Error fetching inspections: {str(e)}")
     
     async def get_inspection(self, inspection_id: int) -> InspectionResponse:

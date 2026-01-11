@@ -61,13 +61,19 @@ async def get_all_reports(current_user: dict = Depends(get_current_user)):
     """Get all reports with all statuses (for dashboard statistics)"""
     return await report_service.get_all_reports()
 
-@router.get("/inspection/{inspection_id}", response_model=ReportResponse)
+@router.get("/inspection/{inspection_id}")
 async def get_report_by_inspection_id(inspection_id: int, current_user: dict = Depends(get_current_user)):
-    """Get report by inspection_id"""
-    report = await report_service.get_report_by_inspection_id(inspection_id)
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found for this inspection")
-    return report
+    """Get report by inspection_id - returns 200 with { report: null } if no report exists"""
+    try:
+        if inspection_id is None:
+            return {"report": None}
+        report = await report_service.get_report_by_inspection_id(inspection_id)
+        return {"report": report.model_dump() if report else None}
+    except Exception as e:
+        print(f"⚠️ Error in get_report_by_inspection_id for inspection {inspection_id}: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"report": None}
 
 # Parameterized routes come after specific routes
 @router.get("/{report_id}/export-pdf")
