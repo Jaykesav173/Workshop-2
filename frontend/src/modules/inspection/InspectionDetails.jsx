@@ -3013,13 +3013,20 @@ function InspectionDetails() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Defect Type
                 </label>
-                <input
-                  type="text"
+                <select
                   value={editFormData.defect_type}
                   onChange={(e) => setEditFormData({ ...editFormData, defect_type: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
-                  placeholder="Enter defect type..."
-                />
+                >
+                  <option value="">Select Defect Type</option>
+                  <option value="Corrosion">Corrosion</option>
+                  <option value="Crack">Crack</option>
+                  <option value="Damage">Damage</option>
+                  <option value="Wear">Wear</option>
+                  <option value="Deformation">Deformation</option>
+                  <option value="Paint chip">Paint chip</option>
+                  <option value="Rust">Rust</option>
+                </select>
               </div>
 
               {/* Action Buttons */}

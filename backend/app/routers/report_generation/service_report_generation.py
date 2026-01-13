@@ -2354,6 +2354,70 @@ class ReportGenerationService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching report: {str(e)}")
     
+    async def get_report_by_inspection_id(self, inspection_id: int):
+        """Get report by inspection_id - returns None if no report exists (defensive)"""
+        try:
+            if inspection_id is None:
+                return None
+            res = self.db.table("Report").select("*").eq("inspection_id", inspection_id).execute()
+            if not res.data or len(res.data) == 0:
+                return None
+            db_record = res.data[0]
+            if not db_record:
+                return None
+            api_510_value = db_record.get('api_510_compliant')
+            if api_510_value is None:
+                api_510_value = False
+            elif isinstance(api_510_value, str):
+                api_510_value = api_510_value.lower() in ('true', 'yes', '1')
+            report_no = None
+            try:
+                if db_record.get('content'):
+                    content_data = json.loads(db_record.get('content'))
+                    if isinstance(content_data, dict) and 'header' in content_data:
+                        report_no = content_data['header'].get('report_no')
+            except Exception as e:
+                print(f'⚠️ Error extracting report_no: {e}')
+            response_data = {
+                'report_id': db_record.get('report_id') or db_record.get('id') or str(uuid.uuid4()),
+                'created_by': db_record.get('created_by') or 0,
+                'status': db_record.get('status') or 'DRAFT',
+                'report_type': db_record.get('report_type') or 'API_510',
+                'created_at': db_record.get('created_at'),
+                'updated_at': db_record.get('updated_at'),
+                'equipment_id': db_record.get('equipment_id'),
+                'title': db_record.get('title'),
+                'content': db_record.get('content'),
+                'inspection_date': db_record.get('inspection_date'),
+                'next_inspection_due': db_record.get('next_inspection_due'),
+                'api_510_compliant': bool(api_510_value),
+                'report_path': db_record.get('report_path'),
+                'report_url': db_record.get('report_url'),
+                'pdf_path': db_record.get('pdf_path'),
+                'pdf_url': db_record.get('pdf_url'),
+                'labeled_photos': db_record.get('labeled_photos'),
+                'labeled_defects': db_record.get('labeled_defects'),
+                'inspection_frequency': db_record.get('inspection_frequency'),
+                'defect_types_summary': db_record.get('defect_types_summary'),
+                'report_no': report_no,
+            }
+            if response_data['created_at'] and isinstance(response_data['created_at'], str):
+                try:
+                    from datetime import datetime
+                    response_data['created_at'] = datetime.fromisoformat(response_data['created_at'].replace('Z', '+00:00'))
+                except:
+                    from datetime import datetime
+                    response_data['created_at'] = datetime.utcnow()
+            if not response_data['created_at']:
+                from datetime import datetime
+                response_data['created_at'] = datetime.utcnow()
+            return ReportResponse(**response_data)
+        except Exception as e:
+            print(f'⚠️ Error fetching report by inspection_id {inspection_id}: {e}')
+            import traceback
+            print(traceback.format_exc())
+            return None
+    
     async def get_equipment_reports(self, equipment_id: int) -> list[ReportResponse]:
         """Get all reports for an equipment"""
         try:
@@ -2394,7 +2458,7 @@ class ReportGenerationService:
         try:
             # Fetch all reports without ordering first to avoid potential syntax issues
             res = self.db.table("Report").select("*").execute()
-            if res.data:
+            if res.data and isinstance(res.data, list):
                 reports = []
                 for db_record in res.data:
                     api_510_value = db_record.get('api_510_compliant')
@@ -2488,7 +2552,14 @@ class ReportGenerationService:
                 return reports
             return []
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error fetching all reports: {str(e)}")
+            # Log the error but return empty list instead of raising 500
+            # This prevents blocking the UI when reports endpoint has issues
+            import traceback
+            print(f"⚠️ Error fetching all reports: {str(e)}")
+            print(traceback.format_exc())
+            # Return empty list instead of raising exception to prevent 500 errors
+            # The frontend can handle empty arrays gracefully
+            return []
     
     async def submit_report(self, report_id: str, current_user: dict = None) -> ReportResponse:
         """Submit report for QA review"""

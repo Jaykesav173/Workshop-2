@@ -376,4 +376,3 @@ class ScheduleResponse(ScheduleBase):
     
     class Config:
         from_attributes = True
-

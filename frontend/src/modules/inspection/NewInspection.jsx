@@ -30,6 +30,8 @@ function NewInspection() {
     next_inspection_date: '',
     findings_summary: '',  // Changed from 'summary' to match schema
     remarks_general: '',   // Changed from 'remarks' to match schema
+    plant_unit_area: '',   // Plant / Unit / Area (required)
+    defect_type: '',       // Defect Type (dropdown)
   })
 
   // Check authentication on mount
@@ -103,6 +105,8 @@ function NewInspection() {
         next_inspection_date: formatDateToISO(formData.next_inspection_date),
         findings_summary: formData.findings_summary || null,
         remarks_general: formData.remarks_general || null,
+        plant_unit_area: formData.plant_unit_area || null,
+        defect_type: formData.defect_type || null,
       }
 
       // Remove null/empty values
@@ -260,6 +264,38 @@ function NewInspection() {
                   onChange={(e) => setFormData({ ...formData, next_inspection_date: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Plant / Unit / Area <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.plant_unit_area}
+                  onChange={(e) => setFormData({ ...formData, plant_unit_area: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter plant/unit/area"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Defect Type
+                </label>
+                <select
+                  value={formData.defect_type}
+                  onChange={(e) => setFormData({ ...formData, defect_type: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Defect Type</option>
+                  <option value="Corrosion">Corrosion</option>
+                  <option value="Crack">Crack</option>
+                  <option value="Damage">Damage</option>
+                  <option value="Wear">Wear</option>
+                  <option value="Deformation">Deformation</option>
+                  <option value="Paint chip">Paint chip</option>
+                  <option value="Rust">Rust</option>
+                </select>
               </div>
             </div>
           </div>
