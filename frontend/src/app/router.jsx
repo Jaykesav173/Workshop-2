@@ -70,6 +70,7 @@ function Router() {
         <Route path="/inspection/:id" element={<InspectionDetails />} />
         <Route path="/defect-ai" element={<DefectAIModule />} />
         <Route path="/reports" element={<ReportsModule />} />
+        <Route path="/reports/:inspectionId" element={<ReportsModule />} />
         <Route path="/validation" element={<ValidationModule />} />
         <Route path="/monitoring" element={<MonitoringModule />} />
         <Route path="/equipment" element={<EquipmentModule />} />
