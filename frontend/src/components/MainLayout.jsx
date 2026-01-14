@@ -126,7 +126,6 @@ export default function MainLayout() {
     { id: 'sites', label: 'Sites / Assets', icon: Icons.Building, path: '/equipment' },
     { id: 'inspections', label: 'Inspections Overview', icon: Icons.Eye, path: '/inspection' },
     { id: 'monitoring', label: 'Report History & Review', icon: Icons.Activity, path: '/monitoring' },
-    { id: 'monitoring', label: 'Report History & Review', icon: Icons.Activity, path: '/monitoring' },
   ]
 
   // Engineer menu items
