@@ -279,6 +279,7 @@ class ReportResponse(ReportBase):
     inspection_frequency: Optional[str] = None
     defect_types_summary: Optional[str] = None  # JSON string
     status: str
+    report_no: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     

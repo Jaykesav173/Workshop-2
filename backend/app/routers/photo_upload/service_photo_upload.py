@@ -8,6 +8,7 @@ from app.config import settings
 import os
 import uuid
 from datetime import datetime
+from app.utils.storage import upload_file_to_storage
 
 class PhotoUploadService:
     def __init__(self):
@@ -30,15 +31,26 @@ class PhotoUploadService:
             # Get file size
             file_size = len(content)
             
-            # TODO: Upload to Supabase storage
-            # storage_url = await self.upload_to_supabase_storage(file_path, unique_filename)
+            # Upload to Supabase storage
+            print(f"☁️ Uploading photo {unique_filename} to Cloud...")
+            storage_url = upload_file_to_storage(
+                file_content=content,
+                filename=unique_filename,
+                bucket_name="photos",
+                folder="inspection-photos"
+            )
+            
+            if storage_url:
+                print(f"✅ Photo uploaded to Cloud: {storage_url}")
+            else:
+                print(f"⚠️ Failed to upload photo to Cloud (returned None)")
             
             # Save to database
             photo_data = {
                 "equipment_id": equipment_id,
                 "uploaded_by": current_user.get("id") if current_user else None,
                 "file_path": file_path,
-                "storage_url": None,  # storage_url, TODO: Upload to Supabase storage
+                "storage_url": storage_url,  
                 "file_name": file.filename,
                 "file_size": file_size,
                 "uploaded_at": str(datetime.utcnow())
@@ -94,4 +106,3 @@ class PhotoUploadService:
             return res.data if res.data else []
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment photos: {str(e)}")
-

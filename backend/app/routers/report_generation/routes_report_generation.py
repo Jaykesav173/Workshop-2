@@ -126,7 +126,10 @@ async def export_report_pdf(report_id: str, current_user: dict = Depends(get_cur
                 from fastapi.responses import Response
                 response = requests.get(report.pdf_url)
                 if response.status_code == 200:
-                    filename = f"API510_Report_{report.report_no or report_id}.pdf"
+                    # Safely get report_no, fallback to 'Unknown' if not present
+                    report_no = getattr(report, "report_no", None)
+                    filename = f"API510_Report_{report_no or report_id}.pdf"
+                    
                     return Response(
                         content=response.content,
                         media_type="application/pdf",
@@ -134,10 +137,16 @@ async def export_report_pdf(report_id: str, current_user: dict = Depends(get_cur
                             "Content-Disposition": f"attachment; filename={filename}"
                         }
                     )
+                else:
+                    print(f"❌ Cloud fetch returned status: {response.status_code}")
             except Exception as e:
                  print(f"❌ Failed to fetch from cloud: {e}")
 
         # 3. If neither available, raise 404
+        print(f"❌ PDF Export Failed for {report_id}")
+        print(f"   path: {report.pdf_path} (exists: {os.path.exists(report.pdf_path) if report.pdf_path else 'N/A'})")
+        print(f"   url: {report.pdf_url}")
+        
         if not report.pdf_path:
              raise HTTPException(status_code=404, detail="PDF not generated yet")
         
