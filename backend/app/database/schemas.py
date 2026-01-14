@@ -144,6 +144,7 @@ class PhotoBase(BaseModel):
     file_path: str
     file_name: Optional[str] = None
     file_size: Optional[int] = None
+    part_view: Optional[str] = None
 
 class PhotoCreate(PhotoBase):
     pass
@@ -152,6 +153,7 @@ class PhotoResponse(PhotoBase):
     id: int
     uploaded_by: int
     storage_url: Optional[str] = None
+    image_url: Optional[str] = None
     uploaded_at: datetime
     
     class Config:

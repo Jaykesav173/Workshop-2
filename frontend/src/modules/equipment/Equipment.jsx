@@ -1111,18 +1111,14 @@ export default function EquipmentDetailsRegistration() {
                         {viewingItem.photos
                           .filter(p => !["General", "General View"].includes(p.part_view))
                           .map((photo) => {
-                            const filename = photo.file_path ? photo.file_path.split(/[\\/]/).pop() : "";
-                            // Use storage_url if available, otherwise construct local path
-                            const imgSrc = photo.storage_url || `/static/uploads/${filename}`;
-
                             return (
                               <div key={photo.id} className="flex flex-col items-center bg-white p-3 rounded-xl shadow-sm border border-gray-200">
                                 <div className="w-full h-40 bg-gray-100 rounded-xl overflow-hidden mb-2">
                                   <img
-                                    src={getImageUrl(imgSrc)}
+                                    src={getImageUrl(photo.image_url)}
                                     alt={photo.part_view}
                                     className="w-full h-full object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
-                                    onClick={() => window.open(getImageUrl(imgSrc), '_blank')}
+                                    onClick={() => window.open(getImageUrl(photo.image_url), '_blank')}
                                   />
                                 </div>
                                 <span className="font-semibold text-sm text-gray-700">{photo.part_view || "Additional View"}</span>

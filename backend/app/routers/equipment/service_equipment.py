@@ -130,11 +130,13 @@ class EquipmentService:
                             valid_photos = []
                             for p in eq_photos:
                                 if p.get('storage_url'):
+                                    p['image_url'] = p['storage_url']
                                     valid_photos.append(p)
                                 elif p.get('file_path'):
                                     filename = os.path.basename(p['file_path'])
                                     served_path = os.path.join(settings.UPLOAD_DIR, filename)
                                     if os.path.exists(served_path):
+                                        p['image_url'] = f"/static/uploads/{filename}"
                                         valid_photos.append(p)
                                      
                             eq['photos'] = valid_photos
@@ -187,25 +189,20 @@ class EquipmentService:
             
             # Fetch photo
             photo_res = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).execute()
-            # Filter photos
+            
+            # Filter photos and populate image_url
             valid_photos = []
             if photo_res.data:
                 for p in photo_res.data:
-                    if p.get('storage_url') or os.path.exists(p['file_path']):
-                        valid_photos.append(p)
-            
-            equipment['photos'] = valid_photos
-            
-            # Filter photos
-            valid_photos = []
-            if photo_res.data:
-                for p in photo_res.data:
+                    # Logic to determine image_url
                     if p.get('storage_url'):
+                        p['image_url'] = p['storage_url']
                         valid_photos.append(p)
                     elif p.get('file_path'):
                         filename = os.path.basename(p['file_path'])
                         served_path = os.path.join(settings.UPLOAD_DIR, filename)
                         if os.path.exists(served_path):
+                            p['image_url'] = f"/static/uploads/{filename}"
                             valid_photos.append(p)
             
             equipment['photos'] = valid_photos
