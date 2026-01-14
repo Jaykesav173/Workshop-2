@@ -175,7 +175,15 @@ function NewInspection() {
                 <select
                   required
                   value={formData.equipment_id}
-                  onChange={(e) => setFormData({ ...formData, equipment_id: e.target.value })}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const selectedEq = equipmentList.find(eq => eq.id.toString() === selectedId);
+                    setFormData({
+                      ...formData,
+                      equipment_id: selectedId,
+                      plant_unit_area: selectedEq?.location || ''
+                    });
+                  }}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">Select Vessel</option>

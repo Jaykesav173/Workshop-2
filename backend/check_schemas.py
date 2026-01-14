@@ -1,17 +1,14 @@
+
+import sys
 import os
 
-file_path = "app/database/schemas.py"
-output_file = "schemas_check.txt"
+# Add backend directory to path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-with open(output_file, "w") as out:
-    try:
-        with open(file_path, "rb") as f:
-            content = f.read()
-            if b'\x00' in content:
-                out.write(f"FAIL: Null bytes found in {file_path}. Count: {content.count(b'\\x00')}")
-            else:
-                out.write(f"PASS: No null bytes found in {file_path}")
-    except Exception as e:
-        out.write(f"ERROR: {e}")
-
-print("Done check.")
+try:
+    import app.database.schemas as schemas
+    print(f"File: {schemas.__file__}")
+    print("Attributes:")
+    print([x for x in dir(schemas) if 'Report' in x])
+except Exception as e:
+    print(f"Error: {e}")
