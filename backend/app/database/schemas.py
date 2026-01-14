@@ -11,7 +11,7 @@ Schemas for 4 core models:
 """
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 # ============================================
 # 1. User Schemas - Haifa (User Authentication)
@@ -21,6 +21,11 @@ class UserBase(BaseModel):
     email: Optional[EmailStr] = None
     username: str
     role: Optional[str] = "USER"
+    phone_number: Optional[str] = None
+    ic_number: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    school_name: Optional[str] = None
+    mother_name: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
@@ -31,8 +36,15 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = None
     password: Optional[str] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
     role: Optional[str] = None
     Account_status: Optional[str] = None
+    phone_number: Optional[str] = None
+    ic_number: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    school_name: Optional[str] = None
+    mother_name: Optional[str] = None
 
 class UserResponse(UserBase):
     id: int
@@ -50,7 +62,44 @@ class LoginResponse(BaseModel):
     success: bool
     message: str
     access_token: Optional[str] = None
-    user: Optional[dict] = None
+    user: Optional[dict] = None  # keys: id, username, role, isFirstLogin created_at email etc
+    notifications: Optional[list] = []  # List of unread notifications/alerts
+
+
+class VerifySecurityQuestionsRequest(BaseModel):
+    email: EmailStr
+    school_name: str
+    mother_name: str
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+class OTPVerifyRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+class ResetPasswordRequest(BaseModel):
+    username: str
+    current_password: str
+    new_password: str
+
+class ResetPasswordForgotRequest(BaseModel):
+    email: EmailStr
+    new_password: str
+
+class CompleteProfileRequest(BaseModel):
+    username: str
+    ic_number: str
+    date_of_birth: str
+    phone_number: str
+    school_name: str
+    mother_name: str
+
+class DashboardSummary(BaseModel):
+    success: bool
+    totalInspections: int
+    photosUploaded: int
+    reportsGenerated: int
 
 # ============================================
 # 2. Equipment Schemas - Yi Jing (Equipment Information)
@@ -59,7 +108,7 @@ class LoginResponse(BaseModel):
 class EquipmentBase(BaseModel):
     equipment_tag_no: Optional[str] = None  # Equipment tag number (unique) - can be null in DB
     type_id: Optional[int] = None  # FK to type table
-    material: Optional[str] = None  # Material of construction
+    material_id: Optional[int] = None  # FK to material table
     location: Optional[str] = None  # Plant/Unit/Area location
     inspection_due_date: Optional[datetime] = None  # Next inspection due date
     equipment_description: Optional[str] = None  # Full equipment description
@@ -68,6 +117,7 @@ class EquipmentBase(BaseModel):
     corrosion_allowance: Optional[float] = None  # Corrosion allowance
     design_pressure: Optional[float] = None  # Design pressure
     design_temperature: Optional[float] = None  # Design temperature
+    status: Optional[str] = "Active"  # Equipment status (Active, Inactive, etc.)
 
 class EquipmentCreate(EquipmentBase):
     pass
@@ -80,6 +130,8 @@ class EquipmentResponse(EquipmentBase):
     # Backward compatibility fields (added by service layer)
     name: Optional[str] = None  # Alias for equipment_tag_no
     type: Optional[str] = None  # Type description (from type table if available)
+    image_url: Optional[str] = None
+    photos: Optional[List["PhotoResponse"]] = []
     
     class Config:
         from_attributes = True
@@ -157,6 +209,7 @@ class InspectionResponse(InspectionBase):
     inspection_id: int  # Primary key
     created_at: datetime
     updated_at: datetime
+    report_status: Optional[str] = None  # Status of associated report
     
     class Config:
         from_attributes = True
@@ -376,3 +429,5 @@ class ScheduleResponse(ScheduleBase):
     
     class Config:
         from_attributes = True
+
+EquipmentResponse.model_rebuild()

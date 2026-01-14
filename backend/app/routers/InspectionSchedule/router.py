@@ -1,15 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import List, Any
+from typing import List, Any, Dict
 from app.database.connection import get_db
 from app.database import schemas
-# Import service using importlib to avoid null byte issues
-import importlib.util
-service_spec = importlib.util.spec_from_file_location("schedule_service", "app/routers/InspectionSchedule/service.py")
-service_module = importlib.util.module_from_spec(service_spec)
-service_spec.loader.exec_module(service_module)
-service = service_module
+
+# Removed import service
 
 router = APIRouter(prefix="/schedules", tags=["Schedules"])
+
+def get_available_inspectors(db: Any) -> List[Dict]:
+    """Get list of available inspectors (users with INSPECTOR role)"""
+    try:
+        # Fetch users with INSPECTOR role
+        res = db.table("User").select("id, username, email, name").eq("role", "INSPECTOR").eq("Account_status", "ACTIVE").execute()
+        
+        if res.data:
+            return res.data
+        return []
+    except Exception as e:
+        # Log the error but return empty list instead of raising
+        import traceback
+        print(f"Error fetching available inspectors: {e}")
+        print(traceback.format_exc())
+        return []
 
 @router.post("/", response_model=schemas.ScheduleResponse)
 async def create_new_assignment(payload: schemas.ScheduleCreate, db: Any = Depends(get_db)):
@@ -60,19 +72,26 @@ async def create_new_assignment(payload: schemas.ScheduleCreate, db: Any = Depen
 
         if inspector_email:
             try:
+                from app.utils.email_templates import get_email_html
                 subject = "New Inspection Schedule Assigned"
-                content = f"""
-                <p>Hello {inspector_name},</p>
-                <p>You have been assigned a new inspection schedule.</p>
-                <ul>
-                    <li><strong>Site/Equipment:</strong> {data.get('site_id')} / {data.get('equipment_id')}</li>
-                    <li><strong>Date:</strong> {date}</li>
-                    <li><strong>Time:</strong> {start} - {end}</li>
-                    <li><strong>Priority:</strong> {data.get('priority')}</li>
-                </ul>
-                <p>Please login to your dashboard to view full details.</p>
-                <a href="http://localhost:5173/inspection" class="button">View Inspection</a>
-                """
+                
+                details = {
+                    "Equipment": str(data.get('equipment_id')),
+                    "Location": data.get('location') or 'Not Specified',
+                    "Date": str(date),
+                    "Time": f"{start} - {end}",
+                    "Priority": data.get('priority')
+                }
+                
+                content = get_email_html(
+                    title="New Inspection Schedule Assigned",
+                    name=inspector_name,
+                    intro="You have been assigned a new inspection schedule.",
+                    details=details,
+                    action_url="http://localhost:5173/inspection",
+                    action_text="View Inspection Dashboard"
+                )
+                
                 send_email(inspector_email, subject, content)
                 print(f"Email sent to {inspector_email}")
             except Exception as notify_error:
@@ -94,7 +113,7 @@ def get_all_inspections(db: Any = Depends(get_db)):
     except Exception as e:
         # Log the error but return empty list instead of raising 500
         import traceback
-        print(f"❌ Error in get_all_inspections: {e}")
+        print(f"Error in get_all_inspections: {e}")
         print(traceback.format_exc())
         # Return empty list to prevent 500 errors - this allows the page to load
         return []
@@ -102,11 +121,11 @@ def get_all_inspections(db: Any = Depends(get_db)):
 @router.get("/available-inspectors")
 def read_inspectors(db: Any = Depends(get_db)):
     try:
-        return service.get_available_inspectors(db)
+        return get_available_inspectors(db)
     except Exception as e:
         # Log the error but return empty list instead of raising 500
         import traceback
-        print(f"❌ Error in read_inspectors: {e}")
+        print(f"Error in read_inspectors: {e}")
         print(traceback.format_exc())
         # Return empty list to prevent 500 errors - this allows the page to load
         return []
@@ -149,24 +168,26 @@ async def send_reminder(schedule_id: int, db: Any = Depends(get_db)):
         inspector_email = user_res.data[0]['email']
         inspector_name = user_res.data[0]['username']
         
+        from app.utils.email_templates import get_email_html
+        
         status = schedule.get('status')
         date = schedule.get('scheduled_date')
         
-        subject = f"Reminder: Inspection {status} - Action Required"
-        content = f"""
-        <p>Hello {inspector_name},</p>
-        <p>This is a reminder for your inspection schedule.</p>
-        <ul>
-            <li><strong>Status:</strong> {status}</li>
-            <li><strong>Equipment ID:</strong> {schedule.get('equipment_id')}</li>
-            <li><strong>Date:</strong> {date}</li>
-            <li><strong>Time:</strong> {schedule.get('start_time')} - {schedule.get('end_time')}</li>
-        </ul>
-        <p>Please login to your dashboard to view details and take action.</p>
-        <a href="http://localhost:5173/inspection" class="button">Go to Dashboard</a>
-        """
+        email_content = get_email_html(
+            title=f"Reminder: Inspection {status}",
+            name=inspector_name,
+            intro="This is a reminder for your inspection schedule.",
+            details={
+                "Status": status,
+                "Equipment ID": str(schedule.get('equipment_id')),
+                "Date": str(date),
+                "Time": f"{schedule.get('start_time')} - {schedule.get('end_time')}"
+            },
+            action_url="http://localhost:5173/inspection",
+            action_text="Go to Dashboard"
+        )
         
-        send_email(inspector_email, subject, content)
+        send_email(inspector_email, f"Reminder: Inspection {status} - Action Required", email_content)
         print(f"Reminder email sent to {inspector_email}")
         
         return {"message": "Reminder sent successfully"}
@@ -174,3 +195,18 @@ async def send_reminder(schedule_id: int, db: Any = Depends(get_db)):
     except Exception as e:
         print(f"Error sending reminder: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/inspector/{inspector_id}/pending")
+def get_inspector_pending_schedules(inspector_id: int, db: Any = Depends(get_db)):
+    """Fetch only pending schedules for a specific inspector"""
+    try:
+        # Use simple query for efficiency
+        res = db.table("inspectionschedule").select("*") \
+            .eq("inspector_id", inspector_id) \
+            .eq("status", "Pending") \
+            .execute()
+        return res.data if res.data else []
+    except Exception as e:
+        print(f"Error fetching pending schedules: {e}")
+        # Return empty list on error to avoid breaking UI
+        return []

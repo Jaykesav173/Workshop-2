@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from datetime import datetime
 import os
-from app.database.schemas import ReportCreate, ReportResponse, API510ReportRequest, ReportReviewRequest
+from app.database.schemas import ReportCreate, ReportResponse, API510ReportRequest, ReportReviewRequest, ReportSearchRequest
 from app.routers.report_generation.service_report_generation import ReportGenerationService
 from app.dependencies import get_current_user
 
@@ -56,9 +56,34 @@ async def get_submitted_reports(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Only engineers can view submitted reports")
     return await report_service.get_submitted_reports()
 
+@router.get("/my-notifications")
+async def get_my_report_notifications(current_user: dict = Depends(get_current_user)):
+    """Fast endpoint for fetching my report notifications"""
+    return await report_service.get_my_reports(current_user["id"], current_user.get("username", ""))
+
 @router.get("/all", response_model=list[ReportResponse])
 async def get_all_reports(current_user: dict = Depends(get_current_user)):
     """Get all reports with all statuses (for dashboard statistics)"""
+    return await report_service.get_all_reports()
+
+@router.get("/history/archive", response_model=list[ReportResponse])
+async def get_report_archive(current_user: dict = Depends(get_current_user)):
+    """
+    Get all reports history/archive.
+    Used by Engineer/Admin Dashboards as fallback or primary data source.
+    """
+    return await report_service.get_all_reports()
+
+@router.post("/history/search", response_model=list[ReportResponse])
+async def search_reports_history(
+    search_data: ReportSearchRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Search reports history.
+    Currently returns all reports (simple implementation for fallback compatibility).
+    """
+    # TODO: Implement actual filtering logic in service layer if needed in future
     return await report_service.get_all_reports()
 
 @router.get("/inspection/{inspection_id}")

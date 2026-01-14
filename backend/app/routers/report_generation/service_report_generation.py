@@ -2452,6 +2452,46 @@ class ReportGenerationService:
             return []
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching reports: {str(e)}")
+            
+    async def get_my_reports(self, user_id: int, user_name: str) -> list[ReportResponse]:
+        """OPTIMIZED: Fetch only reports relevant to the current user for notifications"""
+        try:
+            # Only select necessary columns to avoid fetching heavy JSON content
+            # Filter by inspector name OR created_by OR reviewer (if applicable)
+            # And only fetch relevant statuses
+            
+            # Using OR filter: created_by.eq.ID,inspector_name.eq.NAME
+            # Note: Supabase postgrest filter format
+            
+            # We want: 
+            # 1. Reports created by me
+            # 2. Reports where I am listed as inspector
+            # 3. Reports that are APPROVED, NEEDS REVISION (for notifications)
+            
+            columns = "report_id, title, status, created_at, updated_at, inspector_name, created_by, report_title"
+            
+            # Since OR queries can be complex in this client, let's try a simple filter first on created_by
+            # Most notifications are for the creator
+            
+            res = self.db.table("Report").select(columns).eq("created_by", user_id).in_("status", ["APPROVED", "NEEDS REVISION", "Rejection"]).execute()
+            
+            # Also try to fetch by inspector_name if different
+            # merging logic would go here if needed, but 'created_by' is the primary link for 'my' reports
+            
+            reports = []
+            if res.data:
+                for r in res.data:
+                     # Create light dict for response (mapping to schema might key error if fields missing)
+                     # We return a simplified dict list, not full ReportResponse to avoid validation errors on missing fields
+                     # The caller (router) should handle this or we adjust schema. 
+                     # Actually, let's return dict/dynamic since schema expects many fields.
+                     reports.append(r)
+                     
+            return reports
+
+        except Exception as e:
+            print(f"Error fetching optimized reports: {e}")
+            return []
     
     async def get_all_reports(self) -> list[ReportResponse]:
         """Get all reports with all statuses (for dashboard statistics)"""
@@ -2607,6 +2647,47 @@ class ReportGenerationService:
             except Exception:
                 pass
             
+            
+            # Send email notification to Engineers
+            try:
+                # Fetch all engineers
+                engineers_res = self.db.table("User").select("email, username").eq("role", "ENGINEER").eq("Account_status", "ACTIVE").execute()
+                
+                if engineers_res.data:
+                    from app.utils.email_utils import send_email
+                    from app.utils.email_templates import get_email_html
+                    from datetime import datetime
+                    
+                    report_title = db_record.get('title') or report_no or 'Untitled Report'
+                    equipment_id = db_record.get('equipment_id', 'N/A')
+                    submitter_name = current_user.get('username', 'Inspector') if current_user else 'Inspector'
+                    
+                    for engineer in engineers_res.data:
+                        email = engineer.get('email')
+                        if not email:
+                            continue
+                            
+                        # customized email content
+                        content = get_email_html(
+                            title="Report Submitted for Review",
+                            name=engineer.get('username', 'Engineer'),
+                            intro="A new inspection report has been submitted for your review.",
+                            details={
+                                "Report Title": report_title,
+                                "Equipment ID": str(equipment_id),
+                                "Submitted By": submitter_name,
+                                "Date": datetime.utcnow().strftime("%Y-%m-%d")
+                            },
+                            action_url=f"http://localhost:5173/review-inspection/{report_id}",
+                            action_text="Review Report"
+                        )
+                        
+                        send_email(email, f"Action Required: Report Submitted - {report_title}", content)
+                        print(f"📧 Notification sent to engineer: {email}")
+            except Exception as notify_e:
+                print(f"⚠️ Failed to send engineer notifications: {notify_e}")
+                # Don't block submission
+                
             response_data = {
                 **db_record,
                 'api_510_compliant': bool(api_510_value),
@@ -2707,6 +2788,53 @@ class ReportGenerationService:
                         report_no = content_data['header'].get('report_no')
             except Exception:
                 pass
+            
+            # Send email notification
+            try:
+                # Get report creator's email
+                created_by = db_record.get('created_by')
+                if created_by:
+                    user_res = self.db.table("User").select("email, username").eq("id", created_by).execute()
+                    if user_res.data:
+                        creator_email = user_res.data[0]['email']
+                        creator_name = user_res.data[0]['username']
+                        
+                        from app.utils.email_utils import send_email
+                        from app.utils.email_templates import get_email_html
+                        
+                        subject = f"Report {action_upper}: {db_record.get('title') or report_no or 'Untitled'}"
+                        status_color = "#10B981" if action_upper == "APPROVE" else "#EF4444"
+                        status_text = "APPROVED" if action_upper == "APPROVE" else "NEEDS REVISION"
+                        
+                        details = {
+                            "Report No": report_no or 'N/A',
+                            "Equipment": str(db_record.get('equipment_id', 'N/A')),
+                            "Status": f'<span style="color: {status_color}; font-weight: bold;">{status_text}</span>'
+                        }
+                        
+                        custom_html = ""
+                        if comment:
+                            custom_html = f"""
+                                <div style="background-color: #FEF2F2; border-left: 4px solid #EF4444; padding: 12px; margin-bottom: 20px;">
+                                    <p style="margin: 0; font-weight: bold; color: #991B1B;">Reviewer Comments:</p>
+                                    <p style="margin: 4px 0 0 0; color: #7F1D1D;">{comment}</p>
+                                </div>
+                            """
+                        
+                        content = get_email_html(
+                            title=f"Report {action_upper.title()}d",
+                            name=creator_name,
+                            intro="Your inspection report has been reviewed by the engineering team.",
+                            details=details,
+                            custom_content_html=custom_html,
+                            action_url="http://localhost:5173/inspection",
+                            action_text="View Report"
+                        )
+                        
+                        send_email(creator_email, subject, content)
+                        print(f"📧 Sent review notification email to {creator_email}")
+            except Exception as notify_err:
+                print(f"⚠️ Failed to send review notification email: {notify_err}")
             
             response_data = {
                 **db_record,

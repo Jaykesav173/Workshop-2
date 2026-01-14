@@ -39,7 +39,8 @@ class EquipmentService:
             
             if res.data:
                 return EquipmentResponse(**res.data[0])
-                raise HTTPException(status_code=400, detail="Failed to create equipment")
+            
+            raise HTTPException(status_code=400, detail="Failed to create equipment - no data returned")
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error creating equipment: {str(e)}")
@@ -105,8 +106,12 @@ class EquipmentService:
                         eq_photos = [p for p in photos_res.data if p['equipment_id'] == eq['id']]
                         if eq_photos:
                             # Set main image (first one or general)
-                            filename = os.path.basename(eq_photos[0]['file_path'])
-                            eq['image_url'] = f"/static/uploads/{filename}"
+                            photo = eq_photos[0]
+                            if photo.get('storage_url'):
+                                eq['image_url'] = photo['storage_url']
+                            else:
+                                filename = os.path.basename(photo['file_path'])
+                                eq['image_url'] = f"/static/uploads/{filename}"
                             eq['photos'] = eq_photos
                         else:
                             eq['photos'] = []
@@ -116,6 +121,16 @@ class EquipmentService:
             return [EquipmentResponse(**eq) for eq in equipment_list]
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
+
+    # Get lightweight equipment list (for dropdowns)
+    async def get_equipment_list(self):
+        try:
+            # Select all fields to satisfy EquipmentResponse schema, but skip photos
+            res = self.db.table("equipment").select("*").order("equipment_tag_no").execute()
+            equipment_list = res.data if res.data else []
+            return [EquipmentResponse(**eq) for eq in equipment_list]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching equipment list: {str(e)}")
     
     # Get the equipment by ID
     async def get_equipment(self, equipment_id: str):
@@ -132,8 +147,12 @@ class EquipmentService:
             
             if photo_res.data:
                 # Use the first one or logic to pick 'General' as main
-                filename = os.path.basename(photo_res.data[0]['file_path'])
-                equipment['image_url'] = f"/static/uploads/{filename}"
+                photo = photo_res.data[0]
+                if photo.get('storage_url'):
+                    equipment['image_url'] = photo['storage_url']
+                else:
+                    filename = os.path.basename(photo['file_path'])
+                    equipment['image_url'] = f"/static/uploads/{filename}"
                 
             return EquipmentResponse(**equipment)
         except Exception as e:

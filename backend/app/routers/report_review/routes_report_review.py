@@ -13,7 +13,7 @@ router = APIRouter(prefix="/report-review", tags=["Report Review"])
 report_review_service = ReportReviewService()
 
 @router.post("/review")
-async def submit_review(review_data: schemas.ReportReviewCreate, current_user: dict = Depends(get_current_user)):
+async def submit_review(review_data: schemas.ReportReviewRequest, current_user: dict = Depends(get_current_user)):
     try:
         user_id = current_user.get('id')
         await report_review_service.create_review(review_data, reviewed_by=user_id)

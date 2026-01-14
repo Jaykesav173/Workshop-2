@@ -1,0 +1,9 @@
+Total photos: 2
+Photo 0:
+  file_path: C:\Users\bodyg\OneDrive\Pictures\sem4\workshope2\VISOR (2)\VISOR\backend\app\storage\uploads\1a5ef627-4ee8-41e5-abbd-3a8256b6a110.jpg
+  storage_url: http://localhost:8000/api/photos/228/file
+  finding_key: 1.1
+Photo 1:
+  file_path: C:\Users\bodyg\OneDrive\Pictures\sem4\workshope2\VISOR (2)\VISOR\backend\app\storage\uploads\85f95bc1-15c9-4738-b366-7f1854647bbe.jpg
+  storage_url: http://localhost:8000/api/photos/229/file
+  finding_key: 1.2

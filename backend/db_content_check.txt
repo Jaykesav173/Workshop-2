@@ -1,0 +1,2 @@
+Content field exists.
+Content is valid JSON. Keys: ['inspection_id', 'equipment_id', 'header', 'findings', 'recommendations', 'photos', 'ndt_text', 'initial_inspection_text']

@@ -37,3 +37,22 @@ async def get_defect_analysis(current_user: dict = Depends(get_current_user)):
     """Get defect analysis and statistics"""
     return await analytics_service.get_defect_analysis()
 
+@router.get("/dashboard/user_summary/{user_id}")
+async def get_user_summary(user_id: int):
+    """Get dashboard summary for a specific user"""
+    return await analytics_service.get_user_summary(user_id)
+
+@router.get("/dashboard/reports_by_status/{user_id}")
+async def reports_by_status(user_id: int):
+    """Get reports status distribution for a user"""
+    return await analytics_service.get_user_reports_status(user_id)
+
+@router.get("/dashboard/reports_trend/{user_id}")
+async def reports_trend(user_id: int):
+    """Get reports trend for a user"""
+    return await analytics_service.get_user_reports_trend(user_id)
+
+@router.get("/dashboard/recent_activity/{user_id}")
+async def recent_activity(user_id: int):
+    """Get recent activity for a user"""
+    return await analytics_service.get_user_recent_activity(user_id)
