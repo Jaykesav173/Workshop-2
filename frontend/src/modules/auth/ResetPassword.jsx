@@ -55,13 +55,13 @@ export default function ResetPassword() {
     setIsSubmitting(true);
 
     try {
-      const res = await axios.post(`${API_BASE}/reset_password_forgot`, {
+      const res = await axios.post(`${API_BASE}/api/auth/reset_password_forgot`, {
         email,
         new_password: newPassword,
       });
 
       if (res.data.success) {
-        setError(""); 
+        setError("");
         alert("Password reset successfully! Redirecting to login...");
         setTimeout(() => navigate("/login"), 2000);
       }
@@ -77,14 +77,14 @@ export default function ResetPassword() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 flex items-center justify-center p-4">
       <Card className="w-full max-w-md mx-auto">
         <CardHeader className="text-center space-y-4">
-        <div className="mx-auto w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center">
-         <Lock className="w-8 h-8 text-white" />
-        </div>
-      <CardTitle>Reset Password</CardTitle>
-      <CardDescription className="text-sm text-slate-600">
-        Account: <span className="font-medium">{email}</span>
-      </CardDescription>
-</CardHeader>
+          <div className="mx-auto w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center">
+            <Lock className="w-8 h-8 text-white" />
+          </div>
+          <CardTitle>Reset Password</CardTitle>
+          <CardDescription className="text-sm text-slate-600">
+            Account: <span className="font-medium">{email}</span>
+          </CardDescription>
+        </CardHeader>
 
 
         <CardContent>

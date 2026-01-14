@@ -29,19 +29,32 @@ export function SettingsView() {
   // ---------------- LOAD PROFILE ----------------
   useEffect(() => {
 
-    const storedUser = localStorage.getItem("loggedInUser");
+    const storedUser = localStorage.getItem("user"); // Using 'user' based on MainLayout login logic
     if (!storedUser) return;
 
-    const parsed = JSON.parse(storedUser);
-    setUserId(parsed.id);
+    try {
+      const parsed = JSON.parse(storedUser);
+      setUserId(parsed.id);
 
-    axios.get(`${API_BASE}/users/${parsed.id}`)
-      .then(res => {
-        setForm(res.data.user);
+      // Fetch fresh data
+      const token = localStorage.getItem("token");
+      axios.get(`${API_BASE}/users/${parsed.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
       })
-      .catch(err => {
-        console.error("Profile fetch error:", err);
-      });
+        .then(res => {
+          // Adjust based on your backend response structure
+          // Sometimes it might be res.data.user or just res.data
+          const userData = res.data.user || res.data;
+          setForm(prev => ({ ...prev, ...userData }));
+        })
+        .catch(err => {
+          console.error("Profile fetch error:", err);
+          // Fallback to stored user data if fetch fails
+          setForm(prev => ({ ...prev, ...parsed }));
+        });
+    } catch (e) {
+      console.error("Error parsing stored user:", e);
+    }
 
   }, []);
 
@@ -60,24 +73,30 @@ export function SettingsView() {
     e.preventDefault();
 
     // Basic validation
-    if (!form.name || !form.username || !form.email) {
-      alert("Name, Username, and Email are required.");
+    if (!form.username || !form.email) {
+      alert("Username and Email are required.");
       return;
     }
 
     try {
       setSaving(true);
+      const token = localStorage.getItem("token");
 
       const res = await axios.put(
         `${API_BASE}/users/${userId}`,
-        form
+        form,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
       );
 
       // Save updated user back to localStorage
-      localStorage.setItem(
-        "loggedInUser",
-        JSON.stringify(res.data.user)
-      );
+      // Ensure we keep the token and other auth details if the backend response doesn't include them
+      const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+      const updatedUser = { ...currentUser, ...res.data.user };
+
+      localStorage.setItem("user", JSON.stringify(updatedUser)); // Update 'user' key
+      localStorage.setItem("loggedInUser", JSON.stringify(updatedUser)); // Update 'loggedInUser' key if used elsewhere
 
       alert("✅ Profile updated successfully!");
 
@@ -93,7 +112,7 @@ export function SettingsView() {
 
   // ---------------- RENDER ----------------
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-4xl max-auto p-6 space-y-6">
 
       <Card>
 
@@ -114,7 +133,7 @@ export function SettingsView() {
                 <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
-                  value={form.name}
+                  value={form.name || ""}
                   onChange={handleChange}
                 />
               </div>
@@ -123,7 +142,7 @@ export function SettingsView() {
                 <Label htmlFor="username">Username</Label>
                 <Input
                   id="username"
-                  value={form.username}
+                  value={form.username || ""}
                   onChange={handleChange}
                 />
               </div>
@@ -137,7 +156,7 @@ export function SettingsView() {
               <Input
                 id="email"
                 type="email"
-                value={form.email}
+                value={form.email || ""}
                 onChange={handleChange}
               />
             </div>
@@ -149,7 +168,7 @@ export function SettingsView() {
               <Input
                 id="phone_number"
                 type="tel"
-                value={form.phone_number}
+                value={form.phone_number || ""}
                 onChange={handleChange}
               />
             </div>
@@ -160,7 +179,7 @@ export function SettingsView() {
               <Label htmlFor="ic_number">IC Number</Label>
               <Input
                 id="ic_number"
-                value={form.ic_number}
+                value={form.ic_number || ""}
                 onChange={handleChange}
               />
             </div>
@@ -172,7 +191,7 @@ export function SettingsView() {
               <Input
                 id="date_of_birth"
                 type="date"
-                value={form.date_of_birth}
+                value={form.date_of_birth || ""}
                 onChange={handleChange}
               />
             </div>
@@ -183,7 +202,7 @@ export function SettingsView() {
               <Label htmlFor="school_name">School Name</Label>
               <Input
                 id="school_name"
-                value={form.school_name}
+                value={form.school_name || ""}
                 onChange={handleChange}
               />
             </div>
@@ -194,7 +213,7 @@ export function SettingsView() {
               <Label htmlFor="mother_name">Mother's Name</Label>
               <Input
                 id="mother_name"
-                value={form.mother_name}
+                value={form.mother_name || ""}
                 onChange={handleChange}
               />
             </div>
@@ -204,7 +223,7 @@ export function SettingsView() {
             <Button
               type="submit"
               disabled={saving}
-              className="mt-4"
+              className="mt-4 bg-red-600 hover:bg-red-700 text-white"
             >
               {saving ? "Saving..." : "Save Changes"}
             </Button>
@@ -217,3 +236,5 @@ export function SettingsView() {
     </div>
   );
 }
+
+export default SettingsView;

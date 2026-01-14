@@ -40,7 +40,7 @@ export default function CompleteProfile() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/api/complete_profile", {
+      const res = await fetch("http://localhost:8000/api/users/complete_profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

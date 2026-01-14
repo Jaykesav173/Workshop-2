@@ -87,11 +87,11 @@ function Login() {
   const handleLogin = async ({ username, password, requested_role }) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // Try using our authService first
       const response = await authService.login(username, password);
-      
+
       if (response.success || response.access_token) {
         const backendRole = response.user?.role;
         // Enforce role-based login per selected tab
@@ -107,6 +107,10 @@ function Login() {
         if (response.user) {
           localStorage.setItem('user', JSON.stringify(response.user));
           localStorage.setItem('userRole', response.user.role || 'USER');
+
+          if (response.notifications && response.notifications.length > 0) {
+            localStorage.setItem('loginNotifications', JSON.stringify(response.notifications));
+          }
         }
 
         // Check for first login (if supported)
@@ -135,7 +139,7 @@ function Login() {
       }
     } catch (error) {
       console.error('Login failed:', error);
-      
+
       // Try alternative API endpoint from dev-haifa if our authService fails
       try {
         const res = await fetch(`${API_BASE}/login`, {
@@ -162,6 +166,10 @@ function Login() {
 
         localStorage.setItem("loggedInUser", JSON.stringify(data.user));
         localStorage.setItem("token", data.access_token || data.token || "");
+
+        if (data.notifications && data.notifications.length > 0) {
+          localStorage.setItem('loginNotifications', JSON.stringify(data.notifications));
+        }
 
         setCurrentUserType(requested_role);
         setCurrentUsername(username);
@@ -267,12 +275,13 @@ function Login() {
       </div>
 
       {/* Login Card */}
-      <Card className="w-full max-w-md shadow-xl border border-slate-200/50 bg-white/98 backdrop-blur-sm dark:bg-white/98">
+      {/* Login Card */}
+      <Card className="w-full max-w-md shadow-2xl border-0 bg-slate-900 rounded-2xl">
         <CardHeader className="text-center pb-6 pt-8 relative z-10">
-          <CardTitle className="text-2xl font-semibold !text-white drop-shadow-lg dark:!text-white">
+          <CardTitle className="text-2xl font-semibold text-white drop-shadow-lg">
             Welcome back
           </CardTitle>
-          <CardDescription className="!text-white/95 mt-2 drop-shadow-md dark:!text-white/95">
+          <CardDescription className="text-slate-400 mt-2">
             Sign in to your account to continue
           </CardDescription>
         </CardHeader>
@@ -280,7 +289,7 @@ function Login() {
         <CardContent className="px-6 pb-8">
           {/* Error Display */}
           {error && (
-            <div className="mb-5 p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-sm shadow-sm">
+            <div className="mb-5 p-3 bg-red-500/10 border border-red-500/50 text-red-200 rounded-lg text-sm shadow-sm">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-4 flex-shrink-0" />
                 <span>{error}</span>
@@ -289,22 +298,22 @@ function Login() {
           )}
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid grid-cols-3 w-full bg-slate-100 p-1 rounded-lg">
-              <TabsTrigger 
+            <TabsList className="grid grid-cols-3 w-full bg-slate-100 p-1 rounded-xl">
+              <TabsTrigger
                 value="user"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-red-600 data-[state=active]:font-semibold"
+                className="data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:font-semibold data-[state=active]:shadow-sm text-slate-500 hover:text-slate-800"
               >
                 <User className="size-4 mr-1.5" /> Inspector
               </TabsTrigger>
-              <TabsTrigger 
+              <TabsTrigger
                 value="admin"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-red-600 data-[state=active]:font-semibold"
+                className="data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:font-semibold data-[state=active]:shadow-sm text-slate-500 hover:text-slate-800"
               >
                 <Shield className="size-4 mr-1.5" /> Admin
               </TabsTrigger>
-              <TabsTrigger 
+              <TabsTrigger
                 value="engineer"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-red-600 data-[state=active]:font-semibold"
+                className="data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:font-semibold data-[state=active]:shadow-sm text-slate-500 hover:text-slate-800"
               >
                 <Wrench className="size-4 mr-1.5" /> Engineer
               </TabsTrigger>
@@ -324,7 +333,7 @@ function Login() {
                 }}
               >
                 <div className="space-y-2">
-                  <Label className="text-slate-700 font-medium">Username</Label>
+                  <Label className="text-slate-400 font-medium">Username</Label>
                   <Input
                     value={credentials.userUsername}
                     onChange={(e) =>
@@ -335,13 +344,13 @@ function Login() {
                     }
                     required
                     disabled={loading}
-                    className="h-11 border-slate-300 focus:border-red-600 focus:ring-red-500"
+                    className="h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-red-600 focus:ring-red-600 rounded-xl"
                     placeholder="Enter your username"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-slate-700 font-medium">Password</Label>
+                  <Label className="text-slate-400 font-medium">Password</Label>
                   <div className="relative">
                     <Input
                       type={showUserPassword ? "text" : "password"}
@@ -354,12 +363,12 @@ function Login() {
                       }
                       required
                       disabled={loading}
-                      className="h-11 border-slate-300 focus:border-red-600 focus:ring-red-500 pr-10"
+                      className="h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-red-600 focus:ring-red-600 rounded-xl pr-10"
                       placeholder="Enter your password"
                     />
                     <button
                       type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
                       onClick={() => setShowUserPassword(!showUserPassword)}
                     >
                       {showUserPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -368,8 +377,8 @@ function Login() {
                 </div>
 
                 <ForgotPasswordLink />
-                <Button 
-                  className="w-full h-11 bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-all" 
+                <Button
+                  className="w-full h-11 bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-all rounded-xl"
                   disabled={loading}
                 >
                   {loading ? 'Signing in...' : 'Sign in as Inspector'}
@@ -391,7 +400,7 @@ function Login() {
                 }}
               >
                 <div className="space-y-2">
-                  <Label className="text-slate-700 font-medium">Username</Label>
+                  <Label className="text-slate-400 font-medium">Username</Label>
                   <Input
                     value={credentials.adminUsername}
                     onChange={(e) =>
@@ -402,13 +411,13 @@ function Login() {
                     }
                     required
                     disabled={loading}
-                    className="h-11 border-slate-300 focus:border-red-600 focus:ring-red-500"
+                    className="h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-red-600 focus:ring-red-600 rounded-xl"
                     placeholder="Enter your username"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-slate-700 font-medium">Password</Label>
+                  <Label className="text-slate-400 font-medium">Password</Label>
                   <div className="relative">
                     <Input
                       type={showAdminPassword ? "text" : "password"}
@@ -421,7 +430,7 @@ function Login() {
                       }
                       required
                       disabled={loading}
-                      className="h-11 border-slate-300 focus:border-red-600 focus:ring-red-500 pr-10"
+                      className="h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-red-600 focus:ring-red-600 rounded-xl pr-10"
                       placeholder="Enter your password"
                     />
                     <button
@@ -435,8 +444,8 @@ function Login() {
                 </div>
 
                 <ForgotPasswordLink />
-                <Button 
-                  className="w-full h-11 bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-all" 
+                <Button
+                  className="w-full h-11 bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-all rounded-xl"
                   disabled={loading}
                 >
                   {loading ? 'Signing in...' : 'Sign in as Admin'}
@@ -458,7 +467,7 @@ function Login() {
                 }}
               >
                 <div className="space-y-2">
-                  <Label className="text-slate-700 font-medium">Username</Label>
+                  <Label className="text-slate-400 font-medium">Username</Label>
                   <Input
                     value={credentials.engineerUsername}
                     onChange={(e) =>
@@ -469,13 +478,13 @@ function Login() {
                     }
                     required
                     disabled={loading}
-                    className="h-11 border-slate-300 focus:border-red-600 focus:ring-red-500"
+                    className="h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-red-600 focus:ring-red-600 rounded-xl"
                     placeholder="Enter your username"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-slate-700 font-medium">Password</Label>
+                  <Label className="text-slate-400 font-medium">Password</Label>
                   <div className="relative">
                     <Input
                       type={showEngineerPassword ? "text" : "password"}
@@ -488,12 +497,12 @@ function Login() {
                       }
                       required
                       disabled={loading}
-                      className="h-11 border-slate-300 focus:border-red-600 focus:ring-red-500 pr-10"
+                      className="h-11 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-red-600 focus:ring-red-600 rounded-xl pr-10"
                       placeholder="Enter your password"
                     />
                     <button
                       type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
                       onClick={() =>
                         setShowEngineerPassword(!showEngineerPassword)
                       }
@@ -504,8 +513,8 @@ function Login() {
                 </div>
 
                 <ForgotPasswordLink />
-                <Button 
-                  className="w-full h-11 bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-all" 
+                <Button
+                  className="w-full h-11 bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-all rounded-xl"
                   disabled={loading}
                 >
                   {loading ? 'Signing in...' : 'Sign in as Engineer'}

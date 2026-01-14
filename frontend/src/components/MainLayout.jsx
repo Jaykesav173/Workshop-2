@@ -152,7 +152,7 @@ export default function MainLayout() {
   useEffect(() => {
     const userStr = localStorage.getItem('user')
     const token = localStorage.getItem('token')
-    
+
     if (!token) {
       navigate('/login')
       return
@@ -162,13 +162,38 @@ export default function MainLayout() {
       try {
         const userData = JSON.parse(userStr)
         setUser(userData)
+        // Check for login notifications passed from Login page
+        const loginNotifsStr = localStorage.getItem('loginNotifications')
+        if (loginNotifsStr) {
+          try {
+            const loginNotifs = JSON.parse(loginNotifsStr)
+            // These are already formatted from backend, but MainLayout expects specific format?
+            // Backend sends: { type, message, id, date }
+            // MainLayout expects: { id, title, message, created_at, action_link }
+
+            // We can map them or just use them if we display generic messages
+            // Let's assume we want to alert immediately
+
+            if (loginNotifs.length > 0 && !sessionStorage.getItem('hasShownPendingAlert')) {
+              alert(`🔔 Login Notification: You have ${loginNotifs.length} new items.\n\n${loginNotifs.map(n => n.message).join('\n')}`)
+              sessionStorage.setItem('hasShownPendingAlert', 'true')
+            }
+
+            // Clear it so it doesn't show again on refresh
+            localStorage.removeItem('loginNotifications')
+
+          } catch (e) {
+            console.error("Error parsing login notifications", e)
+          }
+        }
+
         // Only fetch notifications on mount, not on every navigation
         // Use a cache key to prevent redundant fetches within 30 seconds
         const cacheKey = `notifications_cache_${userData.id}`
         const cacheTime = localStorage.getItem(cacheKey)
         const now = Date.now()
-        const CACHE_DURATION = 30000 // 30 seconds
-        
+        const CACHE_DURATION = 5000 // 5 seconds
+
         if (!cacheTime || (now - parseInt(cacheTime)) > CACHE_DURATION) {
           fetchNotifications(userData.id)
           localStorage.setItem(cacheKey, now.toString())
@@ -177,185 +202,35 @@ export default function MainLayout() {
         console.error('Error parsing user data:', e)
       }
     }
-  }, [navigate]) // Only run on mount, not on every navigation
+  }, [navigate, location.pathname]) // Run on mount and every navigation (debounced by cache)
+  // Fetch on dropdown open to ensure freshness (e.g. after confirming an inspection on the same page)
+  useEffect(() => {
+    if (notificationDropdownOpen && user) {
+      fetchNotifications(user.id)
+    }
+  }, [notificationDropdownOpen])
 
   const fetchNotifications = async (userId) => {
     try {
-      let newNotifs = []
-      const today = new Date().toISOString().split('T')[0]
+      // Use the new consolidated endpoint
+      const response = await fetch(`http://localhost:8000/api/notifications/all/${userId}`)
+      if (response.ok) {
+        const activeNotifs = await response.json()
 
-      // --- 1. SCHEDULES ---
-      // Table-less approach: Fetch all schedules and filter for Pending ones for this user
-      try {
-        const response = await fetch(`http://localhost:8000/schedules/all`)
-        if (response.ok) {
-        const allSchedules = await response.json()
+        // Filter out dismissed notifications
+        // Note: Backend returns all active items. Front-end suppression handles "dismissed" items locally for the session/browser
+        const visibleNotifs = activeNotifs.filter(n => !localStorage.getItem(`dismissed_notif_${n.id}`))
 
-        // Filter for this user (loose comparison for robustness)
-        const mySchedules = allSchedules.filter(s => s.inspector_id == userId)
+        setNotifications(visibleNotifs)
+        setUnreadCount(visibleNotifs.length)
 
-        // Pending
-        const pending = mySchedules.filter(s => s.status === 'Pending')
-        pending.forEach(s => {
-          newNotifs.push({
-            id: `sched_${s.schedule_id}`,
-            title: "New Schedule Assigned",
-            message: `Inspection for EQ-${s.equipment_id} at ${s.location || 'Site'} is pending confirmation.`,
-            created_at: s.scheduled_date,
-            action_link: `/photo-upload?scheduleId=${s.schedule_id}`
-          })
-        })
-
-        // Due Today
-        const dueToday = mySchedules.filter(s => s.status === 'Confirmed' && s.scheduled_date === today)
-        dueToday.forEach(s => {
-          newNotifs.push({
-            id: `due_${s.schedule_id}`,
-            title: "Inspection Due Today",
-            message: `Inspection for EQ-${s.equipment_id} is due today.`,
-            created_at: s.scheduled_date,
-            action_link: `/photo-upload?scheduleId=${s.schedule_id}`
-          })
-        })
-
-        // Overdue
-        const overdue = mySchedules.filter(s => s.status === 'Confirmed' && s.scheduled_date < today)
-        overdue.forEach(s => {
-          newNotifs.push({
-            id: `over_${s.schedule_id}`,
-            title: "Inspection Overdue",
-            message: `Inspection for EQ-${s.equipment_id} is overdue!`,
-            created_at: s.scheduled_date,
-            action_link: `/photo-upload?scheduleId=${s.schedule_id}`
-          })
-        })
-
-        // --- STATELESS REMINDER EMAIL TRIGGER (SCHEDULES) ---
-        const checkAndSendReminders = async (schedules, type) => {
-          for (const s of schedules) {
-            const key = `reminder_sent_${s.schedule_id}_${today}`
-            if (!localStorage.getItem(key)) {
-              try {
-                console.log(`Sending ${type} reminder for Schedule ${s.schedule_id}...`)
-                await fetch(`http://localhost:8000/schedules/send-reminder/${s.schedule_id}`, { method: 'POST' })
-                localStorage.setItem(key, 'true')
-              } catch (err) {
-                console.error("Failed to send reminder:", err)
-              }
-            }
-          }
+        // Alert user if there are items, but only ONCE per session
+        const hasShownAlert = sessionStorage.getItem('hasShownPendingAlert')
+        if (visibleNotifs.length > 0 && !hasShownAlert) {
+          alert(`🔔 Notice: You have ${visibleNotifs.length} items requiring attention.`)
+          sessionStorage.setItem('hasShownPendingAlert', 'true')
         }
-        if (dueToday.length > 0) checkAndSendReminders(dueToday, "Due Today")
-        if (overdue.length > 0) checkAndSendReminders(overdue, "Overdue")
-        }
-      } catch (scheduleError) {
-        console.warn("Failed to fetch schedules for notifications:", scheduleError)
       }
-
-      // --- 2. REPORTS ---
-      // Fetch latest reports to check for status updates (Approved/Rejected)
-      // OPTIMIZED: Use timeout and non-blocking fetch to prevent delays
-      try {
-        const token = localStorage.getItem('token')
-        let allReports = []
-        
-        if (token) {
-          // Use Promise.race with timeout to prevent hanging requests
-          const fetchWithTimeout = (url, options, timeout = 5000) => {
-            return Promise.race([
-              fetch(url, options),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Request timeout')), timeout)
-              )
-            ])
-          }
-          
-          try {
-            const reportRes = await fetchWithTimeout(`http://localhost:8000/api/reports/all`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            }, 5000) // 5 second timeout
-            
-            // Only process if response is successful
-            if (reportRes.ok) {
-              try {
-                const reportsData = await reportRes.json()
-                
-                // Ensure reportsData is an array
-                if (Array.isArray(reportsData)) {
-                  allReports = reportsData
-                  
-                  const myReports = allReports.filter(r =>
-                    r && (r.created_by === userId || r.inspector_name === user?.username || r.inspector_name === user?.name) &&
-                    (r.status === 'APPROVED' || r.status === 'NEEDS REVISION' || r.status === 'Rejection')
-                  )
-
-                  myReports.forEach(r => {
-                    if (r && r.report_id) {
-                      let msg = r.status === 'APPROVED' ? "Report Approved" : "Report Needs Revision"
-                      newNotifs.push({
-                        id: `rep_${r.report_id}`,
-                        title: msg,
-                        message: `Report "${r.title || r.report_title || 'Untitled'}" status: ${r.status}`,
-                        created_at: r.created_at,
-                        action_link: `/validation/${r.report_id}`
-                      })
-                    }
-                  })
-                }
-              } catch (parseError) {
-                // Silently fail - don't spam console
-                // console.warn("Failed to parse reports response:", parseError)
-              }
-            } else {
-              // Silently handle non-200 responses - backend now returns empty array instead of 500
-              // Only log if it's not a 200/500 (which we now handle gracefully)
-              if (reportRes.status !== 200 && reportRes.status !== 500) {
-                console.warn(`Reports endpoint returned status ${reportRes.status}`)
-              }
-            }
-          } catch (fetchError) {
-            // Silently handle timeout or network errors - don't block UI
-            // console.warn("Failed to fetch reports (timeout or network error):", fetchError.message)
-          }
-        }
-
-        // --- 3. ENGINEER/ADMIN: REPORT REVIEWS ---
-        // If user is ADMIN or ENGINEER (or equivalent reviewer role), check for "Submitted" reports
-        if (allReports.length > 0) {
-          const userRole = user?.role?.toUpperCase() || ''
-          if (userRole === 'ADMIN' || userRole === 'ENGINEER') {
-            const pendingReview = allReports.filter(r => r && r.status === 'Submitted')
-
-            pendingReview.forEach(r => {
-              if (r && r.report_id) {
-                newNotifs.push({
-                  id: `rev_${r.report_id}`, // Distinct ID prefix for reviews
-                  title: "Report Submitted for Review",
-                  message: `Report "${r.title || r.report_title || 'Untitled'}" by ${r.inspector_name || 'Unknown'} is waiting for review.`,
-                  created_at: r.created_at || new Date().toISOString(),
-                  action_link: `/validation/${r.report_id}`
-                })
-              }
-            })
-          }
-        }
-      } catch (reportError) {
-        console.warn("Failed to fetch reports for notifications:", reportError)
-      }
-
-      // Filter out dismissed notifications
-      const activeNotifs = newNotifs.filter(n => !localStorage.getItem(`dismissed_notif_${n.id}`))
-
-      setNotifications(activeNotifs)
-      setUnreadCount(activeNotifs.length)
-
-      // Alert user if there are items, but only ONCE per session
-      const hasShownAlert = sessionStorage.getItem('hasShownPendingAlert')
-      if (activeNotifs.length > 0 && !hasShownAlert) {
-        alert(`🔔 Notice: You have ${activeNotifs.length} items requiring attention.`)
-        sessionStorage.setItem('hasShownPendingAlert', 'true')
-      }
-
     } catch (error) {
       console.error("Error fetching notifications:", error)
     }
@@ -368,27 +243,11 @@ export default function MainLayout() {
   }
 
   const handleModalClose = () => {
-    if (selectedNotification) {
-      // ONLY dismiss STATUS REPORTS (rep_)
-      // Schedules (sched_, due_, over_) stay in the list until backend completion
-      if (selectedNotification.id.startsWith('rep_')) {
-        localStorage.setItem(`dismissed_notif_${selectedNotification.id}`, 'true')
-        setNotifications(prev => prev.filter(n => n.id !== selectedNotification.id))
-        setUnreadCount(prev => Math.max(0, prev - 1))
-      }
-    }
     setSelectedNotification(null)
   }
 
   const handleModalAction = () => {
     if (selectedNotification) {
-      // ONLY dismiss STATUS REPORTS (rep_) upon action
-      if (selectedNotification.id.startsWith('rep_')) {
-        localStorage.setItem(`dismissed_notif_${selectedNotification.id}`, 'true')
-        setNotifications(prev => prev.filter(n => n.id !== selectedNotification.id))
-        setUnreadCount(prev => Math.max(0, prev - 1))
-      }
-
       if (selectedNotification.action_link) {
         navigate(selectedNotification.action_link)
       }
@@ -471,7 +330,7 @@ export default function MainLayout() {
             </div>
           )}
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-1">
           {menuItems.map((item) => {
             const isActive = isActiveMenuItem(item)
@@ -481,11 +340,10 @@ export default function MainLayout() {
                 onClick={() => {
                   if (item.path) navigate(item.path)
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? 'bg-red-50 text-red-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive
+                  ? 'bg-red-50 text-red-600 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
+                  }`}
               >
                 <div className={`${isActive ? 'text-red-600' : 'text-gray-500'}`}>
                   <item.icon />
@@ -514,7 +372,7 @@ export default function MainLayout() {
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center gap-4 ml-6">
               {/* Notification Bell */}
               <div className="relative notification-dropdown-container">
@@ -577,14 +435,14 @@ export default function MainLayout() {
                   )}
                   <Icons.ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 {/* Dropdown Menu */}
                 {profileDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-20">
                     <button
                       onClick={() => {
                         setProfileDropdownOpen(false)
-                        console.log('Profile clicked')
+                        navigate('/profile')
                       }}
                       className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
                     >
@@ -642,7 +500,7 @@ export default function MainLayout() {
                 onClick={handleModalClose}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium transition-colors"
               >
-                {selectedNotification.id.startsWith('rep_') ? 'Close (Dismiss)' : 'Close'}
+                Close
               </button>
               {selectedNotification.action_link && (
                 <button
