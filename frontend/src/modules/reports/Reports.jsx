@@ -98,7 +98,8 @@ function Reports() {
   const location = useLocation() // Get inspection_id from location state if present
   const fileInputRef = useRef(null)
   const [user, setUser] = useState(null)
-  
+  const [reportStatus, setReportStatus] = useState(null)
+
   // Report state
   const [inspectionId, setInspectionId] = useState(null) // Store inspection_id if available
   const [equipmentId, setEquipmentId] = useState(null)
@@ -106,7 +107,7 @@ function Reports() {
   const [selectedEquipment, setSelectedEquipment] = useState(null)
   const [availablePhotos, setAvailablePhotos] = useState([])
   const [currentUser, setCurrentUser] = useState(null)
-  
+
   // Header state
   const [header, setHeader] = useState({
     equipment_tag: '',
@@ -121,19 +122,19 @@ function Reports() {
     inspection_type: 'VI', // Default to Visual Inspection
     turnaround_code: null // Auto-generated from report_date
   })
-  
+
   // Function to generate report number according to format
   const generateReportNumber = (plant, equipmentTag, reportDate, inspectionType = 'VI', turnaroundCode = null) => {
     if (!plant || !equipmentTag || !reportDate) {
       return ''
     }
-    
+
     // Normalize plant name: remove spaces, convert to uppercase
     const plantNormalized = plant.replace(/\s+/g, '').toUpperCase()
-    
+
     // Normalize inspection type: uppercase, default to "VI"
     const inspectionTypeNormalized = (inspectionType || 'VI').toUpperCase()
-    
+
     // Extract year from report_date and create turnaround code
     let turnaroundCodeNormalized
     if (turnaroundCode) {
@@ -152,11 +153,11 @@ function Reports() {
         turnaroundCodeNormalized = `TA${new Date().getFullYear()}`
       }
     }
-    
+
     // Construct report number: PLANT/INSPECTION_TYPE/EQUIPMENT_TAG/TURNAROUND_CODE
     return `${plantNormalized}/${inspectionTypeNormalized}/${equipmentTag}/${turnaroundCodeNormalized}`
   }
-  
+
   // Auto-generate report number when relevant fields change
   useEffect(() => {
     if (header.plant && header.equipment_tag && header.report_date) {
@@ -176,15 +177,15 @@ function Reports() {
       })
     }
   }, [header.plant, header.equipment_tag, header.report_date, header.inspection_type, header.turnaround_code])
-  
+
   // Findings and recommendations
   const [findings, setFindings] = useState([])
   const [recommendations, setRecommendations] = useState([])
   const [ndtText, setNdtText] = useState('')
-  
+
   // Report photos (photos added to report)
   const [reportPhotos, setReportPhotos] = useState([])
-  
+
   // UI state
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(null)
@@ -250,7 +251,7 @@ function Reports() {
   useEffect(() => {
     const userStr = localStorage.getItem('user')
     const token = localStorage.getItem('token')
-    
+
     if (!token) {
       navigate('/login')
       return
@@ -276,7 +277,7 @@ function Reports() {
       console.error('Error parsing token:', err)
     }
   }, [navigate])
-  
+
   // Initialize inspection_id from URL params or location state
   useEffect(() => {
     const inspectionIdFromUrl = urlInspectionId || location.state?.inspectionId
@@ -288,7 +289,7 @@ function Reports() {
       }
     }
   }, [urlInspectionId, location.state])
-  
+
   // Fetch equipment list
   useEffect(() => {
     const fetchEquipment = async () => {
@@ -305,15 +306,15 @@ function Reports() {
     }
     fetchEquipment()
   }, [])
-  
+
   // Auto-fill header when equipment is selected
   useEffect(() => {
     if (selectedEquipment) {
       setHeader(prev => ({
         ...prev,
         equipment_tag: selectedEquipment.equipment_tag_no || selectedEquipment.name || '',
-        equipment_description: selectedEquipment.equipment_description || 
-                              `${selectedEquipment.type || ''} - ${selectedEquipment.equipment_tag_no || selectedEquipment.name || ''}`,
+        equipment_description: selectedEquipment.equipment_description ||
+          `${selectedEquipment.type || ''} - ${selectedEquipment.equipment_tag_no || selectedEquipment.name || ''}`,
         plant: selectedEquipment.location || '',
         dosh_no: selectedEquipment.dosh_registration_no || ''
       }))
@@ -321,7 +322,7 @@ function Reports() {
       fetchEquipmentPhotos(selectedEquipment.id)
     }
   }, [selectedEquipment])
-  
+
   // Fetch photos for equipment
   const fetchEquipmentPhotos = async (eqId) => {
     try {
@@ -333,35 +334,35 @@ function Reports() {
       setAvailablePhotos([])
     }
   }
-  
+
   // Add finding
   const addFinding = () => {
-    const newKey = findings.length > 0 
+    const newKey = findings.length > 0
       ? `${Math.max(...findings.map(f => parseFloat(f.key.split('.')[0]))) + 1}.1`
       : '1.1'
     setFindings([...findings, { key: newKey, text: '' }])
   }
-  
+
   // Update finding
   const updateFinding = (index, field, value) => {
     const updated = [...findings]
     updated[index] = { ...updated[index], [field]: value }
     setFindings(updated)
   }
-  
+
   // Remove finding
   const removeFinding = (index) => {
     setFindings(findings.filter((_, i) => i !== index))
   }
-  
+
   // Add recommendation
   const addRecommendation = () => {
-    const newKey = recommendations.length > 0 
+    const newKey = recommendations.length > 0
       ? `${Math.max(...recommendations.map(r => parseFloat(r.key.split('.')[0]))) + 1}.1`
       : '1.1'
     setRecommendations([...recommendations, { key: newKey, text: '' }])
   }
-  
+
   // Update recommendation
   const updateRecommendation = (index, field, value) => {
     const updated = [...recommendations]
@@ -384,12 +385,12 @@ function Reports() {
     updated[index] = { key: template.key, text: template.text }
     setRecommendations(updated)
   }
-  
+
   // Remove recommendation
   const removeRecommendation = (index) => {
     setRecommendations(recommendations.filter((_, i) => i !== index))
   }
-  
+
   // Add photo to report
   const addPhotoToReport = (photo) => {
     const newPhoto = {
@@ -402,14 +403,14 @@ function Reports() {
     }
     setReportPhotos([...reportPhotos, newPhoto])
   }
-  
+
   // Update report photo
   const updateReportPhoto = (index, field, value) => {
     const updated = [...reportPhotos]
     updated[index] = { ...updated[index], [field]: value }
     setReportPhotos(updated)
   }
-  
+
   // Remove photo from report
   const removeReportPhoto = (index) => {
     setReportPhotos(reportPhotos.filter((_, i) => i !== index))
@@ -434,13 +435,13 @@ function Reports() {
       setLoading(true)
       setError(null)
       const token = localStorage.getItem('token')
-      
+
       const response = await photoService.uploadPhoto(file, equipmentId, token)
-      
+
       if (response.success && response.photo) {
         const uploadedPhoto = response.photo
         setAvailablePhotos([...availablePhotos, uploadedPhoto])
-        
+
         const newPhoto = {
           finding_key: '',
           finding_text: '',
@@ -464,25 +465,25 @@ function Reports() {
       }
     }
   }
-  
+
   // Generate report
   const handleGenerateReport = async () => {
     setLoading(true)
     setError(null)
     setSuccess(null)
-    
+
     if (!header.equipment_tag || !header.report_no || !header.inspector_name) {
       setError('Please fill in all required header fields (Equipment Tag, Report No., Inspector Name)')
       setLoading(false)
       return
     }
-    
+
     try {
       const token = localStorage.getItem('token')
-      
+
       // Get inspection_id from various sources (URL param, location state, or component state)
       let finalInspectionId = inspectionId || urlInspectionId || location.state?.inspectionId || null
-      
+
       // Convert to integer if present (backend expects Optional[int])
       if (finalInspectionId) {
         finalInspectionId = typeof finalInspectionId === 'string' ? parseInt(finalInspectionId, 10) : finalInspectionId
@@ -491,7 +492,7 @@ function Reports() {
           finalInspectionId = null
         }
       }
-      
+
       const reportData = {
         inspection_id: finalInspectionId, // Include inspection_id if available (backend allows Optional[int])
         equipment_id: equipmentId,
@@ -502,7 +503,7 @@ function Reports() {
         ndt_text: ndtText || null,
         initial_inspection_text: 'Initial/Pre-Inspection — Not applicable'
       }
-      
+
       // Debug logging: Log what we're sending
       console.log('📋 Sending report payload:', {
         inspection_id: reportData.inspection_id,
@@ -513,24 +514,25 @@ function Reports() {
         photos_count: reportData.photos.length,
       })
       console.log('📋 Full report payload:', JSON.stringify(reportData, null, 2))
-      
+
       const response = await reportService.generateReport(reportData)
       console.log('📋 Report generation response:', response)
       console.log('📋 Report ID (report_id):', response.report_id)
-      
+
       if (!response || (!response.report_id && !response.id)) {
         throw new Error('Report generation succeeded but no report ID was returned')
       }
-      
+
       const reportId = response.report_id || response.id
       setGeneratedReportId(reportId)
+      setReportStatus(response.status || 'DRAFT')
       setSuccess(`Report generated successfully! Report ID: ${reportId}`)
     } catch (err) {
       console.error('❌ Error generating report:', err)
       console.error('❌ Error response:', err.response)
       console.error('❌ Error details:', err.response?.data)
       console.error('❌ Error message:', err.message)
-      
+
       // Extract detailed error message
       let errorMessage = 'Failed to generate report. Please try again.'
       if (err.response?.data) {
@@ -544,20 +546,49 @@ function Reports() {
       } else if (err.message) {
         errorMessage = err.message
       }
-      
+
       setError(errorMessage)
     } finally {
       setLoading(false)
     }
   }
-  
+
+  // Submit report for review
+  const handleSubmitReport = async () => {
+    if (!generatedReportId) return
+
+    // Confirm submission
+    if (!window.confirm('Are you sure you want to submit this report for QA review? You won\'t be able to edit it afterwards.')) {
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await reportService.submitReport(generatedReportId)
+      console.log('📋 Submit response:', response)
+
+      setReportStatus(response.status || 'Submitted')
+      setSuccess('Report submitted successfully! The engineering team has been notified.')
+
+      // Optional: Redirect or refresh
+    } catch (err) {
+      console.error('❌ Error submitting report:', err)
+      setError(err.response?.data?.detail || err.message || 'Failed to submit report')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Download PDF
   const handleDownloadPDF = async () => {
     if (!generatedReportId) {
       setError('No report ID available. Please generate a report first.')
       return
     }
-    
+
     try {
       const token = localStorage.getItem('token')
       console.log('📥 Downloading PDF for report_id:', generatedReportId)
@@ -578,464 +609,491 @@ function Reports() {
 
   return (
     <>
-          {/* Page Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              API-510 Pressure Vessel Inspection Report
-            </h1>
-            <p className="text-gray-600">Create and generate inspection reports</p>
-          </div>
+      {/* Page Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          API-510 Pressure Vessel Inspection Report
+        </h1>
+        <p className="text-gray-600">Create and generate inspection reports</p>
+      </div>
 
-          {/* Success/Error Messages */}
-          {success && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-800 rounded-xl">
-              {success}
-            </div>
-          )}
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl">
-              {error}
-            </div>
-          )}
+      {/* Success/Error Messages */}
+      {success && (
+        <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-800 rounded-xl">
+          {success}
+        </div>
+      )}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl">
+          {error}
+        </div>
+      )}
 
-          {/* Equipment Selection Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Equipment Selection</h2>
-            <div className="visor-form-group">
-              <label className="visor-form-label">Select Equipment</label>
-              <select
-                className="visor-form-select"
-                value={equipmentId || ''}
-                onChange={(e) => {
-                  const eq = equipmentList.find(eq => eq.id === parseInt(e.target.value))
-                  setSelectedEquipment(eq)
-                }}
-              >
-                <option value="">Select Equipment</option>
-                {equipmentList.length === 0 ? (
-                  <option value="" disabled>No equipment available</option>
-                ) : (
-                  equipmentList.map(eq => {
-                    const tag = eq.equipment_tag_no || eq.name || 'N/A'
-                    const desc = eq.equipment_description || eq.type || ''
-                    const loc = eq.location || 'N/A'
-                    const displayText = desc ? `${tag} - ${desc} (${loc})` : `${tag} (${loc})`
-                    return (
-                      <option key={eq.id} value={eq.id}>
-                        {displayText}
-                      </option>
-                    )
-                  })
-                )}
-              </select>
-            </div>
-          </div>
-          
-          {/* Report Header Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Report Header</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="visor-form-group">
-                <label className="visor-form-label">Equipment Tag No. <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  className="visor-form-input"
-                  value={header.equipment_tag}
-                  onChange={(e) => setHeader({...header, equipment_tag: e.target.value})}
-                  placeholder="V-101"
-                />
-              </div>
-              <div className="visor-form-group">
-                <label className="visor-form-label">Equipment Description <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  className="visor-form-input"
-                  value={header.equipment_description}
-                  onChange={(e) => setHeader({...header, equipment_description: e.target.value})}
-                  placeholder="Pressure Vessel"
-                />
-              </div>
-              <div className="visor-form-group">
-                <label className="visor-form-label">Plant/Unit/Area <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  className="visor-form-input"
-                  value={header.plant}
-                  onChange={(e) => setHeader({...header, plant: e.target.value})}
-                  placeholder="Unit 1"
-                />
-              </div>
-              <div className="visor-form-group">
-                <label className="visor-form-label">DOSH Registration No. <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  className="visor-form-input"
-                  value={header.dosh_no}
-                  onChange={(e) => setHeader({...header, dosh_no: e.target.value})}
-                  placeholder="DOSH-12345"
-                />
-              </div>
-              <div className="visor-form-group">
-                <label className="visor-form-label">Report No. <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  className="visor-form-input"
-                  value={header.report_no}
-                  onChange={(e) => setHeader({...header, report_no: e.target.value})}
-                  placeholder="PLANT1/VI/V-002/TA2025"
-                  title="Auto-generated from Plant, Equipment Tag, and Report Date (format: PLANT/INSPECTION_TYPE/EQUIPMENT_TAG/TURNAROUND_CODE)"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Format: PLANT/INSPECTION_TYPE/EQUIPMENT_TAG/TURNAROUND_CODE (auto-generated when Plant, Equipment Tag, and Report Date are filled)
-                </p>
-              </div>
-              <div className="visor-form-group">
-                <label className="visor-form-label">Report Date <span className="text-red-500">*</span></label>
-                <input
-                  type="date"
-                  className="visor-form-input"
-                  value={header.report_date}
-                  onChange={(e) => setHeader({...header, report_date: e.target.value})}
-                />
-              </div>
-              <div className="visor-form-group">
-                <label className="visor-form-label">Inspector Name <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  className="visor-form-input"
-                  value={header.inspector_name}
-                  onChange={(e) => setHeader({...header, inspector_name: e.target.value})}
-                  placeholder="John Doe"
-                />
-              </div>
-              <div className="visor-form-group">
-                <label className="visor-form-label">Reviewed By</label>
-                <input
-                  type="text"
-                  className="visor-form-input"
-                  value={header.reviewed_by}
-                  onChange={(e) => setHeader({...header, reviewed_by: e.target.value})}
-                  placeholder="Jane Smith"
-                />
-              </div>
-              <div className="visor-form-group md:col-span-2">
-                <label className="visor-form-label">Approved By (Client)</label>
-                <input
-                  type="text"
-                  className="visor-form-input"
-                  value={header.client_approver}
-                  onChange={(e) => setHeader({...header, client_approver: e.target.value})}
-                  placeholder="Client Name"
-                />
-              </div>
-            </div>
-          </div>
-          
-          {/* Findings Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Findings</h2>
-              <button
-                onClick={addFinding}
-                className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
-              >
-                <Icons.Plus className="w-4 h-4" />
-                Add Finding
-              </button>
-            </div>
-            {findings.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No findings added yet. Click "Add Finding" to get started.</p>
+      {/* Equipment Selection Card */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Equipment Selection</h2>
+        <div className="visor-form-group">
+          <label className="visor-form-label">Select Equipment</label>
+          <select
+            className="visor-form-select"
+            value={equipmentId || ''}
+            onChange={(e) => {
+              const eq = equipmentList.find(eq => eq.id === parseInt(e.target.value))
+              setSelectedEquipment(eq)
+            }}
+          >
+            <option value="">Select Equipment</option>
+            {equipmentList.length === 0 ? (
+              <option value="" disabled>No equipment available</option>
             ) : (
-              <div className="space-y-4">
-                {findings.map((finding, index) => (
-                  <div key={index} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
-                    <div className="mb-4">
-                      <label className="visor-form-label">Quick Template</label>
-                      <select
-                        defaultValue=""
-                        className="visor-form-select"
-                        onChange={(e) => {
-                          applyFindingTemplate(index, e.target.value)
-                          e.target.selectedIndex = 0
-                        }}
-                      >
-                        <option value="">Select predefined finding...</option>
-                        {findingTemplates.map(template => (
-                          <option key={template.id} value={template.id}>
-                            {template.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex gap-4 mb-4">
-                      <div className="flex-1">
-                        <label className="visor-form-label">Finding Key (e.g., 1.1, 2.3)</label>
-                        <input
-                          type="text"
-                          className="visor-form-input"
-                          value={finding.key}
-                          onChange={(e) => updateFinding(index, 'key', e.target.value)}
-                          placeholder="1.1"
-                        />
-                      </div>
-                      <button
-                        onClick={() => removeFinding(index)}
-                        className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors mt-7"
-                      >
-                        Remove
-                      </button>
+              equipmentList.map(eq => {
+                const tag = eq.equipment_tag_no || eq.name || 'N/A'
+                const desc = eq.equipment_description || eq.type || ''
+                const loc = eq.location || 'N/A'
+                const displayText = desc ? `${tag} - ${desc} (${loc})` : `${tag} (${loc})`
+                return (
+                  <option key={eq.id} value={eq.id}>
+                    {displayText}
+                  </option>
+                )
+              })
+            )}
+          </select>
+        </div>
+      </div>
+
+      {/* Report Header Card */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-6">Report Header</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="visor-form-group">
+            <label className="visor-form-label">Equipment Tag No. <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              className="visor-form-input"
+              value={header.equipment_tag}
+              onChange={(e) => setHeader({ ...header, equipment_tag: e.target.value })}
+              placeholder="V-101"
+            />
+          </div>
+          <div className="visor-form-group">
+            <label className="visor-form-label">Equipment Description <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              className="visor-form-input"
+              value={header.equipment_description}
+              onChange={(e) => setHeader({ ...header, equipment_description: e.target.value })}
+              placeholder="Pressure Vessel"
+            />
+          </div>
+          <div className="visor-form-group">
+            <label className="visor-form-label">Plant/Unit/Area <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              className="visor-form-input"
+              value={header.plant}
+              onChange={(e) => setHeader({ ...header, plant: e.target.value })}
+              placeholder="Unit 1"
+            />
+          </div>
+          <div className="visor-form-group">
+            <label className="visor-form-label">DOSH Registration No. <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              className="visor-form-input"
+              value={header.dosh_no}
+              onChange={(e) => setHeader({ ...header, dosh_no: e.target.value })}
+              placeholder="DOSH-12345"
+            />
+          </div>
+          <div className="visor-form-group">
+            <label className="visor-form-label">Report No. <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              className="visor-form-input"
+              value={header.report_no}
+              onChange={(e) => setHeader({ ...header, report_no: e.target.value })}
+              placeholder="PLANT1/VI/V-002/TA2025"
+              title="Auto-generated from Plant, Equipment Tag, and Report Date (format: PLANT/INSPECTION_TYPE/EQUIPMENT_TAG/TURNAROUND_CODE)"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Format: PLANT/INSPECTION_TYPE/EQUIPMENT_TAG/TURNAROUND_CODE (auto-generated when Plant, Equipment Tag, and Report Date are filled)
+            </p>
+          </div>
+          <div className="visor-form-group">
+            <label className="visor-form-label">Report Date <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              className="visor-form-input"
+              value={header.report_date}
+              onChange={(e) => setHeader({ ...header, report_date: e.target.value })}
+            />
+          </div>
+          <div className="visor-form-group">
+            <label className="visor-form-label">Inspector Name <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              className="visor-form-input"
+              value={header.inspector_name}
+              onChange={(e) => setHeader({ ...header, inspector_name: e.target.value })}
+              placeholder="John Doe"
+            />
+          </div>
+          <div className="visor-form-group">
+            <label className="visor-form-label">Reviewed By</label>
+            <input
+              type="text"
+              className="visor-form-input"
+              value={header.reviewed_by}
+              onChange={(e) => setHeader({ ...header, reviewed_by: e.target.value })}
+              placeholder="Jane Smith"
+            />
+          </div>
+          <div className="visor-form-group md:col-span-2">
+            <label className="visor-form-label">Approved By (Client)</label>
+            <input
+              type="text"
+              className="visor-form-input"
+              value={header.client_approver}
+              onChange={(e) => setHeader({ ...header, client_approver: e.target.value })}
+              placeholder="Client Name"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Findings Card */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">Findings</h2>
+          <button
+            onClick={addFinding}
+            className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
+          >
+            <Icons.Plus className="w-4 h-4" />
+            Add Finding
+          </button>
+        </div>
+        {findings.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No findings added yet. Click "Add Finding" to get started.</p>
+        ) : (
+          <div className="space-y-4">
+            {findings.map((finding, index) => (
+              <div key={index} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
+                <div className="mb-4">
+                  <label className="visor-form-label">Quick Template</label>
+                  <select
+                    defaultValue=""
+                    className="visor-form-select"
+                    onChange={(e) => {
+                      applyFindingTemplate(index, e.target.value)
+                      e.target.selectedIndex = 0
+                    }}
+                  >
+                    <option value="">Select predefined finding...</option>
+                    {findingTemplates.map(template => (
+                      <option key={template.id} value={template.id}>
+                        {template.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-4 mb-4">
+                  <div className="flex-1">
+                    <label className="visor-form-label">Finding Key (e.g., 1.1, 2.3)</label>
+                    <input
+                      type="text"
+                      className="visor-form-input"
+                      value={finding.key}
+                      onChange={(e) => updateFinding(index, 'key', e.target.value)}
+                      placeholder="1.1"
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeFinding(index)}
+                    className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors mt-7"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div>
+                  <label className="visor-form-label">Finding Text</label>
+                  <textarea
+                    className="visor-form-textarea"
+                    rows="3"
+                    value={finding.text}
+                    onChange={(e) => updateFinding(index, 'text', e.target.value)}
+                    placeholder="Describe the finding..."
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recommendations Card */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">Recommendations</h2>
+          <button
+            onClick={addRecommendation}
+            className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
+          >
+            <Icons.Plus className="w-4 h-4" />
+            Add Recommendation
+          </button>
+        </div>
+        {recommendations.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No recommendations added yet. Click "Add Recommendation" to get started.</p>
+        ) : (
+          <div className="space-y-4">
+            {recommendations.map((rec, index) => (
+              <div key={index} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
+                <div className="mb-4">
+                  <label className="visor-form-label">Quick Template</label>
+                  <select
+                    defaultValue=""
+                    className="visor-form-select"
+                    onChange={(e) => {
+                      applyRecommendationTemplate(index, e.target.value)
+                      e.target.selectedIndex = 0
+                    }}
+                  >
+                    <option value="">Select predefined recommendation...</option>
+                    {recommendationTemplates.map(template => (
+                      <option key={template.id} value={template.id}>
+                        {template.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-4 mb-4">
+                  <div className="flex-1">
+                    <label className="visor-form-label">Recommendation Key (e.g., 2.2, 2.5)</label>
+                    <input
+                      type="text"
+                      className="visor-form-input"
+                      value={rec.key}
+                      onChange={(e) => updateRecommendation(index, 'key', e.target.value)}
+                      placeholder="2.2"
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeRecommendation(index)}
+                    className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors mt-7"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div>
+                  <label className="visor-form-label">Recommendation Text</label>
+                  <textarea
+                    className="visor-form-textarea"
+                    rows="3"
+                    value={rec.text}
+                    onChange={(e) => updateRecommendation(index, 'text', e.target.value)}
+                    placeholder="Describe the recommendation..."
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* NDT Card */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Non-Destructive Testings (NDT)</h2>
+        <textarea
+          className="visor-form-textarea"
+          rows="4"
+          value={ndtText}
+          onChange={(e) => setNdtText(e.target.value)}
+          placeholder="Enter NDT information..."
+        />
+      </div>
+
+      {/* Photo Upload Card */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload New Photo</h2>
+        <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center bg-gray-50">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handlePhotoUpload}
+            disabled={loading}
+            className="hidden"
+            id="photo-upload-input"
+          />
+          <label
+            htmlFor="photo-upload-input"
+            className={`cursor-pointer inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${loading
+              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+              : 'bg-red-600 text-white hover:bg-red-700'
+              }`}
+          >
+            <Icons.Upload className="w-5 h-5" />
+            {loading ? 'Uploading...' : 'Upload Photo'}
+          </label>
+          <p className="mt-3 text-sm text-gray-500">
+            Select an image file (JPG, PNG, etc.) - Max 10MB
+            {equipmentId && <span className="block mt-1">Will be linked to selected equipment</span>}
+          </p>
+        </div>
+      </div>
+
+      {/* Available Photos Card */}
+      {availablePhotos.length > 0 && (
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Available Photos for Selected Equipment</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {availablePhotos.map((photo) => (
+              <div key={photo.id} className="border border-gray-200 rounded-xl p-3 bg-gray-50 hover:shadow-md transition-shadow">
+                <img
+                  src={photo.storage_url || `${API_BASE}/photos/${photo.id}/file`}
+                  alt="Equipment photo"
+                  className="w-full h-32 object-cover rounded-lg mb-3"
+                  onError={(e) => {
+                    e.target.src = `${API_BASE}/photos/${photo.id}/file`
+                  }}
+                />
+                <button
+                  onClick={() => addPhotoToReport(photo)}
+                  className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded-xl font-medium hover:bg-green-700 transition-colors"
+                >
+                  Add to Report
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Report Photos Card */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Report Photos</h2>
+        {reportPhotos.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No photos added yet. Select equipment and add photos above.</p>
+        ) : (
+          <div className="space-y-4">
+            {reportPhotos.map((photo, index) => (
+              <div key={index} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
+                <div className="flex gap-4">
+                  <div className="w-32 h-32 border border-gray-300 rounded-xl overflow-hidden bg-white flex-shrink-0">
+                    <img
+                      src={photo.storage_url || `${API_BASE}/photos/${photo.photo_id}/file`}
+                      alt="Report photo"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.src = `${API_BASE}/photos/${photo.photo_id}/file`
+                      }}
+                    />
+                  </div>
+                  <div className="flex-1 space-y-4">
+                    <div>
+                      <label className="visor-form-label">Finding Key (e.g., 7.1)</label>
+                      <input
+                        type="text"
+                        className="visor-form-input"
+                        value={photo.finding_key}
+                        onChange={(e) => updateReportPhoto(index, 'finding_key', e.target.value)}
+                        placeholder="7.1"
+                      />
                     </div>
                     <div>
                       <label className="visor-form-label">Finding Text</label>
                       <textarea
                         className="visor-form-textarea"
-                        rows="3"
-                        value={finding.text}
-                        onChange={(e) => updateFinding(index, 'text', e.target.value)}
-                        placeholder="Describe the finding..."
+                        rows="2"
+                        value={photo.finding_text}
+                        onChange={(e) => updateReportPhoto(index, 'finding_text', e.target.value)}
+                        placeholder="Describe the finding for this photo..."
                       />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          {/* Recommendations Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Recommendations</h2>
-              <button
-                onClick={addRecommendation}
-                className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
-              >
-                <Icons.Plus className="w-4 h-4" />
-                Add Recommendation
-              </button>
-            </div>
-            {recommendations.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No recommendations added yet. Click "Add Recommendation" to get started.</p>
-            ) : (
-              <div className="space-y-4">
-                {recommendations.map((rec, index) => (
-                  <div key={index} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
-                    <div className="mb-4">
-                      <label className="visor-form-label">Quick Template</label>
-                      <select
-                        defaultValue=""
-                        className="visor-form-select"
-                        onChange={(e) => {
-                          applyRecommendationTemplate(index, e.target.value)
-                          e.target.selectedIndex = 0
-                        }}
-                      >
-                        <option value="">Select predefined recommendation...</option>
-                        {recommendationTemplates.map(template => (
-                          <option key={template.id} value={template.id}>
-                            {template.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex gap-4 mb-4">
-                      <div className="flex-1">
-                        <label className="visor-form-label">Recommendation Key (e.g., 2.2, 2.5)</label>
-                        <input
-                          type="text"
-                          className="visor-form-input"
-                          value={rec.key}
-                          onChange={(e) => updateRecommendation(index, 'key', e.target.value)}
-                          placeholder="2.2"
-                        />
-                      </div>
-                      <button
-                        onClick={() => removeRecommendation(index)}
-                        className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors mt-7"
-                      >
-                        Remove
-                      </button>
                     </div>
                     <div>
                       <label className="visor-form-label">Recommendation Text</label>
                       <textarea
                         className="visor-form-textarea"
-                        rows="3"
-                        value={rec.text}
-                        onChange={(e) => updateRecommendation(index, 'text', e.target.value)}
-                        placeholder="Describe the recommendation..."
+                        rows="2"
+                        value={photo.recommendation_text}
+                        onChange={(e) => updateReportPhoto(index, 'recommendation_text', e.target.value)}
+                        placeholder="Describe the recommendation for this photo..."
                       />
                     </div>
                   </div>
-                ))}
+                  <button
+                    onClick={() => removeReportPhoto(index)}
+                    className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors h-fit"
+                  >
+                    <Icons.X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-            )}
+            ))}
           </div>
-          
-          {/* NDT Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Non-Destructive Testings (NDT)</h2>
-            <textarea
-              className="visor-form-textarea"
-              rows="4"
-              value={ndtText}
-              onChange={(e) => setNdtText(e.target.value)}
-              placeholder="Enter NDT information..."
-            />
-          </div>
-          
-          {/* Photo Upload Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload New Photo</h2>
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center bg-gray-50">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoUpload}
-                disabled={loading}
-                className="hidden"
-                id="photo-upload-input"
-              />
-              <label
-                htmlFor="photo-upload-input"
-                className={`cursor-pointer inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
-                  loading
-                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                    : 'bg-red-600 text-white hover:bg-red-700'
-                }`}
-              >
-                <Icons.Upload className="w-5 h-5" />
-                {loading ? 'Uploading...' : 'Upload Photo'}
-              </label>
-              <p className="mt-3 text-sm text-gray-500">
-                Select an image file (JPG, PNG, etc.) - Max 10MB
-                {equipmentId && <span className="block mt-1">Will be linked to selected equipment</span>}
-              </p>
-            </div>
-          </div>
-          
-          {/* Available Photos Card */}
-          {availablePhotos.length > 0 && (
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Available Photos for Selected Equipment</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {availablePhotos.map((photo) => (
-                  <div key={photo.id} className="border border-gray-200 rounded-xl p-3 bg-gray-50 hover:shadow-md transition-shadow">
-                    <img
-                      src={photo.storage_url || `${API_BASE}/photos/${photo.id}/file`}
-                      alt="Equipment photo"
-                      className="w-full h-32 object-cover rounded-lg mb-3"
-                      onError={(e) => {
-                        e.target.src = `${API_BASE}/photos/${photo.id}/file`
-                      }}
-                    />
-                    <button
-                      onClick={() => addPhotoToReport(photo)}
-                      className="w-full px-3 py-2 bg-green-600 text-white text-sm rounded-xl font-medium hover:bg-green-700 transition-colors"
-                    >
-                      Add to Report
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+        )}
+      </div>
+
+      {/* Generate Report Card */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <button
+          onClick={handleGenerateReport}
+          disabled={loading}
+          className="w-full px-6 py-3.5 bg-green-600 text-white text-lg font-semibold rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              Generating Report...
+            </>
+          ) : (
+            <>
+              <Icons.FileText className="w-5 h-5" />
+              Generate API-510 Report
+            </>
           )}
-          
-          {/* Report Photos Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Report Photos</h2>
-            {reportPhotos.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No photos added yet. Select equipment and add photos above.</p>
+        </button>
+
+        {generatedReportId && (
+          <button
+            onClick={handleDownloadPDF}
+            className="w-full mt-4 px-6 py-3.5 bg-red-600 text-white text-lg font-semibold rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <Icons.Download className="w-5 h-5" />
+            Download PDF
+          </button>
+        )}
+
+        {generatedReportId && (
+          <button
+            onClick={handleSubmitReport}
+            disabled={loading || reportStatus === 'Submitted' || reportStatus === 'APPROVED' || reportStatus === 'QA_REVIEW'}
+            className={`w-full mt-4 px-6 py-3.5 text-white text-lg font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 ${reportStatus === 'Submitted' || reportStatus === 'APPROVED' || reportStatus === 'QA_REVIEW'
+              ? 'bg-gray-400 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+          >
+            {reportStatus === 'Submitted' || reportStatus === 'QA_REVIEW' ? (
+              <>
+                <Icons.CheckCircle className="w-5 h-5" />
+                Submitted for Review
+              </>
+            ) : reportStatus === 'APPROVED' ? (
+              <>
+                <Icons.CheckCircle className="w-5 h-5" />
+                Approved
+              </>
             ) : (
-              <div className="space-y-4">
-                {reportPhotos.map((photo, index) => (
-                  <div key={index} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
-                    <div className="flex gap-4">
-                      <div className="w-32 h-32 border border-gray-300 rounded-xl overflow-hidden bg-white flex-shrink-0">
-                        <img
-                          src={photo.storage_url || `${API_BASE}/photos/${photo.photo_id}/file`}
-                          alt="Report photo"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.src = `${API_BASE}/photos/${photo.photo_id}/file`
-                          }}
-                        />
-                      </div>
-                      <div className="flex-1 space-y-4">
-                        <div>
-                          <label className="visor-form-label">Finding Key (e.g., 7.1)</label>
-                          <input
-                            type="text"
-                            className="visor-form-input"
-                            value={photo.finding_key}
-                            onChange={(e) => updateReportPhoto(index, 'finding_key', e.target.value)}
-                            placeholder="7.1"
-                          />
-                        </div>
-                        <div>
-                          <label className="visor-form-label">Finding Text</label>
-                          <textarea
-                            className="visor-form-textarea"
-                            rows="2"
-                            value={photo.finding_text}
-                            onChange={(e) => updateReportPhoto(index, 'finding_text', e.target.value)}
-                            placeholder="Describe the finding for this photo..."
-                          />
-                        </div>
-                        <div>
-                          <label className="visor-form-label">Recommendation Text</label>
-                          <textarea
-                            className="visor-form-textarea"
-                            rows="2"
-                            value={photo.recommendation_text}
-                            onChange={(e) => updateReportPhoto(index, 'recommendation_text', e.target.value)}
-                            placeholder="Describe the recommendation for this photo..."
-                          />
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeReportPhoto(index)}
-                        className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors h-fit"
-                      >
-                        <Icons.X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <>
+                <Icons.FileText className="w-5 h-5" />
+                {reportStatus === 'REJECTED' ? 'Resubmit Report' : 'Submit Report'}
+              </>
             )}
-          </div>
-          
-          {/* Generate Report Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <button
-              onClick={handleGenerateReport}
-              disabled={loading}
-              className="w-full px-6 py-3.5 bg-green-600 text-white text-lg font-semibold rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Generating Report...
-                </>
-              ) : (
-                <>
-                  <Icons.FileText className="w-5 h-5" />
-                  Generate API-510 Report
-                </>
-              )}
-            </button>
-            
-            {generatedReportId && (
-              <button
-                onClick={handleDownloadPDF}
-                className="w-full mt-4 px-6 py-3.5 bg-red-600 text-white text-lg font-semibold rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-              >
-                <Icons.Download className="w-5 h-5" />
-                Download PDF
-              </button>
-            )}
-          </div>
+          </button>
+        )}
+      </div>
     </>
   )
 }
