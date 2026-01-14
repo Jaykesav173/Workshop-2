@@ -25,6 +25,7 @@ import json
 import requests
 from collections import defaultdict
 import io
+from app.utils.storage import upload_file_to_storage
 
 # Try to import PIL/Pillow, fallback if not available
 try:
@@ -305,6 +306,46 @@ class ReportGenerationService:
             pdf_path = await self._generate_pdf_report(report_data, report_filename)
             print(f"   PDF generated: {pdf_path}")
             
+            # Upload PDF to Cloud Storage
+            pdf_storage_url = None
+            try:
+                print(f"   ☁️ Uploading PDF to Cloud Storage...")
+                with open(pdf_path, "rb") as f:
+                    pdf_content = f.read()
+                pdf_storage_url = upload_file_to_storage(
+                    file_content=pdf_content,
+                    filename=os.path.basename(pdf_path),
+                    bucket_name="photos",  # Use photos bucket which is public
+                    folder="reports"
+                )
+                if pdf_storage_url:
+                    print(f"   ✅ PDF uploaded to Cloud: {pdf_storage_url}")
+                else:
+                    print(f"   ⚠️ Upload returned None for PDF")
+            except Exception as e:
+                print(f"   ⚠️ Failed to upload PDF to cloud: {e}")
+                import traceback
+                traceback.print_exc()
+                
+            # Upload JSON to Cloud Storage (as report_url)
+            json_storage_url = None
+            try:
+                print(f"   ☁️ Uploading JSON to Cloud Storage...")
+                with open(json_path, "rb") as f:
+                    json_content = f.read()
+                json_storage_url = upload_file_to_storage(
+                    file_content=json_content,
+                    filename=os.path.basename(json_path),
+                    bucket_name="photos", 
+                    folder="reports"
+                )
+                if json_storage_url:
+                    print(f"   ✅ JSON uploaded to Cloud: {json_storage_url}")
+                else:
+                    print(f"   ⚠️ Upload returned None for JSON")
+            except Exception as e:
+                print(f"   ⚠️ Failed to upload JSON to cloud: {e}")
+            
             # Generate report_id - CRITICAL: Must be a valid UUID string
             generated_report_id = str(uuid.uuid4())
             print(f"📋 Generated report_id: {generated_report_id}")
@@ -325,9 +366,9 @@ class ReportGenerationService:
                 "equipment_id": report_data_dict.get('equipment_id'),
                 "created_by": current_user.get("id") if current_user else None,
                 "report_path": json_path,
-                "report_url": None,
+                "report_url": json_storage_url,
                 "pdf_path": pdf_path,
-                "pdf_url": None,
+                "pdf_url": pdf_storage_url,
                 "report_type": "API_510",
                 "title": f"API 510 Inspection Report - {report_data.header.equipment_tag}",
                 "content": json.dumps(report_data.model_dump(), indent=2),

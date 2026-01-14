@@ -107,21 +107,41 @@ async def export_report_pdf(report_id: str, current_user: dict = Depends(get_cur
     try:
         report = await report_service.get_report(report_id)
         
+        # 1. Try serving from local file if it exists
+        if report.pdf_path and os.path.exists(report.pdf_path):
+            return FileResponse(
+                path=report.pdf_path,
+                media_type="application/pdf",
+                filename=os.path.basename(report.pdf_path),
+                headers={
+                    "Content-Disposition": f"attachment; filename={os.path.basename(report.pdf_path)}"
+                }
+            )
+            
+        # 2. If local file missing, try to serve from Cloud URL
+        if report.pdf_url:
+            print(f"⚠️ Local PDF not found, fetching from Cloud: {report.pdf_url}")
+            try:
+                import requests
+                from fastapi.responses import Response
+                response = requests.get(report.pdf_url)
+                if response.status_code == 200:
+                    filename = f"API510_Report_{report.report_no or report_id}.pdf"
+                    return Response(
+                        content=response.content,
+                        media_type="application/pdf",
+                        headers={
+                            "Content-Disposition": f"attachment; filename={filename}"
+                        }
+                    )
+            except Exception as e:
+                 print(f"❌ Failed to fetch from cloud: {e}")
+
+        # 3. If neither available, raise 404
         if not report.pdf_path:
-            raise HTTPException(status_code=404, detail="PDF not generated yet")
+             raise HTTPException(status_code=404, detail="PDF not generated yet")
         
-        if not os.path.exists(report.pdf_path):
-            raise HTTPException(status_code=404, detail=f"PDF file not found at: {report.pdf_path}")
-        
-        # Return the PDF file with proper headers
-        return FileResponse(
-            path=report.pdf_path,
-            media_type="application/pdf",
-            filename=os.path.basename(report.pdf_path),
-            headers={
-                "Content-Disposition": f"attachment; filename={os.path.basename(report.pdf_path)}"
-            }
-        )
+        raise HTTPException(status_code=404, detail=f"PDF file not found locally or in cloud")
     except HTTPException:
         raise
     except Exception as e:
