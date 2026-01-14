@@ -51,7 +51,7 @@ const PhotoUpload = () => {
         let allSchedules = sch.data || [];
         const userRole = (user.role || '').toUpperCase();
         const userId = user.id ? parseInt(user.id) : null;
-        
+
         if (userRole === 'INSPECTOR' && userId) {
           // Filter by inspector_id (handle both string and number comparison)
           allSchedules = allSchedules.filter(s => {
@@ -69,7 +69,7 @@ const PhotoUpload = () => {
 
         console.log(`Fetched ${allSchedules.length} schedules for ${userRole} (ID: ${userId})`);
         setSchedules(allSchedules);
-      } catch (err) { 
+      } catch (err) {
         console.error('Error fetching schedules:', err);
         setSchedules([]);
       }
@@ -383,7 +383,7 @@ const PhotoUpload = () => {
                 <DetailRow label="Status" value={selectedTask.status} isStatus />
               </div>
             </div>
-            <div className="bg-gray-50 p-6 flex justify-between">
+            <div className="bg-gray-50 p-6 flex">
 
               {/* INSPECTOR ACTIONS */}
               {user.role === 'INSPECTOR' && (
@@ -439,8 +439,8 @@ const PhotoUpload = () => {
                 </div>
               )}
 
-              {/* ADMIN / ENGINEER ACTIONS */}
-              {(user.role === 'ADMIN' || user.role === 'ENGINEER') && (
+              {/* ADMIN / ENGINEER ACTIONS - Only show for Pending or Confirmed tasks */}
+              {(user.role === 'ADMIN' || user.role === 'ENGINEER') && ['Pending', 'Confirmed'].includes(selectedTask.status) && (
                 <div className="flex gap-2">
                   <button onClick={handleCancelEvent} className="px-6 py-3 border border-red-200 text-red-600 bg-red-50 rounded-2xl font-bold hover:bg-red-100 transition-colors">
                     Cancel Event
@@ -451,7 +451,7 @@ const PhotoUpload = () => {
                 </div>
               )}
 
-              <button onClick={() => setIsDetailOpen(false)} className="bg-gray-200 text-gray-700 px-6 py-3 rounded-2xl font-bold hover:bg-gray-300">Close</button>
+              <button onClick={() => setIsDetailOpen(false)} className="bg-gray-200 text-gray-700 px-6 py-3 rounded-2xl font-bold hover:bg-gray-300 ml-auto">Close</button>
             </div>
           </div>
         </div>
