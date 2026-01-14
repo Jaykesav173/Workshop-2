@@ -71,22 +71,27 @@ class AIPhotoService:
                 print(f"File {file.filename} encoded, size: {len(base64_image)} characters")
                 
                 # Structured prompt for parsing
-                prompt_text = """Analyze this inspection photo for defects and provide your response in the following EXACT format:
+                prompt_text = """You are an expert industrial inspector analyzing photos for equipment maintenance. 
+Your task is to identify ANY potential defects, anomalies, wear, or damage in the image. 
+Even if the defect is minor, you must report it. If the image appears clean, describe the condition of the equipment.
 
-DESCRIPTION: [Plain language description of the defect only - no headings, no labels, no markdown, no bullet points. Just describe what you see in the photo. Do NOT mention category, severity, or recommendations here.]
+Provide your response in the following EXACT format:
 
-RECOMMENDATION: [Corrective or preventive actions only - no descriptions, no labels, no markdown, no bullet points. Just what should be done.]
+DESCRIPTION: [Plain language description of the defect or condition. Focus on details like rust, cracks, dents, wear patterns, or discoloration. Do not use markdown or bullet points.]
+
+RECOMMENDATION: [Specific maintenance action required. E.g., 'Clean and apply anti-corrosion coating', 'Monitor for propagation', 'Replace component'.]
 
 CATEGORY: [ONE of: CORROSION, CRACK, DAMAGE, WEAR, DEFORMATION, UNKNOWN]
 
 SEVERITY: [ONE of: LOW, MEDIUM, HIGH, CRITICAL]
 
 Important: 
-- DESCRIPTION should ONLY contain the defect description, nothing else
-- RECOMMENDATION should ONLY contain actions, nothing else
-- Do NOT include category or severity names in DESCRIPTION or RECOMMENDATION
-- Category must be exactly one of: CORROSION, CRACK, DAMAGE, WEAR, DEFORMATION, UNKNOWN
-- Severity must be exactly one of: LOW, MEDIUM, HIGH, CRITICAL"""
+- Use professional technical language.
+- DESCRIPTION must be a single paragraph.
+- RECOMMENDATION must be actionable.
+- Category must be exactly one of the list above.
+- Severity must be exactly one of the list above.
+- DO NOT refuse to analyze. If unsure, mark as UNKNOWN category and LOW severity, and describe what looks unusual."""
                 
                 response = self.client.chat.completions.create(
                     model="gpt-4o",

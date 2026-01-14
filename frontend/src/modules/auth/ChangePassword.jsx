@@ -54,7 +54,7 @@ export function ChangePassword() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("http://localhost:8000/reset_password_first_login", {
+      const response = await fetch("http://localhost:8000/api/auth/reset_password_first_login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -73,8 +73,9 @@ export function ChangePassword() {
         return;
       }
 
-      // Navigate to Complete Profile with role
-      navigate("/complete-profile", { state: { username, role: userType } });
+      // Navigate to Login
+      alert("Password changed successfully. Please login again.");
+      navigate("/login");
     } catch (err) {
       console.error(err);
       setError("An error occurred. Please try again.");

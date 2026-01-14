@@ -21,4 +21,3 @@ def get_available_inspectors(db: Any) -> List[Dict]:
         print(f"❌ Error fetching available inspectors: {e}")
         print(traceback.format_exc())
         return []
-

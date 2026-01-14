@@ -132,6 +132,31 @@ class UserFlexibleUpdate(BaseModel):
     new_password: str | None = None
 
 # -------------------------------
+# SCHEDULE MODELS
+# -------------------------------
+class ScheduleCreate(BaseModel):
+    equipment_id: int | str
+    inspector_id: int | str
+    engineer_id: int | str
+    scheduled_date: str
+    start_time: str
+    end_time: str
+    priority: str = "Medium"
+    location: str | None = None
+    details: str | None = None
+    site_id: str | None = None
+    inspector_email: str | None = None
+
+class ScheduleUpdate(BaseModel):
+    scheduled_date: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    status: str | None = None
+    priority: str | None = None
+    inspector_id: int | None = None
+    equipment_id: int | None = None
+
+# -------------------------------
 # LOGIN
 # -------------------------------
 @app.post("/api/login")
@@ -223,19 +248,24 @@ def add_user(data: UserCreate):
         "temp_password": True
     }).execute()
 
+    from app.utils.email_templates import get_email_html
+    
+    email_content = get_email_html(
+        title="Welcome to VISOR System",
+        name=data.name,
+        intro="Your account has been created. Here are your credentials:",
+        details={
+            "Username": data.username,
+            "Temporary Password": temp_password
+        },
+        action_url="http://localhost:5173/login",
+        action_text="Login to Reset Password"
+    )
+
     send_email(
         data.email,
         "Your Account Credentials",
-        f"""
-Hello {data.name},
-
-Your account has been created.
-
-Username: {data.username}
-Temporary Password: {temp_password}
-
-Please login and reset your password immediately.
-"""
+        email_content
     )
 
     return {"success": True, "message": "User created & email sent"}
@@ -264,31 +294,28 @@ def toggle_status(user_id: int):
         .execute()
 
     # Email content
-    if new_status == "INACTIVE":
-        subject = "Account Deactivated"
-        body = f"""
-Hello {user['name']},
+    from app.utils.email_templates import get_email_html
 
-Your account has been DEACTIVATED by the administrator.
-
-You will no longer be able to log in until your account is reactivated.
-
-If you believe this is a mistake, please contact support.
-"""
-    else:
-        subject = "Account Activated"
-        body = f"""
-Hello {user['name']},
-
-Good news! Your account has been ACTIVATED.
-
-You can now log in to the system using your credentials.
-
-If you have any issues, please contact support.
-"""
+    status_color = "#10B981" if new_status == "ACTIVE" else "#EF4444"
+    intro_text = (
+        f"Your account status has been updated to {new_status}. You can now login."
+        if new_status == "ACTIVE"
+        else f"Your account has been DEACTIVATED. You can no longer login."
+    )
+    
+    email_content = get_email_html(
+        title=f"Account Status: {new_status}",
+        name=user['name'],
+        intro=intro_text,
+        details={
+            "New Status": f'<span style="color: {status_color}; font-weight: bold;">{new_status}</span>',
+        },
+        action_url="http://localhost:5173/login" if new_status == "ACTIVE" else None,
+        action_text="Login Now"
+    )
 
     # Send email
-    send_email(user["email"], subject, body)
+    send_email(user["email"], f"Account Status: {new_status}", email_content)
 
     return {
         "success": True,
@@ -316,10 +343,23 @@ def send_otp(req: EmailRequest):
         "expires_at": datetime.utcnow() + timedelta(minutes=5)
     }
 
+    from app.utils.email_templates import get_email_html
+    
+    email_content = get_email_html(
+        title="Password Recovery OTP",
+        name="User",
+        intro="Here is your One-Time Password (OTP) for password recovery.",
+        details={
+            "OTP Code": f'<span style="font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #000;">{otp}</span>',
+            "Expires In": "5 minutes"
+        },
+        action_text="Use this code in the app"
+    )
+
     send_email(
         req.email,
         "Password Recovery OTP",
-        f"Your OTP code is: {otp}\nExpires in 5 minutes."
+        email_content
     )
 
     return {"success": True, "message": "OTP Sent"}
@@ -462,10 +502,23 @@ def verify_security_questions(data: VerifySecurityQuestionsRequest):
     }
 
     # Send OTP via email
+    from app.utils.email_templates import get_email_html
+    
+    email_content = get_email_html(
+        title="Password Recovery OTP",
+        name="User",
+        intro="Here is your One-Time Password (OTP) for password recovery.",
+        details={
+            "OTP Code": f'<span style="font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #000;">{otp}</span>',
+            "Expires In": "5 minutes"
+        },
+        action_text="Use this code in the app"
+    )
+
     send_email(
         data.email,
         "Password Recovery OTP",
-        f"Your OTP code is: {otp}\nExpires in 5 minutes."
+        email_content
     )
 
     return {"success": True, "message": "Security answers verified and OTP sent"}
@@ -589,6 +642,7 @@ def get_recent_reports():
 
     return {"success": True, "activities": enriched}
 
+
 # -------------------------------
 # DASHBOARD ENDPOINTS
 # -------------------------------
@@ -671,3 +725,102 @@ def recent_activity(user_id: int):
         .execute()
     )
     return {"success": True, "activities": res.data}
+
+# -------------------------------
+# SCHEDULING ENDPOINTS
+# -------------------------------
+
+@app.post("/schedules/")
+def create_schedule(data: ScheduleCreate):
+    # Check for conflicts
+    conflict = supabase.table("inspectionschedule").select("*") \
+        .eq("inspector_id", data.inspector_id) \
+        .eq("scheduled_date", data.scheduled_date) \
+        .lt("start_time", data.end_time) \
+        .gt("end_time", data.start_time) \
+        .neq("status", "Cancelled") \
+        .execute()
+
+    if conflict.data:
+        raise HTTPException(status_code=400, detail="Inspector is already booked for this time slot.")
+
+    # Prepare insert data
+    insert_data = data.dict(exclude={"inspector_email"})
+    
+    # Insert schedule
+    res = supabase.table("inspectionschedule").insert(insert_data).execute()
+    
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to create schedule")
+
+    schedule = res.data[0]
+
+    # Email Notification
+    inspector_email = data.inspector_email
+    inspector_name = "Inspector"
+
+    if not inspector_email:
+        # Fetch email if not provided
+        user_res = supabase.table("User").select("email, username").eq("id", data.inspector_id).execute()
+        if user_res.data:
+            inspector_email = user_res.data[0]['email']
+            inspector_name = user_res.data[0]['username']
+
+    if inspector_email:
+        try:
+            from app.utils.email_templates import get_email_html
+            
+            subject = "New Inspection Schedule Assigned"
+            
+            details = {
+                "Equipment ID": data.equipment_id,
+                "Location": data.location or 'Not Specified',
+                "Date": str(data.scheduled_date),
+                "Time": f"{data.start_time} - {data.end_time}",
+                "Priority": data.priority
+            }
+            
+            body = get_email_html(
+                title="New Inspection Schedule Assigned",
+                name=inspector_name,
+                intro="You have been assigned a new inspection schedule.",
+                details=details,
+                action_url="http://localhost:5173/inspection",
+                action_text="Go to Dashboard"
+            )
+            
+            send_email(inspector_email, subject, body)
+        except Exception as e:
+            logger.error(f"Failed to send schedule email: {e}")
+
+    return schedule
+
+@app.get("/schedules/all")
+def get_all_schedules():
+    res = supabase.table("inspectionschedule").select("*").execute()
+    return res.data if res.data else []
+
+@app.get("/schedules/available-inspectors")
+def get_available_inspectors():
+    # Fetch users with role INSPECTOR
+    res = supabase.table("User").select("id, username, email").eq("role", "INSPECTOR").eq("Account_status", "ACTIVE").execute()
+    return res.data if res.data else []
+
+@app.put("/schedules/{schedule_id}")
+def update_schedule(schedule_id: int, data: ScheduleUpdate):
+    update_data = {k: v for k, v in data.dict().items() if v is not None}
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    res = supabase.table("inspectionschedule").update(update_data).eq("schedule_id", schedule_id).execute()
+    
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+        
+    return res.data[0]
+
+@app.get("/api/equipment/")
+def get_equipment():
+    res = supabase.table("Equipment").select("*").execute()
+    return res.data if res.data else []

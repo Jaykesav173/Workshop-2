@@ -116,7 +116,29 @@ class InspectionWorkflowService:
                 res = self.db.table("Inspection").select("*").execute()
             
             if res.data:
-                return [InspectionResponse(**inspection) for inspection in res.data]
+                inspections_list = res.data
+                
+                # Optimization: Fetch report statuses for these inspections
+                try:
+                    inspection_ids = [i['inspection_id'] for i in inspections_list]
+                    if inspection_ids:
+                        reports_res = self.db.table("Report").select("inspection_id, status").in_("inspection_id", inspection_ids).execute()
+                        
+                        # Create map of inspection_id -> report_status
+                        report_status_map = {}
+                        if reports_res.data:
+                            for report in reports_res.data:
+                                if report.get('inspection_id'):
+                                    report_status_map[report['inspection_id']] = report.get('status')
+                        
+                        # Add report_status to inspection objects
+                        for inspection in inspections_list:
+                            inspection['report_status'] = report_status_map.get(inspection['inspection_id'])
+                except Exception as e:
+                    print(f"⚠️ Error fetching report statuses: {e}")
+                    # Continue without report status if this fails
+                
+                return [InspectionResponse(**inspection) for inspection in inspections_list]
             return []
         except Exception as e:
             import traceback

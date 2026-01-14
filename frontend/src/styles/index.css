@@ -1,9 +1,10 @@
+/* Import VISOR component styles */
+@import './components.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Import VISOR component styles */
-@import './components.css';
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
@@ -15,4 +16,3 @@ body {
   margin: 0;
   min-height: 100vh;
 }
-

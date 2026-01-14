@@ -1,0 +1,146 @@
+Equipment: V-101
+  Main Image URL: https://akfskwfkmtbapzjetqpc.supabase.co/storage/v1/object/public/photos/photos/0388edbb-cbe7-4b48-b34c-c90a2e604c6f.jpeg
+  - Photo ID: 158
+    Part View: 'GENERAL'
+    Image URL: 'https://akfskwfkmtbapzjetqpc.supabase.co/storage/v1/object/public/photos/photos/0388edbb-cbe7-4b48-b34c-c90a2e604c6f.jpeg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 159
+    Part View: 'GENERAL'
+    Image URL: 'https://akfskwfkmtbapzjetqpc.supabase.co/storage/v1/object/public/photos/photos/6fd089e7-abb4-4943-be2c-93a841d92233.jpeg'  <-- VERIFY THIS
+--------------------
+Equipment: T-101
+  Main Image URL: /static/uploads/7feb1805-f9f4-414a-8db4-49d62246aa65.jpg
+  - Photo ID: 1
+    Part View: ''
+    Image URL: '/static/uploads/7feb1805-f9f4-414a-8db4-49d62246aa65.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 232
+    Part View: 'GENERAL'
+    Image URL: '/static/uploads/2faebac4-a8b4-4550-a797-3e0b4305eba5.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: 1231456545
+  Main Image URL: /static/uploads/a0c1550e-15f4-4751-ae69-1a1ee3db54eb.jpg
+  - Photo ID: 3
+    Part View: ''
+    Image URL: '/static/uploads/a0c1550e-15f4-4751-ae69-1a1ee3db54eb.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: V-330
+  Main Image URL: /static/uploads/3419e95e-eb8a-48c0-af3a-a3e842d99880.jpg
+  - Photo ID: 82
+    Part View: ''
+    Image URL: '/static/uploads/3419e95e-eb8a-48c0-af3a-a3e842d99880.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 83
+    Part View: ''
+    Image URL: '/static/uploads/2aba01e7-e796-414d-82d4-d77f039b7ef0.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: T-107
+  Main Image URL: /static/uploads/b1682323-2fd0-4d20-a3e4-11cba5978489.jpg
+  - Photo ID: 89
+    Part View: ''
+    Image URL: '/static/uploads/b1682323-2fd0-4d20-a3e4-11cba5978489.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 90
+    Part View: ''
+    Image URL: '/static/uploads/8e03981d-4abf-456d-b5e2-5d2f8e2e7db7.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: TEST-DEBUG-002
+  Main Image URL: /static/uploads/508ba3db-ed76-4d7b-a39b-42ade2861a50.txt
+  - Photo ID: 107
+    Part View: 'GENERAL'
+    Image URL: '/static/uploads/508ba3db-ed76-4d7b-a39b-42ade2861a50.txt'  <-- VERIFY THIS
+--------------------
+Equipment: R-078
+  Main Image URL: /static/uploads/9a734d4c-9265-4a3f-a024-f500289919e0.jpg
+  - Photo ID: 135
+    Part View: 'GENERAL'
+    Image URL: '/static/uploads/9a734d4c-9265-4a3f-a024-f500289919e0.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 136
+    Part View: 'GENERAL'
+    Image URL: '/static/uploads/7a9633d2-99de-49aa-a7c8-f387800ce387.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: R-023
+  Main Image URL: /static/uploads/c784ff1d-922b-435d-9675-f2609530ed19.jpg
+  - Photo ID: 139
+    Part View: 'General'
+    Image URL: '/static/uploads/c784ff1d-922b-435d-9675-f2609530ed19.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 140
+    Part View: 'East Side'
+    Image URL: '/static/uploads/1d9af89c-fb3a-451d-8746-de8db644ef8c.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: P-4504
+  Main Image URL: /static/uploads/f9144985-807e-42a8-af47-1157bc2bb159.jpg
+  - Photo ID: 141
+    Part View: 'General'
+    Image URL: '/static/uploads/f9144985-807e-42a8-af47-1157bc2bb159.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 142
+    Part View: 'North Side'
+    Image URL: '/static/uploads/8b878e01-8d9e-4faa-b8f5-777c01f93750.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: T-984
+  Main Image URL: /static/uploads/55fef902-e45d-435a-b6b6-5db9312dfe55.jpg
+  - Photo ID: 143
+    Part View: 'General'
+    Image URL: '/static/uploads/55fef902-e45d-435a-b6b6-5db9312dfe55.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 144
+    Part View: 'North Side'
+    Image URL: '/static/uploads/e6e91e30-da59-4911-8d42-9bb1e799ff04.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: R-010
+  Main Image URL: /static/uploads/74630aaa-0ebc-4df8-8e0b-ca61ca9adae0.jpg
+  - Photo ID: 145
+    Part View: 'General'
+    Image URL: '/static/uploads/74630aaa-0ebc-4df8-8e0b-ca61ca9adae0.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 146
+    Part View: 'South Side'
+    Image URL: '/static/uploads/c29aafd8-84cc-4495-a3fc-cabd0c4812e6.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: T-921
+  Main Image URL: /static/uploads/3ce3f851-5649-4dbf-815d-5faf2332ccf5.jpg
+  - Photo ID: 147
+    Part View: 'General'
+    Image URL: '/static/uploads/3ce3f851-5649-4dbf-815d-5faf2332ccf5.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 148
+    Part View: 'North Side'
+    Image URL: '/static/uploads/9d25d801-1508-44f6-8033-004b41f420a3.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 149
+    Part View: 'East Side'
+    Image URL: '/static/uploads/3fd7a27e-efff-4b2d-91f3-fa1d34ea81cc.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: J-202
+  Main Image URL: /static/uploads/8c2b35ff-0ba0-4540-94a1-6e9ac58c41c2.jpg
+  - Photo ID: 206
+    Part View: 'GENERAL'
+    Image URL: '/static/uploads/8c2b35ff-0ba0-4540-94a1-6e9ac58c41c2.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 196
+    Part View: 'General'
+    Image URL: '/static/uploads/f026f1d5-5a2c-4dc9-8c31-6ac18e964f3e.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 197
+    Part View: 'North Side'
+    Image URL: '/static/uploads/39882eec-6a52-4ab5-81b4-4b46f489195a.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: T-123
+  Main Image URL: /static/uploads/e81b095d-893e-4e33-815e-186f733be3b4.jpg
+  - Photo ID: 233
+    Part View: 'General'
+    Image URL: '/static/uploads/e81b095d-893e-4e33-815e-186f733be3b4.jpg'  <-- VERIFY THIS
+--------------------
+  - Photo ID: 234
+    Part View: 'East Side'
+    Image URL: '/static/uploads/3aa38085-f8e8-4329-88ef-794f4b1bdbc6.jpg'  <-- VERIFY THIS
+--------------------
+Equipment: EQ-HX-014
+  Main Image URL: https://akfskwfkmtbapzjetqpc.supabase.co/storage/v1/object/public/photos/equipment/2f563ab8-ae0b-4e83-88a2-bd9a6e09e41f.jpeg
+  - Photo ID: 263
+    Part View: 'General'
+    Image URL: 'https://akfskwfkmtbapzjetqpc.supabase.co/storage/v1/object/public/photos/equipment/2f563ab8-ae0b-4e83-88a2-bd9a6e09e41f.jpeg'  <-- VERIFY THIS
+--------------------

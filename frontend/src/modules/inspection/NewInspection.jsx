@@ -51,7 +51,7 @@ function NewInspection() {
         navigate('/login')
         return
       }
-      const response = await axios.get(`${API_BASE}/equipment/`, {
+      const response = await axios.get(`${API_BASE}/equipment/list`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       setEquipmentList(response.data || [])
@@ -73,7 +73,7 @@ function NewInspection() {
 
     try {
       const token = localStorage.getItem('token')
-      
+
       if (!token) {
         alert('You are not logged in. Please log in first.')
         navigate('/login')
@@ -122,20 +122,20 @@ function NewInspection() {
         `${API_BASE}/inspections/`,
         inspectionData,
         {
-          headers: { 
+          headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         }
       )
-      
+
       console.log('Inspection created successfully:', response.data)
-      navigate(`/inspection/${response.data.id}`)
+      navigate(`/inspection/${response.data.inspection_id}`)
     } catch (err) {
       console.error('Error creating inspection:', err)
       console.error('Error response:', err.response?.data)
       console.error('Error status:', err.response?.status)
-      
+
       if (err.response?.status === 401) {
         const errorDetail = err.response?.data?.detail || 'Unauthorized'
         console.error('401 Error detail:', errorDetail)

@@ -9,6 +9,7 @@ from app.config import settings
 from datetime import datetime
 import os
 import uuid
+from app.utils.storage import upload_file_to_storage, is_valid_image_url
 
 class EquipmentService:
     def __init__(self):
@@ -39,7 +40,8 @@ class EquipmentService:
             
             if res.data:
                 return EquipmentResponse(**res.data[0])
-                raise HTTPException(status_code=400, detail="Failed to create equipment")
+            
+            raise HTTPException(status_code=400, detail="Failed to create equipment - no data returned")
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error creating equipment: {str(e)}")
@@ -50,24 +52,29 @@ class EquipmentService:
             # Verify if the equipment exists in the database
             await self.get_equipment(equipment_id)
             
-            file_ext = os.path.splitext(file.filename)[1]
-            unique_filename = f"{uuid.uuid4()}{file_ext}"
-            file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
-            
-            with open(file_path, "wb") as buffer:
-                content = await file.read()
-                buffer.write(content)
-            
+            # Read file content
+            content = await file.read()
             file_size = len(content)
+            
+            # Upload to Supabase Storage
+            # Uses the "photos" bucket and "equipment" folder
+            storage_url = upload_file_to_storage(
+                file_content=content,
+                filename=file.filename,
+                bucket_name="photos",
+                folder="equipment"
+            )
+            
+            if not storage_url:
+                raise HTTPException(status_code=500, detail="Failed to upload image to cloud storage")
             
             photo_data = {
                 "equipment_id": int(equipment_id), 
                 "uploaded_by": current_user.get("id"),
-                "file_path": file_path,
+                "file_path": storage_url, # Store URL in file_path too for compatibility
                 "file_name": file.filename,
                 "file_size": file_size,
-                "file_size": file_size,
-                "storage_url": None,
+                "storage_url": storage_url,
                 "part_view": part_view,
                 "uploaded_at": str(datetime.utcnow())
             }
@@ -105,17 +112,71 @@ class EquipmentService:
                         eq_photos = [p for p in photos_res.data if p['equipment_id'] == eq['id']]
                         if eq_photos:
                             # Set main image (first one or general)
-                            filename = os.path.basename(eq_photos[0]['file_path'])
-                            eq['image_url'] = f"/static/uploads/{filename}"
-                            eq['photos'] = eq_photos
+                            photo = eq_photos[0]
+                            if photo.get('storage_url'):
+                                eq['image_url'] = photo['storage_url']
+                            else:
+                                # Check if file exists to avoid 404s
+                                # Check if file exists to avoid 404s
+                                # Strictly check in the served directory
+                                filename = os.path.basename(photo['file_path'])
+                                served_path = os.path.join(settings.UPLOAD_DIR, filename)
+                                if os.path.exists(served_path):
+                                    eq['image_url'] = f"/static/uploads/{filename}"
+                                else:
+                                    eq['image_url'] = None
+                            
+                            # Filter the photos list to only include existing files
+                            valid_photos = []
+                            for p in eq_photos:
+                                if p.get('storage_url'):
+                                    p['image_url'] = p['storage_url']
+                                    valid_photos.append(p)
+                                elif p.get('file_path'):
+                                    filename = os.path.basename(p['file_path'])
+                                    served_path = os.path.join(settings.UPLOAD_DIR, filename)
+                                    if os.path.exists(served_path):
+                                        p['image_url'] = f"/static/uploads/{filename}"
+                                        valid_photos.append(p)
+                                     
+                            eq['photos'] = valid_photos
+                            
+                            # Update main image based on valid photos
+                            if eq['image_url'] is None and valid_photos:
+                                 photo = valid_photos[0]
+                                 if photo.get('storage_url'):
+                                     eq['image_url'] = photo['storage_url']
+                                 else:
+                                     filename = os.path.basename(photo['file_path'])
+                                     # Strictly check in the served directory
+                                     served_path = os.path.join(settings.UPLOAD_DIR, filename)
+                                     if os.path.exists(served_path):
+                                         eq['image_url'] = f"/static/uploads/{filename}"
+                                     else:
+                                         eq['image_url'] = None
+                            elif not valid_photos:
+                                # Ensure we don't return stale image_url from DB if no valid photos exist
+                                eq['image_url'] = None
                         else:
                             eq['photos'] = []
+                            eq['image_url'] = None
                     else:
                         eq['photos'] = []
+                        eq['image_url'] = None
             
             return [EquipmentResponse(**eq) for eq in equipment_list]
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching equipment: {str(e)}")
+
+    # Get lightweight equipment list (for dropdowns)
+    async def get_equipment_list(self):
+        try:
+            # Select all fields to satisfy EquipmentResponse schema, but skip photos
+            res = self.db.table("equipment").select("*").order("equipment_tag_no").execute()
+            equipment_list = res.data if res.data else []
+            return [EquipmentResponse(**eq) for eq in equipment_list]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching equipment list: {str(e)}")
     
     # Get the equipment by ID
     async def get_equipment(self, equipment_id: str):
@@ -128,12 +189,39 @@ class EquipmentService:
             
             # Fetch photo
             photo_res = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).execute()
-            equipment['photos'] = photo_res.data if photo_res.data else []
             
+            # Filter photos and populate image_url
+            valid_photos = []
             if photo_res.data:
+                for p in photo_res.data:
+                    # Logic to determine image_url
+                    if p.get('storage_url'):
+                        p['image_url'] = p['storage_url']
+                        valid_photos.append(p)
+                    elif p.get('file_path'):
+                        filename = os.path.basename(p['file_path'])
+                        served_path = os.path.join(settings.UPLOAD_DIR, filename)
+                        if os.path.exists(served_path):
+                            p['image_url'] = f"/static/uploads/{filename}"
+                            valid_photos.append(p)
+            
+            equipment['photos'] = valid_photos
+            
+            if valid_photos:
                 # Use the first one or logic to pick 'General' as main
-                filename = os.path.basename(photo_res.data[0]['file_path'])
-                equipment['image_url'] = f"/static/uploads/{filename}"
+                photo = valid_photos[0]
+                if photo.get('storage_url'):
+                    equipment['image_url'] = photo['storage_url']
+                else:
+                    # Check if file exists to avoid 404s
+                    filename = os.path.basename(photo['file_path'])
+                    served_path = os.path.join(settings.UPLOAD_DIR, filename)
+                    if os.path.exists(served_path):
+                        equipment['image_url'] = f"/static/uploads/{filename}"
+                    else:
+                        equipment['image_url'] = None
+            else:
+                 equipment['image_url'] = None
                 
             return EquipmentResponse(**equipment)
         except Exception as e:
@@ -178,11 +266,14 @@ class EquipmentService:
             photos = self.db.table("Photo").select("*").eq("equipment_id", equipment_id).execute()
             if photos.data:
                 for p in photos.data:
-                    if os.path.exists(p["file_path"]):
-                        try:
-                            os.remove(p["file_path"])
-                        except:
-                            pass
+                    # Only try to delete local files
+                    file_path = p.get("file_path")
+                    if file_path and not is_valid_image_url(file_path):
+                        if os.path.exists(file_path):
+                            try:
+                                os.remove(file_path)
+                            except:
+                                pass
                 self.db.table("Photo").delete().eq("equipment_id", equipment_id).execute()
             
             # Delete equipment

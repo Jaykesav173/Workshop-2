@@ -3,13 +3,18 @@ User Roles Routes - Haifa
 API endpoints for user management and role assignment
 """
 from fastapi import APIRouter, HTTPException, Depends
-from app.database.schemas import UserResponse, UserCreate, UserUpdate
+from app.database.schemas import UserResponse, UserCreate, UserUpdate, CompleteProfileRequest
 from app.routers.user_roles.service_user_roles import UserRolesService
 from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/users", tags=["User Roles"])
 
 user_roles_service = UserRolesService()
+
+@router.post("/complete_profile")
+async def complete_profile(data: CompleteProfileRequest):
+    """Complete user profile (legacy support)"""
+    return await user_roles_service.complete_profile(data)
 
 @router.get("/")
 async def get_all_users(current_user: dict = Depends(get_current_user)):

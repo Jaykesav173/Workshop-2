@@ -48,6 +48,11 @@ async def upload_equipment_image(
     current_user = {"id": 1, "username": "dummy_user"}
     return await equipment_service.upload_equipment_image(equipment_id, file, current_user, part_view)
 
+# Get Lightweight List (Dropdown)
+@router.get("/list", response_model=list[EquipmentResponse])
+async def get_equipment_list():
+    return await equipment_service.get_equipment_list()
+
 # Get All
 @router.get("/", response_model=list[EquipmentResponse])
 async def get_all_equipment():

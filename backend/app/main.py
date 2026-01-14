@@ -1,7 +1,9 @@
 import logging
+import os
 import importlib.util
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.config import settings
 
 from app.routers.auth.router import router as auth_router
@@ -29,10 +31,14 @@ except Exception as e:
 
 # Import routers using importlib to avoid null byte issues
 try:
-    schedule_spec = importlib.util.spec_from_file_location("schedule_router", "app/routers/InspectionSchedule/router.py")
+    import os
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    router_path = os.path.join(current_dir, "routers", "InspectionSchedule", "router.py")
+    schedule_spec = importlib.util.spec_from_file_location("schedule_router", router_path)
     schedule_module = importlib.util.module_from_spec(schedule_spec)
     schedule_spec.loader.exec_module(schedule_module)
     schedule_router = schedule_module.router
+    logger.info("✅ schedule router imported successfully via importlib")
 except Exception as e:
     logger.warning(f"Failed to load schedule router: {e}")
     schedule_router = None
@@ -73,6 +79,17 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+# Ensure upload directory exists
+if not os.path.exists(settings.UPLOAD_DIR):
+    os.makedirs(settings.UPLOAD_DIR)
+
+# Mount static files
+app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+# Mount assets directory for logos/static content
+assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+if os.path.exists(assets_dir):
+    app.mount("/static/assets", StaticFiles(directory=assets_dir), name="assets")
+
 # Include routers
 app.include_router(auth_router, prefix="/api")
 app.include_router(report_generation_router, prefix="/api")
@@ -94,6 +111,20 @@ else:
 if schedule_router:
     app.include_router(schedule_router)  # No /api prefix, uses /schedules directly
     logger.info("✅ schedule router included in app")
+
+# Import and include notifications router
+try:
+    import os
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    notif_router_path = os.path.join(current_dir, "routers", "notifications", "router.py")
+    notif_spec = importlib.util.spec_from_file_location("notifications_router", notif_router_path)
+    notif_module = importlib.util.module_from_spec(notif_spec)
+    notif_spec.loader.exec_module(notif_module)
+    notifications_router = notif_module.router
+    app.include_router(notifications_router, prefix="/api")
+    logger.info("✅ notifications router included in app")
+except Exception as e:
+    logger.warning(f"Failed to load notifications router: {e}")
 
 @app.get("/")
 def root():

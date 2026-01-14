@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from datetime import datetime
 import os
-from app.database.schemas import ReportCreate, ReportResponse, API510ReportRequest, ReportReviewRequest
+from app.database.schemas import ReportCreate, ReportResponse, API510ReportRequest, ReportReviewRequest, ReportSearchRequest
 from app.routers.report_generation.service_report_generation import ReportGenerationService
 from app.dependencies import get_current_user
 
@@ -56,9 +56,34 @@ async def get_submitted_reports(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Only engineers can view submitted reports")
     return await report_service.get_submitted_reports()
 
+@router.get("/my-notifications")
+async def get_my_report_notifications(current_user: dict = Depends(get_current_user)):
+    """Fast endpoint for fetching my report notifications"""
+    return await report_service.get_my_reports(current_user["id"], current_user.get("username", ""))
+
 @router.get("/all", response_model=list[ReportResponse])
 async def get_all_reports(current_user: dict = Depends(get_current_user)):
     """Get all reports with all statuses (for dashboard statistics)"""
+    return await report_service.get_all_reports()
+
+@router.get("/history/archive", response_model=list[ReportResponse])
+async def get_report_archive(current_user: dict = Depends(get_current_user)):
+    """
+    Get all reports history/archive.
+    Used by Engineer/Admin Dashboards as fallback or primary data source.
+    """
+    return await report_service.get_all_reports()
+
+@router.post("/history/search", response_model=list[ReportResponse])
+async def search_reports_history(
+    search_data: ReportSearchRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Search reports history.
+    Currently returns all reports (simple implementation for fallback compatibility).
+    """
+    # TODO: Implement actual filtering logic in service layer if needed in future
     return await report_service.get_all_reports()
 
 @router.get("/inspection/{inspection_id}")
@@ -82,21 +107,41 @@ async def export_report_pdf(report_id: str, current_user: dict = Depends(get_cur
     try:
         report = await report_service.get_report(report_id)
         
+        # 1. Try serving from local file if it exists
+        if report.pdf_path and os.path.exists(report.pdf_path):
+            return FileResponse(
+                path=report.pdf_path,
+                media_type="application/pdf",
+                filename=os.path.basename(report.pdf_path),
+                headers={
+                    "Content-Disposition": f"attachment; filename={os.path.basename(report.pdf_path)}"
+                }
+            )
+            
+        # 2. If local file missing, try to serve from Cloud URL
+        if report.pdf_url:
+            print(f"⚠️ Local PDF not found, fetching from Cloud: {report.pdf_url}")
+            try:
+                import requests
+                from fastapi.responses import Response
+                response = requests.get(report.pdf_url)
+                if response.status_code == 200:
+                    filename = f"API510_Report_{report.report_no or report_id}.pdf"
+                    return Response(
+                        content=response.content,
+                        media_type="application/pdf",
+                        headers={
+                            "Content-Disposition": f"attachment; filename={filename}"
+                        }
+                    )
+            except Exception as e:
+                 print(f"❌ Failed to fetch from cloud: {e}")
+
+        # 3. If neither available, raise 404
         if not report.pdf_path:
-            raise HTTPException(status_code=404, detail="PDF not generated yet")
+             raise HTTPException(status_code=404, detail="PDF not generated yet")
         
-        if not os.path.exists(report.pdf_path):
-            raise HTTPException(status_code=404, detail=f"PDF file not found at: {report.pdf_path}")
-        
-        # Return the PDF file with proper headers
-        return FileResponse(
-            path=report.pdf_path,
-            media_type="application/pdf",
-            filename=os.path.basename(report.pdf_path),
-            headers={
-                "Content-Disposition": f"attachment; filename={os.path.basename(report.pdf_path)}"
-            }
-        )
+        raise HTTPException(status_code=404, detail=f"PDF file not found locally or in cloud")
     except HTTPException:
         raise
     except Exception as e:

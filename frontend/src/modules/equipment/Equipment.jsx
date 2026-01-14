@@ -15,6 +15,16 @@ import {
   getMaterialOptions
 } from "./equipmentApi.jsx";
 
+// Helper to handle image URLs (Cloud vs Local)
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  // If it's a relative path, prepend backend URL
+  return `http://localhost:8000${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 // Form Row Component
 const FormRow = React.memo(({ label, placeholder, type = "input", name, form, setForm, onChange, error, options = [], valueKey = "id", labelKey = "description", required, className }) => {
   if (type === "select" && label === "Material:") {
@@ -509,11 +519,10 @@ export default function EquipmentDetailsRegistration() {
                     setViewParts([]);
                   }
                 }}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === item
-                    ? 'border-red-600 text-red-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === item
+                  ? 'border-red-600 text-red-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
               >
                 {item}
               </button>
@@ -558,14 +567,27 @@ export default function EquipmentDetailsRegistration() {
                       />
                     ) : editImageUrl ? (
                       <img
-                        src={`http://localhost:8000${editImageUrl}`}
+                        src={getImageUrl(editImageUrl)}
                         alt="Current Equipment"
                         className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
                       />
                     ) : (
                       <div className="flex flex-col text-center items-center text-gray-500">
                         <Upload size={48} className="opacity-30 mb-2" />
                         <span className="text-base font-medium text-gray-600">Drag and drop an image here (General View only)</span>
+                      </div>
+                    )}
+                    {editImageUrl && (
+                      <div className="hidden flex-col text-center items-center text-gray-500 w-full h-full justify-center bg-gray-50">
+                        <div className="bg-gray-200 p-4 rounded-full mb-3">
+                          <Upload size={32} className="opacity-40" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-500">Image not available</span>
                       </div>
                     )}
                   </div>
@@ -1023,11 +1045,24 @@ export default function EquipmentDetailsRegistration() {
                       <div className="w-full bg-gray-100 overflow-hidden border border-gray-300 rounded-xl min-h-[520px] flex items-center justify-center">
                         {/* Show equipment image if available in database, else show text */}
                         {viewingItem.image_url ? (
-                          <img
-                            src={`http://localhost:8000${viewingItem.image_url}`}
-                            alt="Equipment"
-                            className="w-full h-full object-contain"
-                          />
+                          <>
+                            <img
+                              src={getImageUrl(viewingItem.image_url)}
+                              alt="Equipment"
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                            <div className="hidden flex-col text-center items-center text-gray-500 w-full h-full justify-center bg-gray-50">
+                              <div className="bg-gray-200 p-4 rounded-full mb-3">
+                                <Upload size={32} className="opacity-40" />
+                              </div>
+                              <span className="text-sm font-medium text-gray-500">Image not available</span>
+                            </div>
+                          </>
                         ) : (
                           <span className="text-gray-500 text-lg font-medium">
                             no image to be viewed
@@ -1076,18 +1111,17 @@ export default function EquipmentDetailsRegistration() {
                         {viewingItem.photos
                           .filter(p => !["General", "General View"].includes(p.part_view))
                           .map((photo) => {
-                            const filename = photo.file_path ? photo.file_path.split(/[\\/]/).pop() : "";
                             return (
                               <div key={photo.id} className="flex flex-col items-center bg-white p-3 rounded-xl shadow-sm border border-gray-200">
                                 <div className="w-full h-40 bg-gray-100 rounded-xl overflow-hidden mb-2">
                                   <img
-                                    src={`http://localhost:8000/static/uploads/${filename}`}
+                                    src={getImageUrl(photo.image_url)}
                                     alt={photo.part_view}
                                     className="w-full h-full object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
-                                    onClick={() => window.open(`http://localhost:8000/static/uploads/${filename}`, '_blank')}
+                                    onClick={() => window.open(getImageUrl(photo.image_url), '_blank')}
                                   />
                                 </div>
-                                <span className="font-semibold text-sm text-gray-700">{photo.part_view || "Unknown View"}</span>
+                                <span className="font-semibold text-sm text-gray-700">{photo.part_view || "Additional View"}</span>
                               </div>
                             );
                           })}

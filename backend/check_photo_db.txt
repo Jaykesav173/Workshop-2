@@ -1,0 +1,8 @@
+Checking table: uploadedphoto
+Error checking uploadedphoto: {'message': "Could not find the table 'public.uploadedphoto' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.InspectionPhoto'", 'details': None}
+Checking table: photo
+Error checking photo: {'message': "Could not find the table 'public.photo' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.Photo'", 'details': None}
+Checking table: Photo
+Found in Photo: {'id': 228, 'equipment_id': 18, 'uploaded_by': 80, 'file_path': 'C:\\Users\\bodyg\\OneDrive\\Pictures\\sem4\\workshope2\\VISOR (2)\\VISOR\\backend\\app\\storage\\uploads\\1a5ef627-4ee8-41e5-abbd-3a8256b6a110.jpg', 'storage_url': None, 'file_name': 'images.jpg', 'file_size': 9626, 'uploaded_at': '2026-01-12T07:10:44.414354', 'ai_description': None, 'ai_recommendation': None, 'part_view': 'GENERAL', 'category': None, 'severity': None, 'box_2d': None}
+Checking table: photos
+Error checking photos: {'message': "Could not find the table 'public.photos' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.Photo'", 'details': None}

@@ -94,7 +94,9 @@ def upload_file_to_storage(
             'jpeg': 'image/jpeg',
             'png': 'image/png',
             'gif': 'image/gif',
-            'webp': 'image/webp'
+            'webp': 'image/webp',
+            'pdf': 'application/pdf',
+            'json': 'application/json'
         }
         content_type = mime_type_map.get(file_ext.lower(), 'image/jpeg')
         
