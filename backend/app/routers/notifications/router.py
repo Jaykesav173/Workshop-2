@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any
 from app.database.connection import get_db
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 # Configure logging
@@ -79,7 +79,37 @@ async def get_all_notifications(user_id: int, db: Any = Depends(get_db)):
             except Exception as e:
                 logger.error(f"Error fetching overdue schedules: {e}")
 
-        # 3. Fetch Submitted Reports (For Admin/Engineer)
+        # 3. Fetch My Reports Status Updates (For Inspectors)
+        if user_role == 'INSPECTOR':
+            try:
+                # Fetch reports created by me that are Approved or Rejected
+                # We limit to recent updates (last 7 days)
+                
+                seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
+                
+                my_reports_res = db.table("Report").select("*") \
+                    .eq("created_by", user_id) \
+                    .in_("status", ["APPROVED", "REJECTED"]) \
+                    .gt("created_at", seven_days_ago) \
+                    .execute()
+                    
+                if my_reports_res.data:
+                    for r in my_reports_res.data:
+                        status = r.get('status')
+                        is_approved = status == 'APPROVED'
+                        
+                        notifications.append({
+                            "id": f"status_{r.get('report_id')}",
+                            "title": f"Report {status.title()}",
+                            "message": f"Your report \"{r.get('title') or r.get('report_title') or 'Untitled'}\" has been {status.lower()}.",
+                            "created_at": r.get('updated_at') or r.get('created_at'),
+                            "action_link": f"/reports/{r.get('inspection_id')}" if r.get('inspection_id') else "/reports",
+                            "type": "success" if is_approved else "error"
+                        })
+            except Exception as e:
+                logger.error(f"Error fetching report status: {e}")
+
+        # 4. Fetch Submitted Reports (For Admin/Engineer)
         if user_role == 'ADMIN' or user_role == 'ENGINEER':
             try:
                 # Fetch submitted reports
