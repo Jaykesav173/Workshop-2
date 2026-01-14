@@ -126,7 +126,7 @@ export default function MainLayout() {
     { id: 'sites', label: 'Sites / Assets', icon: Icons.Building, path: '/equipment' },
     { id: 'inspections', label: 'Inspections Overview', icon: Icons.Eye, path: '/inspection' },
     { id: 'monitoring', label: 'Report History & Review', icon: Icons.Activity, path: '/monitoring' },
-    { id: 'settings', label: 'System Settings', icon: Icons.Settings, path: '/admin/settings' },
+    { id: 'monitoring', label: 'Report History & Review', icon: Icons.Activity, path: '/monitoring' },
   ]
 
   // Engineer menu items
@@ -449,16 +449,7 @@ export default function MainLayout() {
                       <Icons.User className="w-4 h-4 text-gray-500" />
                       <span>Profile</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        setProfileDropdownOpen(false)
-                        console.log('Settings clicked')
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                    >
-                      <Icons.Settings className="w-4 h-4 text-gray-500" />
-                      <span>Settings</span>
-                    </button>
+
                     <div className="border-t border-gray-200 my-1"></div>
                     <button
                       onClick={handleLogout}
